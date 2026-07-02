@@ -44,8 +44,9 @@ cargo run --release --example toy_compare -- --tasks moons,spiral,xor --n-train 
 
 ## PDF Report
 
-A compact PDF overview is available at `docs/nagare.pdf`; the editable LaTeX
-source is `docs/nagare.tex`.
+A compact PDF overview is available at `docs/nagare_hymeko.pdf`; the editable
+LaTeX source is `docs/nagare.tex`. The source can also be compiled to the
+canonical `docs/nagare.pdf` path when that file is not open in a PDF viewer.
 
 ## Layout
 

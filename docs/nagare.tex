@@ -79,6 +79,54 @@ holonomy-informed subspace, and used by a compact local learner.
 \end{tikzpicture}
 \end{center}
 
+\section{HyMeKo Neural Network View}
+
+HyMeKo describes systems as signed, typed hypergraphs. A hypergraph edge can
+connect any number of vertices, and every incidence can carry a sign. This is
+the important difference from an ordinary graph view: a constraint over several
+signals, a context that fuses many observations, or a signed balance over a
+cycle can be represented directly instead of being flattened into pairwise
+edges.
+
+In HyMeKo terms, the neural network is a \emph{neural target} of the IR. The
+compiled neural module is a dataflow projection whose computation graph mirrors
+the hypergraph. Vertices correspond to typed state carriers or feature sites;
+hyperedges correspond to typed multi-argument relations, aggregators, gates, or
+operators; signed incidences distinguish positive, negative, activating,
+inhibiting, source, sink, or residual roles depending on the edge type.
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance=1.0cm,
+  v/.style={circle, draw, minimum size=0.72cm, inner sep=0pt},
+  e/.style={rectangle, draw, rounded corners=2pt, minimum width=1.15cm, minimum height=0.62cm},
+  arr/.style={-{Latex[length=2mm]}, thick}
+]
+\node[v] (x1) {$v_1$};
+\node[v, below=of x1] (x2) {$v_2$};
+\node[v, below=of x2] (x3) {$v_3$};
+\node[e, right=1.4cm of x2] (edge) {$e_k$};
+\node[v, right=1.4cm of edge] (y) {$v_4$};
+\node[e, right=1.4cm of y] (gate) {gate};
+\node[v, right=1.4cm of gate] (out) {$v_5$};
+
+\draw[arr] (x1) -- node[above, font=\small] {$+$} (edge);
+\draw[arr] (x2) -- node[above, font=\small] {$+$} (edge);
+\draw[arr] (x3) -- node[below, font=\small] {$-$} (edge);
+\draw[arr] (edge) -- (y);
+\draw[arr] (y) -- (gate);
+\draw[arr] (gate) -- (out);
+\end{tikzpicture}
+\end{center}
+
+NAGARE keeps that HyMeKo interpretation but changes the learning mechanism
+under test. Instead of treating the hypergraph neural target as a conventional
+backprop-only computation graph, this extraction tests local simultaneous
+updates over pooled holonomy features. The fitted projection gate is therefore
+best read as a HyMeKo-style signed multi-relation operator: it selects a
+holonomy-informed subspace for the update, rather than multiplying the state by
+a scalar uncertainty.
+
 \section{Feature and Gate Definition}
 
 The quaternion periodic feature lift emits seven channels per point:
