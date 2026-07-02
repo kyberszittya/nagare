@@ -1,0 +1,19 @@
+[package]
+name = "nagare-holonomy-learn"
+version = "0.1.0"
+edition = "2021"
+description = "Experimental local holonomy learning with projection-gated global pooling."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/kyberszittya/nagare"
+
+[lib]
+name = "holonomy_learn"
+path = "src/lib.rs"
+
+[dependencies]
+hymeko_clifford = { path = "../hymeko_framework_rust/hymeko_clifford" }
+rand = "=0.9.2"
+
+[[example]]
+name = "toy_compare"
+path = "examples/toy_compare.rs"

@@ -1,0 +1,131 @@
+{
+  "engine": "nagare-holonomy-learn",
+  "n_train": 192,
+  "n_test": 96,
+  "n_points": 32,
+  "epochs": 50,
+  "local_rows": [
+    {
+      "task": "moons",
+      "acc": 1.000000,
+      "loss": 0.001513,
+      "clifford_error": 0.000007,
+      "median_us_per_sample": 4.554167,
+      "params": 60
+    },
+    {
+      "task": "spiral",
+      "acc": 1.000000,
+      "loss": 0.004486,
+      "clifford_error": 0.000044,
+      "median_us_per_sample": 4.702083,
+      "params": 60
+    },
+    {
+      "task": "xor",
+      "acc": 1.000000,
+      "loss": 0.006714,
+      "clifford_error": 0.000137,
+      "median_us_per_sample": 4.803125,
+      "params": 60
+    }
+  ],
+  "stress_rows": [
+    {
+      "task": "moons",
+      "stress": "clean",
+      "entropy_loss": 0.001513,
+      "constant_loss": 0.000465,
+      "projection_loss": 0.000468,
+      "projection_params": 228
+    },
+    {
+      "task": "moons",
+      "stress": "noisy",
+      "entropy_loss": 0.001631,
+      "constant_loss": 0.000500,
+      "projection_loss": 0.000498,
+      "projection_params": 228
+    },
+    {
+      "task": "moons",
+      "stress": "missing",
+      "entropy_loss": 0.001656,
+      "constant_loss": 0.000516,
+      "projection_loss": 0.000521,
+      "projection_params": 228
+    },
+    {
+      "task": "moons",
+      "stress": "fewshot_noisy_missing",
+      "entropy_loss": 0.011536,
+      "constant_loss": 0.005352,
+      "projection_loss": 0.005323,
+      "projection_params": 228
+    },
+    {
+      "task": "spiral",
+      "stress": "clean",
+      "entropy_loss": 0.004487,
+      "constant_loss": 0.001581,
+      "projection_loss": 0.001586,
+      "projection_params": 228
+    },
+    {
+      "task": "spiral",
+      "stress": "noisy",
+      "entropy_loss": 0.043077,
+      "constant_loss": 0.040756,
+      "projection_loss": 0.044278,
+      "projection_params": 228
+    },
+    {
+      "task": "spiral",
+      "stress": "missing",
+      "entropy_loss": 0.015772,
+      "constant_loss": 0.011051,
+      "projection_loss": 0.012371,
+      "projection_params": 228
+    },
+    {
+      "task": "spiral",
+      "stress": "fewshot_noisy_missing",
+      "entropy_loss": 0.286730,
+      "constant_loss": 0.269849,
+      "projection_loss": 0.250603,
+      "projection_params": 228
+    },
+    {
+      "task": "xor",
+      "stress": "clean",
+      "entropy_loss": 0.006731,
+      "constant_loss": 0.002713,
+      "projection_loss": 0.002697,
+      "projection_params": 228
+    },
+    {
+      "task": "xor",
+      "stress": "noisy",
+      "entropy_loss": 0.006969,
+      "constant_loss": 0.002783,
+      "projection_loss": 0.002935,
+      "projection_params": 228
+    },
+    {
+      "task": "xor",
+      "stress": "missing",
+      "entropy_loss": 0.008426,
+      "constant_loss": 0.003485,
+      "projection_loss": 0.003637,
+      "projection_params": 228
+    },
+    {
+      "task": "xor",
+      "stress": "fewshot_noisy_missing",
+      "entropy_loss": 0.033405,
+      "constant_loss": 0.022253,
+      "projection_loss": 0.022197,
+      "projection_params": 228
+    }
+  ]
+}
