@@ -42,6 +42,11 @@ cargo test
 cargo run --release --example toy_compare -- --tasks moons,spiral,xor --n-train 192 --n-test 96 --n-points 32 --epochs 50 --batch-size 32 --lr 0.05 --seed 53 --out reports/latest-toy-run.json
 ```
 
+## PDF Report
+
+A compact PDF overview is available at `docs/nagare.pdf`; the editable LaTeX
+source is `docs/nagare.tex`.
+
 ## Layout
 
 - `src/datasets.rs`: generated moons, spiral, xor data and corruption.

@@ -2,3 +2,6 @@
 *.pdb
 *.profraw
 *.profdata
+*.aux
+*.log
+*.out
