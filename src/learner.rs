@@ -3,14 +3,11 @@ use std::time::Instant;
 use rand::{rngs::StdRng, seq::SliceRandom, Rng, SeedableRng};
 
 use crate::{
-    datasets::{corrupt_dataset, make_dataset, Dataset, Task},
+    datasets::{corrupt_dataset, make_dataset, shuffle_point_order, Dataset, Task},
     metrics::{clifford_probability_error, cross_entropy, entropy2, softmax2, Metrics},
     pooling::structural_pool_features,
-    projection::{
-        default_holonomy_projection_basis, learn_holonomy_projection_basis,
-        project_onto_holonomy_subspace,
-    },
-    LOCAL_FEATURES, PROJECTION_RANK, STRUCTURAL_FEATURES,
+    projection::{default_holonomy_basis, fit_class_mean_basis, ProjectionBasis},
+    LOCAL_FEATURES, PROJECTION_ALPHA, PROJECTION_RANK, STRUCTURAL_FEATURES,
 };
 
 #[derive(Clone, Debug)]
@@ -70,6 +67,17 @@ pub enum StressKind {
     Noisy,
     Missing,
     FewShotNoisyMissing,
+    /// Within-sample point-order shuffle (no value corruption): the
+    /// holonomy-isolating knife. Perturbs only the order-sensitive holonomy
+    /// channels, leaving every per-point (geometry/rotor) pooled statistic
+    /// invariant. Applied to both train and test.
+    Shuffled,
+    /// The hard few-shot/noisy/missing regime *with* the point-order shuffle
+    /// applied on top. This is the regime where the projection gate actually
+    /// differentiates from the constant gate, so comparing it against
+    /// `FewShotNoisyMissing` isolates whether the gate's advantage rides on
+    /// order-sensitive holonomy structure.
+    ShuffledFewShot,
 }
 
 impl StressKind {
@@ -79,20 +87,34 @@ impl StressKind {
             Self::Noisy => "noisy",
             Self::Missing => "missing",
             Self::FewShotNoisyMissing => "fewshot_noisy_missing",
+            Self::Shuffled => "shuffled",
+            Self::ShuffledFewShot => "shuffled_fewshot",
         }
     }
 
+    /// Whether this stress applies a within-sample point-order shuffle.
+    fn shuffles(self) -> bool {
+        matches!(self, Self::Shuffled | Self::ShuffledFewShot)
+    }
+
+    /// Whether this stress uses the reduced few-shot training budget with
+    /// value noise and dropout.
+    fn is_few_shot(self) -> bool {
+        matches!(self, Self::FewShotNoisyMissing | Self::ShuffledFewShot)
+    }
+
     fn train_samples(self, cfg: &Config) -> usize {
-        match self {
-            Self::FewShotNoisyMissing => cfg.n_train.min(32),
-            _ => cfg.n_train,
+        if self.is_few_shot() {
+            cfg.n_train.min(32)
+        } else {
+            cfg.n_train
         }
     }
 
     fn noise_std(self) -> f32 {
         match self {
             Self::Noisy => 0.18,
-            Self::FewShotNoisyMissing => 0.22,
+            _ if self.is_few_shot() => 0.22,
             _ => 0.0,
         }
     }
@@ -100,7 +122,7 @@ impl StressKind {
     fn missing_rate(self) -> f32 {
         match self {
             Self::Missing => 0.35,
-            Self::FewShotNoisyMissing => 0.45,
+            _ if self.is_few_shot() => 0.45,
             _ => 0.0,
         }
     }
@@ -126,7 +148,7 @@ pub struct EntropyPoolLocalLearner {
     w: Vec<f32>,
     b: [f32; 2],
     gate_mode: GateMode,
-    projection_basis: [[f32; STRUCTURAL_FEATURES]; PROJECTION_RANK],
+    projection_basis: ProjectionBasis,
 }
 
 impl EntropyPoolLocalLearner {
@@ -144,7 +166,7 @@ impl EntropyPoolLocalLearner {
             w,
             b: [0.0, 0.0],
             gate_mode,
-            projection_basis: default_holonomy_projection_basis(),
+            projection_basis: default_holonomy_basis(),
         }
     }
 
@@ -175,7 +197,7 @@ impl EntropyPoolLocalLearner {
     pub fn train(&mut self, data: &Dataset, epochs: usize, batch_size: usize, lr: f32, seed: u64) {
         let structural = structural_pool_features(data);
         if self.gate_mode == GateMode::Projection {
-            self.projection_basis = learn_holonomy_projection_basis(&structural, &data.y);
+            self.projection_basis = fit_class_mean_basis(&structural, &data.y);
         }
         let mut rng = StdRng::seed_from_u64(seed);
         let mut indices: Vec<usize> = (0..data.samples).collect();
@@ -226,7 +248,8 @@ impl EntropyPoolLocalLearner {
             GateMode::Constant | GateMode::Projection => 1.0,
         };
         if self.gate_mode == GateMode::Projection {
-            project_onto_holonomy_subspace(&mut warm, &self.projection_basis);
+            self.projection_basis
+                .apply_alpha_mix(&mut warm[..STRUCTURAL_FEATURES], PROJECTION_ALPHA);
         }
         warm
     }
@@ -249,6 +272,8 @@ pub fn run_stress_ablation(cfg: &Config) -> Vec<StressRow> {
         StressKind::Noisy,
         StressKind::Missing,
         StressKind::FewShotNoisyMissing,
+        StressKind::Shuffled,
+        StressKind::ShuffledFewShot,
     ];
     let mut rows = Vec::new();
     for (task_idx, &task) in cfg.tasks.iter().enumerate() {
@@ -277,6 +302,14 @@ pub fn run_stress_ablation(cfg: &Config) -> Vec<StressRow> {
                 stress.missing_rate(),
                 cfg.seed + 30_000 + stress_idx as u64,
             );
+            let (train, test) = if stress.shuffles() {
+                (
+                    shuffle_point_order(&train, cfg.seed + 40_000 + stress_idx as u64),
+                    shuffle_point_order(&test, cfg.seed + 50_000 + stress_idx as u64),
+                )
+            } else {
+                (train, test)
+            };
             let mut entropy_model = EntropyPoolLocalLearner::new_with_gate(
                 cfg.seed + task_idx as u64 * 17 + stress_idx as u64,
                 GateMode::Entropy,

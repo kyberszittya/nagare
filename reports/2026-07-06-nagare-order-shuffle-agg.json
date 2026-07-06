@@ -1,0 +1,326 @@
+{
+  "moons|clean|constant": {
+    "median": 0.000465,
+    "n": 3,
+    "q1": 0.0004465,
+    "q3": 0.0004775
+  },
+  "moons|clean|entropy": {
+    "median": 0.001513,
+    "n": 3,
+    "q1": 0.0014550000000000001,
+    "q3": 0.0015535
+  },
+  "moons|clean|projection": {
+    "median": 0.000468,
+    "n": 3,
+    "q1": 0.0004485,
+    "q3": 0.0004795
+  },
+  "moons|fewshot_noisy_missing|constant": {
+    "median": 0.005255,
+    "n": 3,
+    "q1": 0.004402,
+    "q3": 0.0053035
+  },
+  "moons|fewshot_noisy_missing|entropy": {
+    "median": 0.01132,
+    "n": 3,
+    "q1": 0.0098025,
+    "q3": 0.011428
+  },
+  "moons|fewshot_noisy_missing|projection": {
+    "median": 0.005299,
+    "n": 3,
+    "q1": 0.0044355,
+    "q3": 0.005311
+  },
+  "moons|missing|constant": {
+    "median": 0.000524,
+    "n": 3,
+    "q1": 0.0005200000000000001,
+    "q3": 0.0006305
+  },
+  "moons|missing|entropy": {
+    "median": 0.001687,
+    "n": 3,
+    "q1": 0.0016714999999999998,
+    "q3": 0.0018974999999999999
+  },
+  "moons|missing|projection": {
+    "median": 0.00054,
+    "n": 3,
+    "q1": 0.0005304999999999999,
+    "q3": 0.000643
+  },
+  "moons|noisy|constant": {
+    "median": 0.000642,
+    "n": 3,
+    "q1": 0.000571,
+    "q3": 0.000645
+  },
+  "moons|noisy|entropy": {
+    "median": 0.001964,
+    "n": 3,
+    "q1": 0.0017975,
+    "q3": 0.0019715
+  },
+  "moons|noisy|projection": {
+    "median": 0.000649,
+    "n": 3,
+    "q1": 0.0005735,
+    "q3": 0.000651
+  },
+  "moons|shuffled_fewshot|constant": {
+    "median": 0.004052,
+    "n": 3,
+    "q1": 0.0040315,
+    "q3": 0.004176
+  },
+  "moons|shuffled_fewshot|entropy": {
+    "median": 0.009277,
+    "n": 3,
+    "q1": 0.009104000000000001,
+    "q3": 0.0094365
+  },
+  "moons|shuffled_fewshot|projection": {
+    "median": 0.004062,
+    "n": 3,
+    "q1": 0.0040325,
+    "q3": 0.004206
+  },
+  "moons|shuffled|constant": {
+    "median": 0.000518,
+    "n": 3,
+    "q1": 0.0004595,
+    "q3": 0.000546
+  },
+  "moons|shuffled|entropy": {
+    "median": 0.001657,
+    "n": 3,
+    "q1": 0.0015,
+    "q3": 0.001717
+  },
+  "moons|shuffled|projection": {
+    "median": 0.000522,
+    "n": 3,
+    "q1": 0.0004625,
+    "q3": 0.0005495000000000001
+  },
+  "spiral|clean|constant": {
+    "median": 0.001678,
+    "n": 3,
+    "q1": 0.0016294999999999999,
+    "q3": 0.001766
+  },
+  "spiral|clean|entropy": {
+    "median": 0.004723,
+    "n": 3,
+    "q1": 0.004605,
+    "q3": 0.004899499999999999
+  },
+  "spiral|clean|projection": {
+    "median": 0.001684,
+    "n": 3,
+    "q1": 0.001635,
+    "q3": 0.001775
+  },
+  "spiral|fewshot_noisy_missing|constant": {
+    "median": 0.216768,
+    "n": 3,
+    "q1": 0.19285249999999998,
+    "q3": 0.24330849999999998
+  },
+  "spiral|fewshot_noisy_missing|entropy": {
+    "median": 0.237449,
+    "n": 3,
+    "q1": 0.20587699999999998,
+    "q3": 0.2620895
+  },
+  "spiral|fewshot_noisy_missing|projection": {
+    "median": 0.233492,
+    "n": 3,
+    "q1": 0.207048,
+    "q3": 0.24204750000000003
+  },
+  "spiral|missing|constant": {
+    "median": 0.011051,
+    "n": 3,
+    "q1": 0.008524,
+    "q3": 0.028409999999999998
+  },
+  "spiral|missing|entropy": {
+    "median": 0.015772,
+    "n": 3,
+    "q1": 0.013305500000000001,
+    "q3": 0.029333500000000002
+  },
+  "spiral|missing|projection": {
+    "median": 0.012371,
+    "n": 3,
+    "q1": 0.009393499999999999,
+    "q3": 0.033007999999999996
+  },
+  "spiral|noisy|constant": {
+    "median": 0.016992,
+    "n": 3,
+    "q1": 0.010297,
+    "q3": 0.028874
+  },
+  "spiral|noisy|entropy": {
+    "median": 0.021138,
+    "n": 3,
+    "q1": 0.0139385,
+    "q3": 0.0321075
+  },
+  "spiral|noisy|projection": {
+    "median": 0.017273,
+    "n": 3,
+    "q1": 0.0106725,
+    "q3": 0.030775499999999997
+  },
+  "spiral|shuffled_fewshot|constant": {
+    "median": 0.289263,
+    "n": 3,
+    "q1": 0.2837475,
+    "q3": 0.3167755
+  },
+  "spiral|shuffled_fewshot|entropy": {
+    "median": 0.285852,
+    "n": 3,
+    "q1": 0.277318,
+    "q3": 0.313345
+  },
+  "spiral|shuffled_fewshot|projection": {
+    "median": 0.316421,
+    "n": 3,
+    "q1": 0.2988115,
+    "q3": 0.31682
+  },
+  "spiral|shuffled|constant": {
+    "median": 0.016065,
+    "n": 3,
+    "q1": 0.0150635,
+    "q3": 0.0163535
+  },
+  "spiral|shuffled|entropy": {
+    "median": 0.021794,
+    "n": 3,
+    "q1": 0.021062,
+    "q3": 0.0219125
+  },
+  "spiral|shuffled|projection": {
+    "median": 0.017029,
+    "n": 3,
+    "q1": 0.015373999999999999,
+    "q3": 0.017335
+  },
+  "xor|clean|constant": {
+    "median": 0.002628,
+    "n": 3,
+    "q1": 0.0025235,
+    "q3": 0.0026705
+  },
+  "xor|clean|entropy": {
+    "median": 0.006731,
+    "n": 3,
+    "q1": 0.0065305,
+    "q3": 0.006737
+  },
+  "xor|clean|projection": {
+    "median": 0.002697,
+    "n": 3,
+    "q1": 0.0025555,
+    "q3": 0.0027115000000000004
+  },
+  "xor|fewshot_noisy_missing|constant": {
+    "median": 0.022253,
+    "n": 3,
+    "q1": 0.021896,
+    "q3": 0.023029
+  },
+  "xor|fewshot_noisy_missing|entropy": {
+    "median": 0.033405,
+    "n": 3,
+    "q1": 0.03331,
+    "q3": 0.035178
+  },
+  "xor|fewshot_noisy_missing|projection": {
+    "median": 0.022197,
+    "n": 3,
+    "q1": 0.02198,
+    "q3": 0.0229425
+  },
+  "xor|missing|constant": {
+    "median": 0.003253,
+    "n": 3,
+    "q1": 0.0032435,
+    "q3": 0.0033689999999999996
+  },
+  "xor|missing|entropy": {
+    "median": 0.008013,
+    "n": 3,
+    "q1": 0.008008999999999999,
+    "q3": 0.0082195
+  },
+  "xor|missing|projection": {
+    "median": 0.003264,
+    "n": 3,
+    "q1": 0.003245,
+    "q3": 0.0034505
+  },
+  "xor|noisy|constant": {
+    "median": 0.002678,
+    "n": 3,
+    "q1": 0.0024574999999999996,
+    "q3": 0.0027305
+  },
+  "xor|noisy|entropy": {
+    "median": 0.006763,
+    "n": 3,
+    "q1": 0.006343,
+    "q3": 0.006866000000000001
+  },
+  "xor|noisy|projection": {
+    "median": 0.002702,
+    "n": 3,
+    "q1": 0.0024725,
+    "q3": 0.0028185
+  },
+  "xor|shuffled_fewshot|constant": {
+    "median": 0.029715,
+    "n": 3,
+    "q1": 0.025896,
+    "q3": 0.032041
+  },
+  "xor|shuffled_fewshot|entropy": {
+    "median": 0.044081,
+    "n": 3,
+    "q1": 0.039199,
+    "q3": 0.0468555
+  },
+  "xor|shuffled_fewshot|projection": {
+    "median": 0.029691,
+    "n": 3,
+    "q1": 0.025936,
+    "q3": 0.032251999999999996
+  },
+  "xor|shuffled|constant": {
+    "median": 0.002458,
+    "n": 3,
+    "q1": 0.002425,
+    "q3": 0.002562
+  },
+  "xor|shuffled|entropy": {
+    "median": 0.006343,
+    "n": 3,
+    "q1": 0.006286,
+    "q3": 0.006531
+  },
+  "xor|shuffled|projection": {
+    "median": 0.002455,
+    "n": 3,
+    "q1": 0.002424,
+    "q3": 0.0025945
+  }
+}

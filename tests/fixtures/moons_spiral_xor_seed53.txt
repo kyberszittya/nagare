@@ -1,0 +1,9 @@
+# Frozen seed-53 moons/spiral/xor datasets (Nagare holonomy benchmark line)
+# platform: x86_64-windows
+# task split samples points seed x_fnv1a64 y_fnv1a64 x_preview_hex
+moons train 192 32 53 a9314a4d43b07fe1 ecc496082f008f25 bf01254f,3f6053a2,bf7d0f16,3ea118a7,3f0d1f22,3f5592a2,3f6c37c8,3ef15150
+moons test 96 32 54 0ec9389c60bdfa3b 37641d763d4d5925 3e842563,3f744ad1,3f7ca589,3e3ebc5a,3f7cd9e9,3c6ef281,bf4089a0,3f1743b9
+spiral train 192 32 153 2c4760564c9672fb ecc496082f008f25 3e0f4196,3d1e026c,3e0b999f,3d971626,3e0c7f8b,3de02ec2,3d8b2a1c,3e6900cd
+spiral test 96 32 154 6d60ec1fd7c2892e 37641d763d4d5925 3db0f6c2,bc1382e5,3e202c44,3dc787a4,3de92073,3dda80aa,3dac2df2,3e53a450
+xor train 192 32 253 07f82a1412f98383 ecc496082f008f25 3f528a03,3f35cbd3,3f31756e,3f483709,bf3c3b4d,bf2a2805,bf304fe6,bf458ba4
+xor test 96 32 254 c1347c6a84930010 37641d763d4d5925 bf3fa746,bf32359d,3f24205b,3f49eea0,3f2ef18e,3f4085cb,bf3ef84a,bf3baa2a

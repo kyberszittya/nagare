@@ -2,6 +2,13 @@ use hymeko_clifford::{cayley_to_unit_quat, quat_mul, quat_rotate};
 
 use crate::VERTEX_FEATURES;
 
+/// Channel indices of the raw-geometry group `(x, y, r)`.
+pub const GEOMETRY_CHANNELS: [usize; 3] = [0, 1, 2];
+/// Channel indices of the rotor-rotated group `(rx, ry)`.
+pub const ROTOR_CHANNELS: [usize; 2] = [3, 4];
+/// Channel indices of the running-holonomy group `(w, z)` — order-sensitive.
+pub const HOLONOMY_CHANNELS: [usize; 2] = [5, 6];
+
 /// Quaternion periodic feature lift for `(x, y)` point sets.
 ///
 /// The lift emits `[x, y, r, rotated_x, rotated_y, holonomy_w, holonomy_z]`.

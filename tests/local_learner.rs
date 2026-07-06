@@ -26,7 +26,7 @@ fn stress_ablation_smoke_runs() {
         seed: 3,
     };
     let rows = run_stress_ablation(&cfg);
-    assert_eq!(rows.len(), 4);
+    assert_eq!(rows.len(), 6);
     for row in rows {
         assert!((0.0..=1.0).contains(&row.entropy_metrics.acc));
         assert!((0.0..=1.0).contains(&row.constant_metrics.acc));
