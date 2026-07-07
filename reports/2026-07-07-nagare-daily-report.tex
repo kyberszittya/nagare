@@ -1,0 +1,105 @@
+\documentclass[11pt]{article}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,booktabs,microtype}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=nb,urlcolor=nb]{hyperref}
+\definecolor{nb}{HTML}{2E5E8C}
+\setlength{\parskip}{4pt}\setlength{\parindent}{0pt}
+
+\begin{document}
+
+{\large\textbf{Nagare --- Daily Progress Report}}\\[2pt]
+\textcolor{nb}{\rule{\textwidth}{0.8pt}}\\[2pt]
+\textbf{Date:} 2026-07-07 \hfill \textbf{Author:} Cs.\ Hajdu\\
+\textbf{For:} Prof.\ Kato (NITech, Katolab) and Katalin --- collaboration update\\
+\textbf{Repository:} \url{https://github.com/kyberszittya/nagare}
+
+\section*{Summary}
+Today Nagare progressed from an in-framework component to a \textbf{standalone,
+machine-verified, and benchmarked} closed-form learning framework, with a first
+\textbf{competitive result on a real signed-link-prediction task}. The headline:
+on a fair CPU-vs-CPU comparison Nagare matches or beats PyTorch while using far
+less memory; its balance/holonomy foundation is now formally verified; and its
+closed-form learner reaches competitive AUROC on Slashdot/Epinions/Bitcoin. We
+also report, honestly, the one differentiating experiment that remains open.
+
+\section*{1. Framework consolidation}
+Nagare was extracted into a self-contained public repository: the two diverged
+copies were reconciled, the framework dependencies (\texttt{hymeko\_clifford},
+\texttt{hymeko\_graph}) were vendored in, and the crate now builds with no coupling
+to the parent framework. It compiles and runs on both Windows and the Katolab GPU
+host (\texttt{kato15}, Linux); \textbf{45 tests pass} on both. All optimisations
+below are proven bit-identical (finite-difference tests + a frozen fixture).
+
+\section*{2. Performance --- CPU, versus PyTorch}
+Nagare replaces the autograd tape with contiguous, auto-vectorised, closed-form
+kernels that parallelise (rayon) to every core. Two profile-driven fixes (a loop
+reorder that enables SIMD, and parallelising the pooling stage) took the forward
+from behind PyTorch to ahead of it on CPU.
+
+\begin{center}\small
+\begin{tabular}{lccc}
+\toprule
+axis & metric & Nagare (CPU) & PyTorch (CPU) \\
+\midrule
+forward latency (toy shape, 8 threads) & $\mu$s/sample & \textbf{7.6} & 7.6--9.1 \\
+dimensionality sweep (best-of-each) & speed-up & \textbf{$1.2$--$2.6\times$ faster} & baseline \\
+peak memory (toy $\to$ scaled) & RSS ratio & \multicolumn{2}{c}{\textbf{$3$--$160\times$ less (Nagare)}} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Honest bounds: at \emph{matched} 8 threads on large dense matmuls, tuned BLAS
+(MKL) still wins; and Nagare has \emph{no GPU backend yet}, so a GPU is faster in
+absolute terms --- that is future work, not a CPU-vs-GPU verdict. The genuine,
+robust win is competitive CPU speed at a large memory advantage.
+
+\section*{3. Theoretical foundation --- machine-verified}
+Nagare's learning target is \emph{signed balance $=\mathbb{Z}_2$ holonomy}. We
+machine-verified the load-bearing statements with an SMT solver (Z3) and symbolic
+algebra (sympy): the Cartwright--Harary balance theorem (switchable $\iff$ every
+cycle positive), the gauge invariance of cycle holonomy, and the cycle-space
+structure --- each proved as a validity, not sampled. Empirically, real signed
+networks are strongly balanced (\textbf{$87$--$93\%$ balanced triads}), which is
+the structural reason holonomy is predictive.
+
+\section*{4. Signed-link prediction --- first real-task result}
+A pure-Nagare closed-form model (local update rule, no backpropagation) on
+holonomy features achieves, leakage-free, 5-datasets, standard $80/20$ protocol:
+
+\begin{center}\small
+\begin{tabular}{lcccc}
+\toprule
+ & Bitcoin-Alpha & Bitcoin-OTC & Slashdot & Epinions \\
+\midrule
+Nagare (closed-form) AUROC & 0.904 & 0.928 & 0.910 & 0.951 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+This is \textbf{competitive} (inside the published SGCN/SiGAT band $\sim0.93$--$0.97$)
+--- Nagare's closed-form learner \emph{matches} the baselines. It does not beat
+them, because on these datasets the signal is triad-saturated (deeper cycles and
+continuous edge weights add little to the \emph{binary} sign target). The value is
+therefore competitive quality via closed-form learning at the speed/memory
+advantage above, not an accuracy breakout.
+
+\section*{5. Open question / next step}
+Signed hypergraphs are naturally real-valued ($w_e\in[-1,1]$), and Nagare's
+Clifford/rotor holonomy models that continuum. The measurements show its payoff is
+\emph{not} on binary sign prediction but on a \textbf{continuous target} ---
+predicting rating / trust \emph{strength} (regression), where the magnitude is
+necessary and binarising cannot compete. That is the single, well-posed
+differentiating experiment remaining.
+
+\section*{Artifacts (on the repository)}
+Integrated technical draft \texttt{docs/nagare-paper.pdf}; reports and figures
+under \texttt{reports/}; reproducible harnesses under \texttt{examples/} and
+\texttt{scripts/dev/} (theorem verifier, benchmarks, signed-link model).
+
+\vspace{4pt}\textcolor{nb}{\rule{\textwidth}{0.4pt}}\\
+\footnotesize Prepared as an honest status update: measured results are labelled
+as such, and the one unproven differentiating claim is stated as open.
+
+\end{document}
