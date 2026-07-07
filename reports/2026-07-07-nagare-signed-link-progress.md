@@ -50,6 +50,20 @@ learned, closed-form holonomy over longer signed cycles** (`clifford_fir` over t
 `hymeko_graph` cycle pool). The approach is now de-risked: the Rust model must
 reproduce/beat this via its own kernels.
 
+## Nonlinearity does NOT help at the summary-feature level (2026-07-07)
+
+Discriminating test (`scripts/dev/signed_link_nonlinear.py`): a 64-64 MLP over the
+same `[degree + signed-holonomy]` features is **worse** than the linear logistic
+on all three datasets (BTC-Alpha $-0.015$, Slashdot $-0.015$, Epinions $-0.010$).
+**Implication:** stacking a fancier nonlinear readout (Highway-KAN / "spikes") on
+hand-crafted holonomy *summaries* is over-engineering — the signal there is
+linear. The place a learned model can still add is **learning the holonomy
+aggregation over the RAW signed cycle pool** (longer cycles, `clifford_fir`), not
+a deeper readout over pre-summarized scalars. That — and only that — is what the
+Nagare Rust model should test next; spiking is unmotivated by any evidence and
+the project itself flagged it for toy-validation first. Do not add HSiKAN+spikes
+until deeper *raw-cycle* holonomy is shown to beat the linear+triad result.
+
 ## Next phase (the Nagare closed-form model — not yet built)
 
 Per the handoff: build the edge-sign pipeline on the shipped kernels — signed
