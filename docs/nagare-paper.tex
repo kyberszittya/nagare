@@ -180,25 +180,34 @@ level: a $64$--$64$ MLP over the same features is worse than linear
 hand-crafted holonomy summaries} is over-engineering. The open lever is a
 \emph{learned} holonomy aggregation over the \emph{raw} cycle pool.
 
-\paragraph{Depth is triad-dominated (scalar).} Multi-scale \emph{scalar}
-holonomy via signed adjacency powers $A^2\!+\!A^3\!+\!A^4$ (longer signed walks)
-lifts over triad-only $A^2$ only marginally, and the lift \emph{shrinks} with
-density: BTC-Alpha $+0.008$, Slashdot $+0.003$, Epinions $+0.001$. On standard
-signed networks the balance signal is largely triadic; deeper $\pm1$ walk
-holonomy adds little once triadic closure saturates.
+\paragraph{Depth is triad-dominated; and the binary target does not reward
+continuity.} Two calibrating measurements. (a) Multi-scale \emph{scalar} holonomy
+$A^2\!+\!A^3\!+\!A^4$ lifts over triad-only $A^2$ only marginally and shrinking
+with density (BTC-Alpha $+0.008$, Slashdot $+0.003$, Epinions $+0.001$): the
+balance signal is largely triadic. (b) Signed hypergraphs are naturally
+real-valued ($w_e\in[-1,1]$; holonomy $\prod w_e$ is a continuous product with
+magnitude = confidence), and \texttt{clifford\_fir} models exactly that. Yet on
+the rated Bitcoin graphs the \emph{weighted} $[-1,1]$ holonomy is \emph{worse}
+than $\pm1$ for \emph{sign} prediction (BTC-Alpha $-0.006$, BTC-OTC $-0.013$) ---
+because the target is binary, so binarising aligns with it and down-weighting
+weak-but-correctly-signed edges loses votes. \textbf{Conclusion:} the continuous
+holonomy's payoff is not on the binary sign benchmark (there $\pm1$ + triads
+suffice); it is on a \emph{continuous target} --- predicting rating / trust
+\emph{strength} --- where the $[-1,1]$ magnitude is necessary. That reframes the
+decisive Nagare experiment.
 
 \paragraph{Evidence chain (state).}
 (1) Theorem: signed balance $=\mathbb{Z}_2$ holonomy --- \emph{verified}.
 (2) Structure: real networks are strongly balanced --- \emph{measured}.
 (3) Signal: signed holonomy lifts AUROC --- \emph{measured}.
-(4) Depth: \emph{scalar} deeper holonomy is triad-dominated (marginal lift) ---
+(4) Depth: \emph{scalar} deeper holonomy is triad-dominated, and \emph{weighted}
+$[-1,1]$ holonomy does not beat $\pm1$ on the \emph{binary} sign target ---
 \emph{measured}.
-(5) \textbf{Open}: whether Nagare's \emph{rotor} (Clifford) holonomy --- the
-continuous generalisation of the $\pm1$ sign product, which is a strict lower
-bound of what \texttt{clifford\_fir} represents --- extracts more than scalar
-walk-holonomy. That is the Nagare model's actual bet, \emph{not yet built}. The
-scalar result calibrates the expectation: competitive band, depth alone marginal;
-the open question is the \emph{representation} (rotor vs $\pm1$), not the order.
+(5) \textbf{Reframed open}: the continuous holonomy that \texttt{clifford\_fir}
+represents pays off on a \emph{continuous} target --- predicting rating / trust
+\emph{strength}, where the $[-1,1]$ magnitude is necessary --- not on binary sign
+prediction (there $\pm1$ + triads suffice). The decisive Nagare experiment is
+therefore rotor holonomy on a strength-regression target, \emph{not yet built}.
 
 \section{Learning quality}
 Closed-form local learner, Mann--Whitney AUROC (\texttt{examples/auroc\_eval.rs}),
