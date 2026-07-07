@@ -61,9 +61,13 @@ holonomy features, leakage-free, standard 80/20 protocol:
 
 This is **competitive** (inside the published SGCN/SiGAT band ~0.93–0.97) — Nagare's
 closed-form learner *matches* the baselines. It does not beat them, because on these
-datasets the signal is triad-saturated (deeper cycles and continuous edge weights add
-little to the *binary* sign target). The value is competitive quality via closed-form
-learning at the speed/memory advantage above, not an accuracy breakout.
+datasets the signal is triad-saturated. **Caveat (from prior in-house benchmarks):**
+on *arity-2* signed graphs this AUROC is partly a prevalence effect — Bitcoin's ~90%
+positive edges make a node-popularity heuristic strong — and signed-KAN architectures
+are only SGCN-competitive here. The regime where they are measured to *beat* graph
+GNNs (by ~+0.05 AUC) is **mixed-arity hypergraphs**, which graph-only models cannot
+represent — the differentiating target going forward, and exactly what Nagare's
+higher-arity cycle pool is built for.
 
 ## 5. Open question / next step
 

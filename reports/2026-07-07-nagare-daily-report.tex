@@ -80,10 +80,14 @@ Nagare (closed-form) AUROC & 0.904 & 0.928 & 0.910 & 0.951 \\
 
 This is \textbf{competitive} (inside the published SGCN/SiGAT band $\sim0.93$--$0.97$)
 --- Nagare's closed-form learner \emph{matches} the baselines. It does not beat
-them, because on these datasets the signal is triad-saturated (deeper cycles and
-continuous edge weights add little to the \emph{binary} sign target). The value is
-therefore competitive quality via closed-form learning at the speed/memory
-advantage above, not an accuracy breakout.
+them, because on these datasets the signal is triad-saturated. \textbf{Caveat (from
+prior in-house benchmarks):} on \emph{arity-2} signed graphs this AUROC is partly a
+prevalence effect --- Bitcoin's $\sim$$90\%$ positive edges make a node-popularity
+heuristic strong --- and signed-KAN architectures are only SGCN-competitive here.
+The regime where they are measured to \emph{beat} graph GNNs (by $\sim$$+0.05$ AUC)
+is \textbf{mixed-arity hypergraphs}, which graph-only models cannot represent. That
+is the differentiating target going forward, and it is exactly what Nagare's
+higher-arity cycle pool is built for.
 
 \section*{5. Open question / next step}
 Signed hypergraphs are naturally real-valued ($w_e\in[-1,1]$), and Nagare's
