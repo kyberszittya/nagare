@@ -85,6 +85,22 @@ the framework's value then stays "fast/lean CPU forward + clean systems," not
 - Compute: kato15 (`ssh kato15`, tcsh — drive via `bash -ls` + heredoc; cargo at
   `~/.cargo`, torch env `~/envs/hymeko`) is available for baselines if needed.
 
+## Baseline ceiling — MEASURED 2026-07-07 (harness validated)
+
+Data downloaded (kato15 `/tmp/hajdu/signed/`) and the harness validated with a
+leakage-free signed-degree logistic (`reports/2026-07-07-nagare-signed-link-progress.md`):
+
+| dataset | pos frac | baseline AUROC (3-seed) |
+|---|---:|---:|
+| Bitcoin-Alpha | 0.936 | ~0.91 |
+| Slashdot | 0.774 | ~0.912 |
+| Epinions | 0.853 | ~0.951 |
+
+These match the literature → loader/split/no-leakage-features/AUROC are correct.
+**Nagare's target band:** floor ~0.91–0.95 (above), ceiling ~0.93–0.97 (published
+SGCN/SiGAT). Land in/above on multi-seed median to be "competitive." No Nagare
+number exists yet.
+
 ## Deliverable
 
 A report with the AUROC table (Nagare vs SGCN/SiGAT/backprop-MLP/logistic,
