@@ -64,6 +64,25 @@ Nagare Rust model should test next; spiking is unmotivated by any evidence and
 the project itself flagged it for toy-validation first. Do not add HSiKAN+spikes
 until deeper *raw-cycle* holonomy is shown to beat the linear+triad result.
 
+## Deeper scalar holonomy is triad-dominated (2026-07-07, `scripts/dev/signed_link_deep.py`)
+
+Multi-scale scalar holonomy via signed adjacency powers ($A^2\!+\!A^3\!+\!A^4$,
+longer signed walks) vs triad-only ($A^2$):
+
+| dataset | triad ($A^2$) | deep ($A^2\!+\!A^3\!+\!A^4$) | lift |
+|---|---:|---:|---:|
+| Bitcoin-Alpha | 0.889 | 0.897 | +0.0084 |
+| Slashdot | 0.906 | 0.909 | +0.0030 |
+| Epinions | 0.943 | 0.944 | +0.0015 |
+
+Positive but marginal, and shrinking with density → the balance signal on standard
+signed networks is **triad-dominated**; deeper $\pm1$ walk holonomy adds little.
+**Crucial caveat:** this is *scalar* ($\pm1$) walk holonomy — a **lower bound** for
+Nagare's `clifford_fir`, which uses **rotor/Clifford (continuous)** holonomy. The
+open Nagare bet is the *representation* (rotor vs $\pm1$), not the walk order. The
+scalar result calibrates the expectation: competitive band (~0.90–0.94), depth
+alone marginal; the Rust model must test whether continuous holonomy beats scalar.
+
 ## Next phase (the Nagare closed-form model — not yet built)
 
 Per the handoff: build the edge-sign pipeline on the shipped kernels — signed

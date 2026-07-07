@@ -180,12 +180,25 @@ level: a $64$--$64$ MLP over the same features is worse than linear
 hand-crafted holonomy summaries} is over-engineering. The open lever is a
 \emph{learned} holonomy aggregation over the \emph{raw} cycle pool.
 
+\paragraph{Depth is triad-dominated (scalar).} Multi-scale \emph{scalar}
+holonomy via signed adjacency powers $A^2\!+\!A^3\!+\!A^4$ (longer signed walks)
+lifts over triad-only $A^2$ only marginally, and the lift \emph{shrinks} with
+density: BTC-Alpha $+0.008$, Slashdot $+0.003$, Epinions $+0.001$. On standard
+signed networks the balance signal is largely triadic; deeper $\pm1$ walk
+holonomy adds little once triadic closure saturates.
+
 \paragraph{Evidence chain (state).}
 (1) Theorem: signed balance $=\mathbb{Z}_2$ holonomy --- \emph{verified}.
 (2) Structure: real networks are strongly balanced --- \emph{measured}.
 (3) Signal: signed holonomy lifts AUROC --- \emph{measured}.
-(4) \textbf{Open}: does learned deeper raw-cycle holonomy beat linear$+$triad? ---
-the Nagare Rust model, \emph{not yet built}.
+(4) Depth: \emph{scalar} deeper holonomy is triad-dominated (marginal lift) ---
+\emph{measured}.
+(5) \textbf{Open}: whether Nagare's \emph{rotor} (Clifford) holonomy --- the
+continuous generalisation of the $\pm1$ sign product, which is a strict lower
+bound of what \texttt{clifford\_fir} represents --- extracts more than scalar
+walk-holonomy. That is the Nagare model's actual bet, \emph{not yet built}. The
+scalar result calibrates the expectation: competitive band, depth alone marginal;
+the open question is the \emph{representation} (rotor vs $\pm1$), not the order.
 
 \section{Learning quality}
 Closed-form local learner, Mann--Whitney AUROC (\texttt{examples/auroc\_eval.rs}),
