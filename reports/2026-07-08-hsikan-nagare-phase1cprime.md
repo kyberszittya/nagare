@@ -59,13 +59,24 @@ into small helpers (`offdiag_sq`/`apply_rotation`/`gram_ata`/`gram_aat`/
 `spectral_distribution`/`spectral_lambda_grad`/`build_m`) — each under the complexity
 ceiling. The stateful schedule is a struct threaded explicitly (no globals, §6.5 #11).
 
+## Wiring — both mechanisms in one training loop (done)
+
+`tests/hsikan_entropy_training.rs`: the node-embedding matrix `x` is trained on the
+mixed-arity task by (1) the **entropy-gated local delta-rule readout** (with the task
+error backprop'd through `hsikan_backward` into `x`) AND (2) the **spectral-entropy
+regulariser** `∇_x` summed into the `x` update. Against a reg-off control:
+
+| | task loss (init → final) | final `H_norm` (τ=0.5) |
+|---|---|---|
+| **reg ON** | 0.6869 → **0.0093** | **0.408** (\|Δτ\|=0.092) |
+| reg OFF | — | 0.616 (\|Δτ\|=0.116) |
+
+The regulariser pulls `H_norm(x)` toward τ (0.408 vs the control's 0.616) *while* the
+entropy-gated readout drives task loss to near zero — both mechanisms coexist and work.
+
 ## Open / follow-up
 
-1. **Wire into HSiKAN training** (the remaining plan step): add `SpectralEntropyReg::step`
-   on the node-embedding matrix, its `∇_A` summed into `grad_x` (from `hsikan_backward`),
-   and show (a) task loss still falls, (b) `H_norm` moves toward `τ`. This closes the
-   "both mechanisms" loop (entropy-gated update [1c] + spectral regulariser [1c′]).
-2. **1d** — forward/train latency + peak RSS + the `chunk_t` cap.
+1. **1d** — forward/train latency + peak RSS + the `chunk_t` cap.
 3. **Multi-seed** entropy-vs-constant (from 1c).
 4. `CoefEntropyRegulariser` (per-coef-tensor) is a thin loop over this op if needed.
 
