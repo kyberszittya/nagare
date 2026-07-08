@@ -41,6 +41,10 @@ pub use ops::fused_entropy_update::{
     fused_entropy_update_backward, fused_entropy_update_forward, FusedEntropyUpdateBackward,
     FusedEntropyUpdateShape,
 };
+pub use ops::hsikan::{
+    hsikan_backward, hsikan_forward, HsikanBackward, HsikanCache, HsikanConfig, HsikanEdges,
+    HsikanParams,
+};
 pub use ops::linear::{linear_backward, linear_forward, LinearLayer};
 pub use ops::loss::{bce_with_logits_backward, bce_with_logits_forward};
 pub use ops::project_alpha_mix::{
@@ -50,6 +54,9 @@ pub use ops::project_alpha_mix::{
 pub use ops::scatter::{scatter_mean_backward, scatter_mean_forward};
 pub use ops::signed_scatter::{
     signed_scatter_backward, signed_scatter_forward, SignedScatterLanes, SignedScatterLayout,
+};
+pub use ops::spectral_entropy::{
+    jacobi_eigh, spectral_reg_value_grad, SpectralEntropyConfig, SpectralEntropyReg,
 };
 pub use pooling::structural_pool_features;
 pub use projection::{default_holonomy_basis, fit_class_mean_basis, ProjectionBasis};
