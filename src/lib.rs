@@ -42,8 +42,8 @@ pub use ops::fused_entropy_update::{
     FusedEntropyUpdateShape,
 };
 pub use ops::hsikan::{
-    hsikan_backward, hsikan_forward, HsikanBackward, HsikanCache, HsikanConfig, HsikanEdges,
-    HsikanParams,
+    hsikan_backward, hsikan_forward, hsikan_forward_chunked, HsikanBackward, HsikanCache,
+    HsikanConfig, HsikanEdges, HsikanParams,
 };
 pub use ops::linear::{linear_backward, linear_forward, LinearLayer};
 pub use ops::loss::{bce_with_logits_backward, bce_with_logits_forward};

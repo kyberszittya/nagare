@@ -28,3 +28,7 @@ path = "examples/toy_compare.rs"
 [[bench]]
 name = "parity_gate"
 harness = false
+
+[[bench]]
+name = "hsikan_bench"
+harness = false

@@ -338,6 +338,49 @@ pub fn hsikan_forward(
     (h_e, cache)
 }
 
+/// Forward-only HSiKAN over hyperedges in `chunk_t`-sized batches — the deploy /
+/// feature-extraction path. Returns `h_e (T, d)` **without a backward cache**, so the
+/// peak intermediate stays `O(chunk_t · k · S · d)` instead of the naive
+/// `O(T · k · S · d)`: each chunk's cache is dropped before the next. Inherits the
+/// PyTorch `HSIKAN_CHUNK_T` streaming cap; the output is bit-identical to
+/// [`hsikan_forward`]'s `h_e`.
+///
+/// # Preconditions
+/// Same buffer-length contract as [`hsikan_forward`]; `chunk_t` is clamped to `≥ 1`.
+///
+/// # Postconditions
+/// `h_e.len() == T·d`; peak heap use during the call is bounded by one chunk.
+pub fn hsikan_forward_chunked(
+    params: HsikanParams<'_>,
+    x: &[f32],
+    edges: HsikanEdges<'_>,
+    cfg: HsikanConfig,
+    chunk_t: usize,
+) -> Vec<f32> {
+    let (t, k, d) = (cfg.n_edges, cfg.arity, cfg.hidden);
+    assert_eq!(edges.vertices.len(), t * k);
+    assert_eq!(edges.signs.len(), t * k);
+    let step = chunk_t.max(1);
+    let mut h_e = Vec::with_capacity(t * d);
+    let mut start = 0;
+    while start < t {
+        let end = (start + step).min(t);
+        let sub_edges = HsikanEdges {
+            vertices: &edges.vertices[start * k..end * k],
+            signs: &edges.signs[start * k..end * k],
+        };
+        let sub_cfg = HsikanConfig {
+            n_edges: end - start,
+            ..cfg
+        };
+        // The chunk's cache is dropped here — only h_e is retained.
+        let (chunk_he, _cache) = hsikan_forward(params, x, sub_edges, sub_cfg);
+        h_e.extend_from_slice(&chunk_he);
+        start = end;
+    }
+    h_e
+}
+
 /// Outer-spline backward → `(grad_outer_coef, grad_agg)`.
 fn outer_backward(cache: &HsikanCache, grad_he: &[f32], cfg: HsikanConfig) -> (Vec<f32>, Vec<f32>) {
     let (t, d, s_br, bl) = (cfg.n_edges, cfg.hidden, cfg.n_branches, cfg.branch_len());
@@ -595,6 +638,21 @@ mod tests {
         let (h_e, _) = hsikan_forward(f.params(), &f.x, f.edges(), f.cfg);
         assert_eq!(h_e.len(), f.cfg.n_edges * f.cfg.hidden);
         assert!(h_e.iter().all(|v| v.is_finite()));
+    }
+
+    #[test]
+    fn chunked_matches_naive() {
+        // Streaming over T (incl. a mid-batch chunk boundary) is bit-equal to the
+        // single-batch forward's h_e.
+        let f = Fixture::new(true);
+        let (naive, _) = hsikan_forward(f.params(), &f.x, f.edges(), f.cfg);
+        for chunk in [1usize, 2, 100] {
+            let chunked = hsikan_forward_chunked(f.params(), &f.x, f.edges(), f.cfg, chunk);
+            assert_eq!(chunked.len(), naive.len());
+            for (a, b) in chunked.iter().zip(&naive) {
+                assert!((a - b).abs() < 1e-6, "chunk={chunk}: {a} vs {b}");
+            }
+        }
     }
 
     #[test]
