@@ -7,20 +7,28 @@
 //! aggregation `gather→linear→mean→scatter`; `concat(X₀, H₀…H_{L-1})` node embedding) → edge
 //! head scores `sign(u,v)` from `[emb[u], emb[v]]`. Trained closed-form (Adam), test AUROC.
 //!
-//! Ablation in one run: **L=3 tiered** vs **L=1 flat** inner, same features/triangles/edges,
-//! `tier_of` (hence routing) the only difference. Reports both AUROCs + the verdict.
+//! Three inner mechanisms in one run, same features/triangles/edges:
+//!   1. **L=1 flat** — single sign-agnostic aggregator (baseline).
+//!   2. **L=3 tiered** — fixed degree-tier routing (the CPML core).
+//!   3. **signed hypergraph conv** — learned one-round signed HGNN embedding
+//!      (`vertex_proj → node→edge (σ,D^{-1/2}) → edge_lin → edge→node → concat(x0,·)`),
+//!      built from the `hg_message` kernels. The learned counterpart to the fixed routing.
+//! Reports all three test AUROCs + verdicts vs the flat baseline.
 //!
 //! Run: `cargo run --release --example cpml_signed_link -- --data path.csv [--seed 0] [--max-tri 60000]`
 
 use std::collections::HashMap;
 
 use holonomy_learn::{
-    adam_step, cycle_incidence_degrees, linear_backward, linear_forward, scatter_mean_backward,
-    scatter_mean_forward, tier_cycle_indices, AdamState, LinearLayer, TierSpec,
+    adam_step, cycle_incidence_degrees, hg_edge_to_node_backward, hg_edge_to_node_forward,
+    hg_node_to_edge_backward, hg_node_to_edge_forward, linear_backward, linear_forward,
+    scatter_mean_backward, scatter_mean_forward, tier_cycle_indices, AdamState, LinearLayer,
+    TierSpec,
 };
 
 const F: usize = 4; // per-vertex feature dim
 const D: usize = 4; // per-tier aggregator output dim
+const DH: usize = 8; // HGConv hidden dim
 
 fn arg_str(name: &str) -> Option<String> {
     std::env::args().skip_while(|a| a != name).nth(1)
@@ -262,6 +270,103 @@ fn run(
     auroc(&sc, te_y)
 }
 
+/// Adam-flatten helper for a `LinearLayer` param+grad → one step.
+fn adam_layer(layer: &mut LinearLayer, grad: &LinearLayer, st: &mut AdamState, lr: f32) {
+    let mut flat: Vec<f32> = layer.w.iter().chain(&layer.b).copied().collect();
+    let g: Vec<f32> = grad.w.iter().chain(&grad.b).copied().collect();
+    adam_step(&mut flat, &g, st, lr);
+    let (w, b) = flat.split_at(layer.w.len());
+    layer.w.copy_from_slice(w);
+    layer.b.copy_from_slice(b);
+}
+
+/// Build edge-head input `[emb[u], emb[v]]` per edge (emb width `ed`).
+fn edge_in(emb: &[f32], edges: &[(u32, u32)], ed: usize) -> Vec<f32> {
+    let mut ein = vec![0.0f32; edges.len() * 2 * ed];
+    for (e, &(u, v)) in edges.iter().enumerate() {
+        let b = e * 2 * ed;
+        ein[b..b + ed].copy_from_slice(&emb[u as usize * ed..u as usize * ed + ed]);
+        ein[b + ed..b + 2 * ed].copy_from_slice(&emb[v as usize * ed..v as usize * ed + ed]);
+    }
+    ein
+}
+
+/// Learned signed **hypergraph convolution** node embedding, ablation arm vs the fixed tier
+/// core: `x0 → vertex_proj → node→edge (σ, D^{-1/2}) → edge_lin → edge→node (σ, D^{-1/2}/D)
+/// → concat(x0, out) → edge head`. Same edges/AUROC as `run`. Returns test AUROC.
+#[allow(clippy::too_many_arguments)]
+fn run_hgconv(
+    x0: &[f32],
+    tris: &[u32],
+    tsig: &[f32],
+    s_n2e: &[f32],
+    s_e2n: &[f32],
+    n: usize,
+    tr_e: &[(u32, u32)],
+    tr_y: &[f32],
+    te_e: &[(u32, u32)],
+    te_y: &[u8],
+    seed: u64,
+) -> f64 {
+    let n_tri = tris.len() / 3;
+    let ed = F + DH; // embedding width
+    let mut vproj = LinearLayer::new(F, DH, seed + 1);
+    let mut elin = LinearLayer::new(DH, DH, seed + 2);
+    let mut head = LinearLayer::new(2 * ed, 1, seed + 3);
+    let (mut sv, mut se, mut sh) = (
+        AdamState::new(vproj.w.len() + vproj.b.len()),
+        AdamState::new(elin.w.len() + elin.b.len()),
+        AdamState::new(head.w.len() + head.b.len()),
+    );
+
+    // Forward → (node embedding, per-edge h_e cache for the backward).
+    let embed = |vproj: &LinearLayer, elin: &LinearLayer| -> (Vec<f32>, Vec<f32>) {
+        let x_p = linear_forward(vproj, x0);
+        let h_e = hg_node_to_edge_forward(&x_p, tris, tsig, s_n2e, n_tri, 3, DH);
+        let h_e2 = linear_forward(elin, &h_e);
+        let out = hg_edge_to_node_forward(&h_e2, tris, tsig, s_e2n, n, 3, DH);
+        let mut emb = vec![0.0f32; n * ed];
+        for v in 0..n {
+            emb[v * ed..v * ed + F].copy_from_slice(&x0[v * F..v * F + F]);
+            emb[v * ed + F..v * ed + ed].copy_from_slice(&out[v * DH..v * DH + DH]);
+        }
+        (emb, h_e)
+    };
+
+    let ntr = tr_y.len() as f32;
+    for _ in 0..250 {
+        let (emb, h_e) = embed(&vproj, &elin);
+        let ein = edge_in(&emb, tr_e, ed);
+        let logits = linear_forward(&head, &ein);
+        let mut gl = vec![0.0f32; tr_e.len()];
+        for i in 0..tr_e.len() {
+            let p = 1.0 / (1.0 + (-logits[i]).exp());
+            gl[i] = (p - tr_y[i]) / ntr;
+        }
+        let (grad_ein, grad_head) = linear_backward(&head, &ein, &gl);
+        // Scatter edge-endpoint grads → grad_emb, take the `out` slice.
+        let mut grad_out = vec![0.0f32; n * DH];
+        for (e, &(u, v)) in tr_e.iter().enumerate() {
+            let b = e * 2 * ed;
+            for j in 0..DH {
+                grad_out[u as usize * DH + j] += grad_ein[b + F + j];
+                grad_out[v as usize * DH + j] += grad_ein[b + ed + F + j];
+            }
+        }
+        // Backprop the two HGConv kernels + the linears.
+        let grad_h_e2 = hg_edge_to_node_backward(tris, tsig, s_e2n, &grad_out, n_tri, 3, DH);
+        let (grad_h_e, grad_elin) = linear_backward(&elin, &h_e, &grad_h_e2);
+        let grad_x_p = hg_node_to_edge_backward(tris, tsig, s_n2e, &grad_h_e, n, 3, DH);
+        let (_gx0, grad_vproj) = linear_backward(&vproj, x0, &grad_x_p);
+        adam_layer(&mut vproj, &grad_vproj, &mut sv, 0.02);
+        adam_layer(&mut elin, &grad_elin, &mut se, 0.02);
+        adam_layer(&mut head, &grad_head, &mut sh, 0.02);
+    }
+    let (emb, _) = embed(&vproj, &elin);
+    let ein = edge_in(&emb, te_e, ed);
+    auroc(&linear_forward(&head, &ein), te_y)
+}
+
 fn main() {
     let path = arg_str("--data").expect("--data <edgelist.csv>");
     let seed = arg_f("--seed", 0.0) as u64;
@@ -307,14 +412,17 @@ fn main() {
     let cut = order.len() * 4 / 5;
     let (tr_i, te_i) = order.split_at(cut);
 
-    // Train adjacency (undirected) + signed-degree tallies.
+    // Train adjacency (undirected) + signed-degree tallies + per-edge signs.
     let mut adj: HashMap<u32, Vec<u32>> = HashMap::new();
+    let mut esign: HashMap<(u32, u32), f32> = HashMap::new();
     let mut pos = vec![0.0f32; n];
     let mut neg = vec![0.0f32; n];
+    let ekey = |a: u32, b: u32| if a < b { (a, b) } else { (b, a) };
     for &e in tr_i {
         let (u, v, r) = edges[e];
         adj.entry(u as u32).or_default().push(v as u32);
         adj.entry(v as u32).or_default().push(u as u32);
+        esign.insert(ekey(u as u32, v as u32), r.signum());
         let s = if r > 0.0 { &mut pos } else { &mut neg };
         s[u] += 1.0;
         s[v] += 1.0;
@@ -345,6 +453,7 @@ fn main() {
         }
     }
     let mut tris: Vec<u32> = Vec::new();
+    let mut tri_signs: Vec<f32> = Vec::new(); // per-corner: sign of the outgoing boundary edge
     'outer: for u in 0..n as u32 {
         for &v in &nbr[u as usize] {
             if v <= u {
@@ -356,6 +465,10 @@ fn main() {
                 }
                 if nbr[v as usize].contains(&w) {
                     tris.extend_from_slice(&[u, v, w]);
+                    // corner u → edge (u,v), corner v → edge (v,w), corner w → edge (w,u).
+                    tri_signs.push(esign[&ekey(u, v)]);
+                    tri_signs.push(esign[&ekey(v, w)]);
+                    tri_signs.push(esign[&ekey(u, w)]);
                     if tris.len() / 3 >= max_tri {
                         break 'outer;
                     }
@@ -365,8 +478,11 @@ fn main() {
     }
     let n_tri = tris.len() / 3;
 
-    // Real degrees → tiers (heavy-tailed on these graphs).
+    // Real degrees → tiers (heavy-tailed on these graphs) + D_v^{-1/2} scales for HGConv.
     let degrees = cycle_incidence_degrees(&tris, n);
+    let dv: Vec<f32> = degrees.iter().map(|&d| d.max(1.0)).collect();
+    let dv_inv_sqrt: Vec<f32> = dv.iter().map(|&d| d.powf(-0.5)).collect();
+    let scale_e2n: Vec<f32> = dv.iter().zip(&dv_inv_sqrt).map(|(&d, &s)| s / d).collect();
     let tier3 = TierSpec::uniform(3).assign(&degrees);
     let tier1 = TierSpec::uniform(1).assign(&degrees);
     let sizes: Vec<usize> = (0..3)
@@ -387,30 +503,22 @@ fn main() {
     };
     let (tr_e, tr_y, _) = mk(tr_i);
     let (te_e, _, te_y) = mk(te_i);
+    let sd = seed.wrapping_add(1);
 
-    let a3 = run(
-        3,
+    let a1 = run(1, &x0, &tris, &tier1, n, &tr_e, &tr_y, &te_e, &te_y, sd);
+    let a3 = run(3, &x0, &tris, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, sd);
+    let ah = run_hgconv(
         &x0,
         &tris,
-        &tier3,
+        &tri_signs,
+        &dv_inv_sqrt,
+        &scale_e2n,
         n,
         &tr_e,
         &tr_y,
         &te_e,
         &te_y,
-        seed.wrapping_add(1),
-    );
-    let a1 = run(
-        1,
-        &x0,
-        &tris,
-        &tier1,
-        n,
-        &tr_e,
-        &tr_y,
-        &te_e,
-        &te_y,
-        seed.wrapping_add(1),
+        sd,
     );
 
     let name = path.rsplit(['/', '\\']).next().unwrap_or(&path);
@@ -418,17 +526,22 @@ fn main() {
         "{name}  V={n} edges={} tri={n_tri} tiers(L=3)={sizes:?}",
         edges.len()
     );
-    println!("  L=3 tiered inner: test AUROC {a3:.4}");
-    println!("  L=1 flat  inner: test AUROC {a1:.4}");
-    println!(
-        "  verdict: tier-stratification {} on a real heavy-tailed graph (ΔAUROC {:+.4})",
-        if a3 > a1 + 0.003 {
+    println!("  L=1 flat  inner (fixed):      test AUROC {a1:.4}");
+    println!("  L=3 tiered inner (fixed):     test AUROC {a3:.4}");
+    println!("  signed hypergraph conv (learned): test AUROC {ah:.4}");
+    let verdict = |name: &str, val: f64, base: f64| {
+        let tag = if val > base + 0.003 {
             "HELPS"
-        } else if a3 < a1 - 0.003 {
+        } else if val < base - 0.003 {
             "HURTS"
         } else {
-            "ties (does not earn its weight)"
-        },
-        a3 - a1
-    );
+            "ties"
+        };
+        println!(
+            "  {name} vs flat baseline: {tag} (ΔAUROC {:+.4})",
+            val - base
+        );
+    };
+    verdict("tier-stratification", a3, a1);
+    verdict("hypergraph conv    ", ah, a1);
 }

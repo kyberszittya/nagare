@@ -19,6 +19,7 @@ pub mod cpml_tier;
 pub mod fsr_mixer;
 pub mod fused_entropy_update;
 pub mod gomb_shell;
+pub mod hg_message;
 pub mod hsikan;
 pub mod kan;
 pub mod kochanek_bartels;
