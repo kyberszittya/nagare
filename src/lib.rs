@@ -13,6 +13,7 @@ pub mod optimizer;
 pub mod pooling;
 pub mod projection;
 pub mod runtime;
+pub mod tabular;
 
 pub const VERTEX_FEATURES: usize = 7;
 pub const STRUCTURAL_FEATURES: usize = 4 * VERTEX_FEATURES;
@@ -46,6 +47,7 @@ pub use ops::hsikan::{
     hsikan_backward, hsikan_forward, hsikan_forward_chunked, HsikanBackward, HsikanCache,
     HsikanConfig, HsikanEdges, HsikanParams,
 };
+pub use ops::kan::{kan_backward, kan_forward, KanCache, KanConfig};
 pub use ops::linear::{linear_backward, linear_forward, LinearLayer};
 pub use ops::loss::{bce_with_logits_backward, bce_with_logits_forward};
 pub use ops::project_alpha_mix::{
@@ -56,9 +58,13 @@ pub use ops::scatter::{scatter_mean_backward, scatter_mean_forward};
 pub use ops::signed_scatter::{
     signed_scatter_backward, signed_scatter_forward, SignedScatterLanes, SignedScatterLayout,
 };
+pub use ops::softmax_k::{
+    accuracy_k, cross_entropy_k_backward, cross_entropy_k_forward, softmax_k,
+};
 pub use ops::spectral_entropy::{
     jacobi_eigh, spectral_reg_value_grad, SpectralEntropyConfig, SpectralEntropyReg,
 };
 pub use pooling::structural_pool_features;
 pub use projection::{default_holonomy_basis, fit_class_mean_basis, ProjectionBasis};
 pub use runtime::NagareRuntime;
+pub use tabular::{load_csv, Tabular};
