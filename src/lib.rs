@@ -38,6 +38,7 @@ pub use ops::catmull_rom::{
 };
 pub use ops::cayley_rotor::{cayley_rotor_backward, cayley_rotor_forward};
 pub use ops::clifford_fir::{clifford_fir_backward, clifford_fir_forward, CliffordFIR};
+pub use ops::cpml_tier::{cycle_incidence_degrees, tier_cycle_indices, TierSpec};
 pub use ops::fsr_mixer::{FsrMixer, FsrMixerBackward, FsrMixerCache, FsrRoute};
 pub use ops::fused_entropy_update::{
     fused_entropy_update_backward, fused_entropy_update_forward, FusedEntropyUpdateBackward,
