@@ -110,6 +110,13 @@ impl HsikanConfig {
         self.n_edges * self.arity
     }
 
+    /// Total packed length of `inner_coef` (and of `outer_coef`) for this config's basis —
+    /// `n_branches · branch_len`. Callers size their param buffers with this so they never
+    /// hardcode the Chebyshev-vs-KB layout.
+    pub fn param_len(&self) -> usize {
+        self.n_branches * self.branch_len()
+    }
+
     /// Packed learnable length of one sign branch's spline params.
     fn branch_len(&self) -> usize {
         match self.spline_kind {
