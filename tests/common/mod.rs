@@ -4,6 +4,8 @@
 //! `hsikan_multiseed.rs` (median/IQR). Reuses `entropy2`/`softmax2`/`cross_entropy` (§6.1).
 #![allow(dead_code)] // each test binary compiles this module and uses a subset.
 
+pub mod vision;
+
 use holonomy_learn::{
     cross_entropy, entropy2, hsikan_forward, softmax2, HsikanConfig, HsikanEdges, HsikanParams,
 };
