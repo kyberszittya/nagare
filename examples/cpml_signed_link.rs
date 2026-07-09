@@ -13,6 +13,7 @@
 //!   3. **signed hypergraph conv** — learned one-round signed HGNN embedding
 //!      (`vertex_proj → node→edge (σ,D^{-1/2}) → edge_lin → edge→node → concat(x0,·)`),
 //!      built from the `hg_message` kernels. The learned counterpart to the fixed routing.
+//!
 //! Reports all three test AUROCs + verdicts vs the flat baseline.
 //!
 //! Run: `cargo run --release --example cpml_signed_link -- --data path.csv [--seed 0] [--max-tri 60000]`
