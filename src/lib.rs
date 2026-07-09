@@ -49,6 +49,7 @@ pub use ops::hsikan::{
     HsikanConfig, HsikanEdges, HsikanParams,
 };
 pub use ops::kan::{kan_backward, kan_forward, KanCache, KanConfig};
+pub use ops::kochanek_bartels::{kb_backward, kb_forward, KbBackward, KbCache};
 pub use ops::linear::{linear_backward, linear_forward, LinearLayer};
 pub use ops::loss::{bce_with_logits_backward, bce_with_logits_forward};
 pub use ops::mse::{mse_backward, mse_forward, r2_score};

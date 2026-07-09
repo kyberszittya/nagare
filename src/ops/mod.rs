@@ -20,6 +20,7 @@ pub mod fused_entropy_update;
 pub mod gomb_shell;
 pub mod hsikan;
 pub mod kan;
+pub mod kochanek_bartels;
 pub mod linear;
 pub mod loss;
 pub mod mse;
