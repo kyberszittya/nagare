@@ -46,7 +46,7 @@ pub use ops::fused_entropy_update::{
 pub use ops::gomb_shell::{gomb_outer_backward, gomb_outer_forward};
 pub use ops::hsikan::{
     hsikan_backward, hsikan_forward, hsikan_forward_chunked, HsikanBackward, HsikanCache,
-    HsikanConfig, HsikanEdges, HsikanParams,
+    HsikanConfig, HsikanEdges, HsikanParams, SplineKind,
 };
 pub use ops::kan::{kan_backward, kan_forward, KanCache, KanConfig};
 pub use ops::kochanek_bartels::{kb_backward, kb_forward, KbBackward, KbCache};

@@ -26,6 +26,7 @@
 //!   trusted conditioning range for the gradient is `h_v, agg ∈ (-1, 1)`.
 
 use crate::ops::catmull_rom::{chebyshev_cr_backward, chebyshev_cr_forward, CatmullRomCache};
+use crate::ops::kochanek_bartels::{kb_backward, kb_forward, KbCache};
 
 /// Shape + architecture of one HSiKAN layer evaluation.
 #[derive(Debug, Clone, Copy)]
@@ -44,6 +45,23 @@ pub struct HsikanConfig {
     pub cheb_k: usize,
     /// Enable the highway skip gate on the inner spline.
     pub use_highway: bool,
+    /// Univariate basis for the inner + outer spline activations.
+    pub spline_kind: SplineKind,
+}
+
+/// Which univariate basis the inner/outer HSiKAN splines use.
+///
+/// The two bases carry **different learnable parametrisations**, packed into the same
+/// `inner_coef`/`outer_coef` buffers per branch (length [`HsikanConfig::branch_len`]):
+/// - `ChebyshevCr` — `(d, cheb_k)` Chebyshev coefficients (the default; PyTorch-parity path).
+/// - `KochanekBartels` — `(d, grid)` control points followed by `(d, grid, 3)` raw TCB
+///   tangents, i.e. `d·grid·4` values per branch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SplineKind {
+    /// Chebyshev-parametrised Catmull-Rom.
+    ChebyshevCr,
+    /// Kochanek-Bartels (tension/continuity/bias) spline.
+    KochanekBartels,
 }
 
 impl HsikanConfig {
@@ -75,15 +93,30 @@ impl HsikanConfig {
             grid,
             cheb_k,
             use_highway,
+            spline_kind: SplineKind::ChebyshevCr,
         }
+    }
+
+    /// Select the spline basis (builder-style; leaves every other field intact).
+    ///
+    /// Switching to `KochanekBartels` changes [`Self::branch_len`], so the caller must
+    /// size `inner_coef`/`outer_coef` to the KB layout (`d·grid·4` per branch).
+    pub fn with_spline_kind(mut self, spline_kind: SplineKind) -> Self {
+        self.spline_kind = spline_kind;
+        self
     }
 
     fn n_rows(&self) -> usize {
         self.n_edges * self.arity
     }
 
+    /// Packed learnable length of one sign branch's spline params.
     fn branch_len(&self) -> usize {
-        self.hidden * self.cheb_k
+        match self.spline_kind {
+            SplineKind::ChebyshevCr => self.hidden * self.cheb_k,
+            // KB: (d·grid) control points ++ (d·grid·3) raw TCB tangents.
+            SplineKind::KochanekBartels => self.hidden * self.grid * 4,
+        }
     }
 }
 
@@ -116,12 +149,79 @@ pub struct HsikanCache {
     h_v: Vec<f32>,
     inner_pre: Vec<Vec<f32>>,
     t_gate: Vec<f32>,
-    inner_cache: Vec<CatmullRomCache>,
-    inner_control: Vec<Vec<f32>>,
-    outer_cache: Vec<CatmullRomCache>,
-    outer_control: Vec<Vec<f32>>,
+    inner_spline: Vec<BranchSpline>,
+    outer_spline: Vec<BranchSpline>,
     basis: Vec<f32>,
     counts: Vec<f32>,
+}
+
+/// Per-branch spline forward state saved for the closed-form backward, tagged by basis.
+/// `Cheb` also stores its derived Catmull-Rom control points; `Kb` stores the raw control
+/// points + TCB tangents its backward re-reads.
+#[derive(Debug, Clone)]
+enum BranchSpline {
+    Cheb {
+        cache: CatmullRomCache,
+        control: Vec<f32>,
+    },
+    Kb {
+        cache: KbCache,
+        control: Vec<f32>,
+        tcb: Vec<f32>,
+    },
+}
+
+/// One branch's spline forward (basis-dispatched). Returns `(y, saved state, basis)`;
+/// `basis` is empty for bases that don't use a shared knot basis (KB).
+fn branch_spline_forward(
+    block: &[f32],
+    x: &[f32],
+    n: usize,
+    d: usize,
+    cfg: HsikanConfig,
+) -> (Vec<f32>, BranchSpline, Vec<f32>) {
+    match cfg.spline_kind {
+        SplineKind::ChebyshevCr => {
+            let (y, cache, control, basis) =
+                chebyshev_cr_forward(block, x, n, d, cfg.grid, cfg.cheb_k);
+            (y, BranchSpline::Cheb { cache, control }, basis)
+        }
+        SplineKind::KochanekBartels => {
+            let (control, tcb) = block.split_at(d * cfg.grid);
+            let (y, cache) = kb_forward(control, tcb, x, n, d, cfg.grid);
+            let spline = BranchSpline::Kb {
+                cache,
+                control: control.to_vec(),
+                tcb: tcb.to_vec(),
+            };
+            (y, spline, Vec::new())
+        }
+    }
+}
+
+/// One branch's spline backward → `(grad over the packed param block, grad w.r.t. input)`.
+fn branch_spline_backward(
+    spline: &BranchSpline,
+    basis: &[f32],
+    grad_y: &[f32],
+    cfg: HsikanConfig,
+) -> (Vec<f32>, Vec<f32>) {
+    match spline {
+        BranchSpline::Cheb { cache, control } => {
+            let bw = chebyshev_cr_backward(control, basis, cache, grad_y, cfg.cheb_k);
+            (bw.grad_coef, bw.grad_x)
+        }
+        BranchSpline::Kb {
+            cache,
+            control,
+            tcb,
+        } => {
+            let bw = kb_backward(control, tcb, cache, grad_y);
+            let mut block = bw.grad_coef; // (d·grid)
+            block.extend_from_slice(&bw.grad_tcb); // ++ (d·grid·3)
+            (block, bw.grad_x)
+        }
+    }
 }
 
 /// Gradients returned by the backward pass.
@@ -129,9 +229,10 @@ pub struct HsikanCache {
 pub struct HsikanBackward {
     /// Gradient w.r.t. node embeddings, flat `(n_nodes, d)`.
     pub grad_x: Vec<f32>,
-    /// Gradient w.r.t. inner coefficients, flat `(S, d, cheb_k)`.
+    /// Gradient w.r.t. inner params, same packed per-branch layout as `inner_coef`
+    /// (`(S, d, cheb_k)` for Chebyshev; `(S, d, grid)` control ++ `(S, d, grid, 3)` TCB for KB).
     pub grad_inner_coef: Vec<f32>,
-    /// Gradient w.r.t. outer coefficients, flat `(S, d, cheb_k)`.
+    /// Gradient w.r.t. outer params, same packed per-branch layout as `outer_coef`.
     pub grad_outer_coef: Vec<f32>,
     /// Gradient w.r.t. gate weight, flat `(d, d)`.
     pub grad_gate_w: Vec<f32>,
@@ -172,25 +273,24 @@ fn compute_gate(gate_w: &[f32], gate_b: &[f32], h_v: &[f32], n_rows: usize, d: u
     t_gate
 }
 
-type InnerForward = (Vec<Vec<f32>>, Vec<CatmullRomCache>, Vec<Vec<f32>>, Vec<f32>);
+type InnerForward = (Vec<Vec<f32>>, Vec<BranchSpline>, Vec<f32>);
 
-/// Inner spline for every branch (same input `h_v`, per-branch coefs).
+/// Inner spline for every branch (same input `h_v`, per-branch packed params).
 fn inner_forward(inner_coef: &[f32], h_v: &[f32], cfg: HsikanConfig) -> InnerForward {
     let (n_rows, d, bl) = (cfg.n_rows(), cfg.hidden, cfg.branch_len());
     let mut pre = Vec::with_capacity(cfg.n_branches);
-    let mut caches = Vec::with_capacity(cfg.n_branches);
-    let mut controls = Vec::with_capacity(cfg.n_branches);
+    let mut splines = Vec::with_capacity(cfg.n_branches);
     let mut basis = Vec::new();
     for s in 0..cfg.n_branches {
-        let coef = &inner_coef[s * bl..(s + 1) * bl];
-        let (y, cache, control, b) =
-            chebyshev_cr_forward(coef, h_v, n_rows, d, cfg.grid, cfg.cheb_k);
+        let block = &inner_coef[s * bl..(s + 1) * bl];
+        let (y, spline, b) = branch_spline_forward(block, h_v, n_rows, d, cfg);
         pre.push(y);
-        caches.push(cache);
-        controls.push(control);
-        basis = b;
+        splines.push(spline);
+        if !b.is_empty() {
+            basis = b;
+        }
     }
-    (pre, caches, controls, basis)
+    (pre, splines, basis)
 }
 
 /// Sign-masked per-sign mean over each edge's vertices → `(counts, agg)`.
@@ -259,30 +359,27 @@ fn accumulate_gated(
     }
 }
 
-type OuterForward = (Vec<f32>, Vec<CatmullRomCache>, Vec<Vec<f32>>);
+type OuterForward = (Vec<f32>, Vec<BranchSpline>);
 
 /// Diagonal outer spline per branch, summed over branches → `h_e (T, d)`.
 fn outer_forward(outer_coef: &[f32], agg: &[f32], cfg: HsikanConfig) -> OuterForward {
     let (t, d, s_br, bl) = (cfg.n_edges, cfg.hidden, cfg.n_branches, cfg.branch_len());
     let mut h_e = vec![0.0f32; t * d];
-    let mut caches = Vec::with_capacity(s_br);
-    let mut controls = Vec::with_capacity(s_br);
+    let mut splines = Vec::with_capacity(s_br);
     for s in 0..s_br {
         let mut agg_s = vec![0.0f32; t * d];
         for ti in 0..t {
             agg_s[ti * d..ti * d + d]
                 .copy_from_slice(&agg[(ti * s_br + s) * d..(ti * s_br + s) * d + d]);
         }
-        let coef = &outer_coef[s * bl..(s + 1) * bl];
-        let (out_s, cache, control, _b) =
-            chebyshev_cr_forward(coef, &agg_s, t, d, cfg.grid, cfg.cheb_k);
+        let block = &outer_coef[s * bl..(s + 1) * bl];
+        let (out_s, spline, _basis) = branch_spline_forward(block, &agg_s, t, d, cfg);
         for (acc, v) in h_e.iter_mut().zip(&out_s) {
             *acc += v;
         }
-        caches.push(cache);
-        controls.push(control);
+        splines.push(spline);
     }
-    (h_e, caches, controls)
+    (h_e, splines)
 }
 
 /// Forward HSiKAN layer. Returns `h_e (T, d)` and a backward cache.
@@ -313,25 +410,22 @@ pub fn hsikan_forward(
     let n_nodes = x.len() / d;
 
     let h_v = gather(x, edges.vertices, n_rows, d);
-    let (inner_pre, inner_cache, inner_control, basis) =
-        inner_forward(params.inner_coef, &h_v, cfg);
+    let (inner_pre, inner_spline, basis) = inner_forward(params.inner_coef, &h_v, cfg);
     let t_gate = if cfg.use_highway {
         compute_gate(params.gate_w, params.gate_b, &h_v, n_rows, d)
     } else {
         Vec::new()
     };
     let (agg, counts) = aggregate(edges.signs, &inner_pre, &t_gate, &h_v, cfg);
-    let (h_e, outer_cache, outer_control) = outer_forward(params.outer_coef, &agg, cfg);
+    let (h_e, outer_spline) = outer_forward(params.outer_coef, &agg, cfg);
 
     let cache = HsikanCache {
         n_nodes,
         h_v,
         inner_pre,
         t_gate,
-        inner_cache,
-        inner_control,
-        outer_cache,
-        outer_control,
+        inner_spline,
+        outer_spline,
         basis,
         counts,
     };
@@ -387,17 +481,12 @@ fn outer_backward(cache: &HsikanCache, grad_he: &[f32], cfg: HsikanConfig) -> (V
     let mut grad_outer_coef = vec![0.0f32; s_br * bl];
     let mut grad_agg = vec![0.0f32; t * s_br * d];
     for s in 0..s_br {
-        let bw = chebyshev_cr_backward(
-            &cache.outer_control[s],
-            &cache.basis,
-            &cache.outer_cache[s],
-            grad_he,
-            cfg.cheb_k,
-        );
-        grad_outer_coef[s * bl..(s + 1) * bl].copy_from_slice(&bw.grad_coef);
+        let (grad_block, grad_x) =
+            branch_spline_backward(&cache.outer_spline[s], &cache.basis, grad_he, cfg);
+        grad_outer_coef[s * bl..(s + 1) * bl].copy_from_slice(&grad_block);
         for ti in 0..t {
             grad_agg[(ti * s_br + s) * d..(ti * s_br + s) * d + d]
-                .copy_from_slice(&bw.grad_x[ti * d..ti * d + d]);
+                .copy_from_slice(&grad_x[ti * d..ti * d + d]);
         }
     }
     (grad_outer_coef, grad_agg)
@@ -464,15 +553,10 @@ fn inner_backward(
             &mut grad_hv,
             &mut grad_t_gate,
         );
-        let bw = chebyshev_cr_backward(
-            &cache.inner_control[s],
-            &cache.basis,
-            &cache.inner_cache[s],
-            &grad_inner_s,
-            cfg.cheb_k,
-        );
-        grad_inner_coef[s * bl..(s + 1) * bl].copy_from_slice(&bw.grad_coef);
-        for (g, b) in grad_hv.iter_mut().zip(&bw.grad_x) {
+        let (grad_block, grad_x) =
+            branch_spline_backward(&cache.inner_spline[s], &cache.basis, &grad_inner_s, cfg);
+        grad_inner_coef[s * bl..(s + 1) * bl].copy_from_slice(&grad_block);
+        for (g, b) in grad_hv.iter_mut().zip(&grad_x) {
             *g += b;
         }
     }
@@ -578,7 +662,14 @@ mod tests {
 
     impl Fixture {
         fn new(use_highway: bool) -> Self {
-            let cfg = HsikanConfig::new(2, 3, 3, 2, 5, 4, use_highway);
+            Self::with_kind(use_highway, SplineKind::ChebyshevCr)
+        }
+
+        /// Fixture at a chosen spline basis; params are sized to that basis's packed
+        /// per-branch length, so the same generator fills Chebyshev (24) or KB (120).
+        fn with_kind(use_highway: bool, spline_kind: SplineKind) -> Self {
+            let cfg =
+                HsikanConfig::new(2, 3, 3, 2, 5, 4, use_highway).with_spline_kind(spline_kind);
             let n_nodes = 5;
             // Small interior values so both splines stay inside [-1, 1].
             let x: Vec<f32> = (0..n_nodes * 3)
@@ -586,13 +677,9 @@ mod tests {
                 .collect();
             let vertices = vec![0u32, 1, 2, 2, 3, 4];
             let signs = vec![1i8, -1, 1, -1, 1, -1];
-            let branch = 2 * 3 * 4;
-            let inner_coef: Vec<f32> = (0..branch)
-                .map(|i| 0.1 * ((i as f32 * 0.9).cos()))
-                .collect();
-            let outer_coef: Vec<f32> = (0..branch)
-                .map(|i| 0.1 * ((i as f32 * 1.3).sin()))
-                .collect();
+            let total = cfg.n_branches * cfg.branch_len();
+            let inner_coef: Vec<f32> = (0..total).map(|i| 0.1 * ((i as f32 * 0.9).cos())).collect();
+            let outer_coef: Vec<f32> = (0..total).map(|i| 0.1 * ((i as f32 * 1.3).sin())).collect();
             let gate_w: Vec<f32> = (0..9).map(|i| 0.05 * ((i as f32 * 0.7).sin())).collect();
             let gate_b = vec![-2.0f32, -1.5, -2.5];
             Self {
@@ -680,42 +767,55 @@ mod tests {
         }
     }
 
-    #[test]
-    fn backward_matches_finite_difference() {
-        let f = Fixture::new(true);
+    /// Full central-difference sweep of every analytic gradient buffer, parameterised by a
+    /// fixture builder so it serves both spline bases.
+    fn fd_sweep(build: impl Fn() -> Fixture) {
+        let f = build();
         let (h_e, cache) = hsikan_forward(f.params(), &f.x, f.edges(), f.cfg);
         let grad_he = vec![1.0f32; h_e.len()];
         let g = hsikan_backward(f.params(), f.edges(), &cache, &grad_he, f.cfg);
 
         assert_fd("grad_x", &g.grad_x, |idx, e| {
-            let mut ff = Fixture::new(true);
+            let mut ff = build();
             ff.x = f.x.clone();
             ff.x[idx] += e;
             ff.loss()
         });
         assert_fd("grad_inner_coef", &g.grad_inner_coef, |idx, e| {
-            let mut ff = Fixture::new(true);
+            let mut ff = build();
             ff.inner_coef = f.inner_coef.clone();
             ff.inner_coef[idx] += e;
             ff.loss()
         });
         assert_fd("grad_outer_coef", &g.grad_outer_coef, |idx, e| {
-            let mut ff = Fixture::new(true);
+            let mut ff = build();
             ff.outer_coef = f.outer_coef.clone();
             ff.outer_coef[idx] += e;
             ff.loss()
         });
         assert_fd("grad_gate_w", &g.grad_gate_w, |idx, e| {
-            let mut ff = Fixture::new(true);
+            let mut ff = build();
             ff.gate_w = f.gate_w.clone();
             ff.gate_w[idx] += e;
             ff.loss()
         });
         assert_fd("grad_gate_b", &g.grad_gate_b, |idx, e| {
-            let mut ff = Fixture::new(true);
+            let mut ff = build();
             ff.gate_b = f.gate_b.clone();
             ff.gate_b[idx] += e;
             ff.loss()
         });
+    }
+
+    #[test]
+    fn backward_matches_finite_difference() {
+        fd_sweep(|| Fixture::new(true));
+    }
+
+    #[test]
+    fn kb_backward_matches_finite_difference() {
+        // Kochanek-Bartels basis: every packed grad (control points + TCB tangents),
+        // plus grad_x and gate grads, must match finite difference.
+        fd_sweep(|| Fixture::with_kind(true, SplineKind::KochanekBartels));
     }
 }
