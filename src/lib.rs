@@ -41,6 +41,7 @@ pub use ops::fused_entropy_update::{
     fused_entropy_update_backward, fused_entropy_update_forward, FusedEntropyUpdateBackward,
     FusedEntropyUpdateShape,
 };
+pub use ops::gomb_shell::{gomb_outer_backward, gomb_outer_forward};
 pub use ops::hsikan::{
     hsikan_backward, hsikan_forward, hsikan_forward_chunked, HsikanBackward, HsikanCache,
     HsikanConfig, HsikanEdges, HsikanParams,
