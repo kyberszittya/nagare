@@ -22,6 +22,7 @@ pub mod hsikan;
 pub mod kan;
 pub mod linear;
 pub mod loss;
+pub mod mse;
 pub mod project_alpha_mix;
 pub mod scatter;
 pub mod signed_scatter;

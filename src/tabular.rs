@@ -101,18 +101,7 @@ fn standardise_minmax(x: &mut [f32], n: usize, d: usize) {
 impl Tabular {
     /// Deterministic LCG-shuffled train/test split; returns `(train_idx, test_idx)`.
     pub fn split(&self, test_frac: f32, seed: u64) -> (Vec<usize>, Vec<usize>) {
-        let mut order: Vec<usize> = (0..self.n).collect();
-        let mut st = seed
-            .wrapping_mul(6_364_136_223_846_793_005)
-            .wrapping_add(1_442_695_040_888_963_407);
-        for i in (1..order.len()).rev() {
-            st = st
-                .wrapping_mul(6_364_136_223_846_793_005)
-                .wrapping_add(1_442_695_040_888_963_407);
-            order.swap(i, (st >> 33) as usize % (i + 1));
-        }
-        let cut = ((self.n as f32) * (1.0 - test_frac)) as usize;
-        (order[..cut].to_vec(), order[cut..].to_vec())
+        shuffle_split(self.n, test_frac, seed)
     }
 
     /// Gather the rows in `idx` into `(x_sub (m, d), y_sub (m,))`.
@@ -124,6 +113,105 @@ impl Tabular {
             y.push(self.y[i]);
         }
         (x, y)
+    }
+}
+
+/// Deterministic LCG-shuffled train/test index split over `n` rows.
+pub fn shuffle_split(n: usize, test_frac: f32, seed: u64) -> (Vec<usize>, Vec<usize>) {
+    let mut order: Vec<usize> = (0..n).collect();
+    let mut st = seed
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1_442_695_040_888_963_407);
+    for i in (1..order.len()).rev() {
+        st = st
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        order.swap(i, (st >> 33) as usize % (i + 1));
+    }
+    let cut = ((n as f32) * (1.0 - test_frac)) as usize;
+    (order[..cut].to_vec(), order[cut..].to_vec())
+}
+
+/// A loaded regression dataset: features standardised to `[-1,1]`, target z-scored.
+#[derive(Debug, Clone)]
+pub struct TabularReg {
+    /// Features, flat `(n, d)`, each column in `[-1, 1]`.
+    pub x: Vec<f32>,
+    /// Standardised (z-scored) target `(n,)`.
+    pub target: Vec<f32>,
+    /// Rows.
+    pub n: usize,
+    /// Feature columns.
+    pub d: usize,
+    /// Original target mean (to de-standardise / report RMSE in original units).
+    pub target_mean: f32,
+    /// Original target standard deviation.
+    pub target_std: f32,
+}
+
+/// Load a label-last **numeric** CSV for regression: features → `[-1,1]`, target z-scored.
+///
+/// # Panics
+/// Panics on a ragged row or a non-numeric field.
+pub fn load_csv_regression(text: &str) -> TabularReg {
+    let rows: Vec<Vec<&str>> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(|l| l.split(',').map(str::trim).collect())
+        .collect();
+    assert!(!rows.is_empty(), "no data rows");
+    let d = rows[0].len() - 1;
+    assert!(d >= 1);
+    let n = rows.len();
+    let mut x = Vec::with_capacity(n * d);
+    let mut target = Vec::with_capacity(n);
+    for r in &rows {
+        assert_eq!(r.len(), d + 1, "ragged row: {r:?}");
+        for f in &r[..d] {
+            x.push(
+                f.parse::<f32>()
+                    .unwrap_or_else(|_| panic!("non-numeric {f:?}")),
+            );
+        }
+        target.push(
+            r[d].parse::<f32>()
+                .unwrap_or_else(|_| panic!("non-numeric target {:?}", r[d])),
+        );
+    }
+    standardise_minmax(&mut x, n, d);
+
+    let mean = target.iter().sum::<f32>() / n as f32;
+    let var = target.iter().map(|&t| (t - mean) * (t - mean)).sum::<f32>() / n as f32;
+    let std = var.sqrt().max(1e-8);
+    for t in target.iter_mut() {
+        *t = (*t - mean) / std;
+    }
+    TabularReg {
+        x,
+        target,
+        n,
+        d,
+        target_mean: mean,
+        target_std: std,
+    }
+}
+
+impl TabularReg {
+    /// Deterministic train/test split.
+    pub fn split(&self, test_frac: f32, seed: u64) -> (Vec<usize>, Vec<usize>) {
+        shuffle_split(self.n, test_frac, seed)
+    }
+
+    /// Gather the rows in `idx` into `(x_sub (m, d), target_sub (m,))`.
+    pub fn gather(&self, idx: &[usize]) -> (Vec<f32>, Vec<f32>) {
+        let mut x = Vec::with_capacity(idx.len() * self.d);
+        let mut t = Vec::with_capacity(idx.len());
+        for &i in idx {
+            x.extend_from_slice(&self.x[i * self.d..(i + 1) * self.d]);
+            t.push(self.target[i]);
+        }
+        (x, t)
     }
 }
 

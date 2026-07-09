@@ -50,6 +50,7 @@ pub use ops::hsikan::{
 pub use ops::kan::{kan_backward, kan_forward, KanCache, KanConfig};
 pub use ops::linear::{linear_backward, linear_forward, LinearLayer};
 pub use ops::loss::{bce_with_logits_backward, bce_with_logits_forward};
+pub use ops::mse::{mse_backward, mse_forward, r2_score};
 pub use ops::project_alpha_mix::{
     project_alpha_mix_backward, project_alpha_mix_forward, ProjectAlphaMixBackward,
     ProjectAlphaMixShape,
@@ -67,4 +68,4 @@ pub use ops::spectral_entropy::{
 pub use pooling::structural_pool_features;
 pub use projection::{default_holonomy_basis, fit_class_mean_basis, ProjectionBasis};
 pub use runtime::NagareRuntime;
-pub use tabular::{load_csv, Tabular};
+pub use tabular::{load_csv, load_csv_regression, shuffle_split, Tabular, TabularReg};
