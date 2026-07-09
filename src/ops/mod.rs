@@ -16,6 +16,7 @@ pub mod catmull_rom;
 pub mod cayley_rotor;
 pub mod clifford_fir;
 pub mod cpml_tier;
+pub mod dihedral;
 pub mod fsr_mixer;
 pub mod fused_entropy_update;
 pub mod gomb_shell;
