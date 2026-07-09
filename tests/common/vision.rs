@@ -2,8 +2,12 @@
 //! gradient field. Used by `vision_quat_conv` (single-θ canonicalisation) and
 //! `vision_dihedral_conv` (D_n group-conv) so the task + gradient extraction live in one place.
 
-use rand::{rngs::StdRng, Rng};
+use holonomy_learn::{accuracy_k, softmax_k};
+use rand::{rngs::StdRng, Rng, SeedableRng};
+use std::f32::consts::TAU;
 
+pub const B: usize = 12; // orientation-histogram bins
+pub const NK: usize = B / 2 + 1; // DFT magnitudes kept (k = 0..B/2)
 pub const G: usize = 12; // grid side
 pub const K: usize = 4; // shape classes (bar / cross / L / T)
 pub const PS: usize = 3; // patch side
@@ -107,4 +111,150 @@ pub fn patch_gradient_field(x: &[f32], n: usize) -> (Vec<f32>, Vec<f32>) {
         }
     }
     (field, theta)
+}
+
+/// Which phase-pool feature to build from the orientation histogram.
+#[derive(Clone, Copy)]
+pub enum PhaseFeature {
+    /// The histogram itself — rotation-*covariant* (a floor baseline).
+    Raw,
+    /// `|DFT(h)|_{0..B/2}` — rotation-*invariant* (circular-shift-invariant magnitudes).
+    Dft,
+    /// `|DFT(h)|` ⊕ phase entropy `H(h)` — invariant, plus the nonlinear entropy feature.
+    DftEntropy,
+}
+
+/// Per-image magnitude-weighted **orientation histogram** `(n, B)` — the pooled rotor phases:
+/// each patch's dominant gradient contributes its orientation `θ_p` (weighted by magnitude) to the
+/// circular histogram (soft-binned). Under image rotation, `θ_p → θ_p + φ` shifts the histogram.
+pub fn phase_histogram(x: &[f32], n: usize) -> Vec<f32> {
+    let (field, _theta) = patch_gradient_field(x, n);
+    let mut h = vec![0.0f32; n * B];
+    for s in 0..n {
+        for p in 0..NP {
+            let (mut gx, mut gy) = (0.0f32, 0.0f32);
+            for c in 0..CELLS {
+                let base = ((s * NP + p) * CELLS + c) * 3;
+                gx += field[base];
+                gy += field[base + 1];
+            }
+            let m = (gx * gx + gy * gy).sqrt();
+            let theta = gy.atan2(gx).rem_euclid(TAU);
+            let pos = theta / TAU * B as f32;
+            let lo = pos.floor() as usize % B;
+            let frac = pos - pos.floor();
+            h[s * B + lo] += m * (1.0 - frac);
+            h[s * B + (lo + 1) % B] += m * frac;
+        }
+    }
+    h
+}
+
+/// Build the requested phase-pool feature from the histogram `(n, B)` → `(features, dim)`.
+pub fn phase_features(h: &[f32], n: usize, mode: PhaseFeature) -> (Vec<f32>, usize) {
+    if let PhaseFeature::Raw = mode {
+        return (h.to_vec(), B);
+    }
+    let with_entropy = matches!(mode, PhaseFeature::DftEntropy);
+    let dim = NK + usize::from(with_entropy);
+    let mut f = vec![0.0f32; n * dim];
+    for s in 0..n {
+        let hs = &h[s * B..s * B + B];
+        for (k, fk) in f[s * dim..s * dim + NK].iter_mut().enumerate() {
+            let (mut re, mut im) = (0.0f32, 0.0f32);
+            for (b, &hv) in hs.iter().enumerate() {
+                let ang = -TAU * k as f32 * b as f32 / B as f32;
+                re += hv * ang.cos();
+                im += hv * ang.sin();
+            }
+            *fk = (re * re + im * im).sqrt();
+        }
+        if with_entropy {
+            let tot: f32 = hs.iter().sum::<f32>() + 1e-6;
+            let mut ent = 0.0f32;
+            for &hv in hs {
+                let pr = hv / tot;
+                if pr > 1e-9 {
+                    ent -= pr * pr.ln();
+                }
+            }
+            f[s * dim + NK] = ent;
+        }
+    }
+    (f, dim)
+}
+
+/// Train a linear softmax classifier on fixed per-image features (train-standardised); return
+/// test accuracy. Shared by the phase-pool tests.
+pub fn train_linear(
+    f_tr: &[f32],
+    dim: usize,
+    y_tr: &[usize],
+    f_te: &[f32],
+    y_te: &[usize],
+    seed: u64,
+) -> f32 {
+    let (n_tr, n_te) = (y_tr.len(), y_te.len());
+    let mut mu = vec![0.0f32; dim];
+    let mut sd = vec![0.0f32; dim];
+    for r in f_tr.chunks(dim) {
+        for j in 0..dim {
+            mu[j] += r[j] / n_tr as f32;
+        }
+    }
+    for r in f_tr.chunks(dim) {
+        for j in 0..dim {
+            sd[j] += (r[j] - mu[j]).powi(2) / n_tr as f32;
+        }
+    }
+    for s in &mut sd {
+        *s = s.sqrt() + 1e-6;
+    }
+    let norm = |f: &[f32], n: usize| -> Vec<f32> {
+        let mut o = vec![0.0f32; n * dim];
+        for i in 0..n {
+            for j in 0..dim {
+                o[i * dim + j] = (f[i * dim + j] - mu[j]) / sd[j];
+            }
+        }
+        o
+    };
+    let (ftr, fte) = (norm(f_tr, n_tr), norm(f_te, n_te));
+    let mut rng = StdRng::seed_from_u64(seed);
+    let mut w: Vec<f32> = (0..dim * K)
+        .map(|_| (rng.random::<f32>() * 2.0 - 1.0) * 0.1)
+        .collect();
+    let mut b = vec![0.0f32; K];
+    let logits = |w: &[f32], b: &[f32], f: &[f32], n: usize| -> Vec<f32> {
+        let mut l = vec![0.0f32; n * K];
+        for i in 0..n {
+            for k in 0..K {
+                let mut z = b[k];
+                for j in 0..dim {
+                    z += f[i * dim + j] * w[k * dim + j];
+                }
+                l[i * K + k] = z;
+            }
+        }
+        l
+    };
+    for _ in 0..400 {
+        let probs = softmax_k(&logits(&w, &b, &ftr, n_tr), n_tr, K);
+        for k in 0..K {
+            let mut gb = 0.0f32;
+            let mut gw = vec![0.0f32; dim];
+            for i in 0..n_tr {
+                let d = (probs[i * K + k] - f32::from(y_tr[i] == k)) / n_tr as f32;
+                gb += d;
+                for j in 0..dim {
+                    gw[j] += d * ftr[i * dim + j];
+                }
+            }
+            b[k] -= 0.3 * gb;
+            for j in 0..dim {
+                w[k * dim + j] -= 0.3 * gw[j];
+            }
+        }
+    }
+    accuracy_k(&logits(&w, &b, &fte, n_te), y_te, n_te, K)
 }
