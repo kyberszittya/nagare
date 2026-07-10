@@ -12,8 +12,8 @@ use std::io::Write;
 use std::path::Path;
 
 use holonomy_learn::{
-    accuracy_k, cross_entropy_k_backward, linear_forward, rotate_image, spatial_phase_features,
-    LinearLayer, PhaseFeature,
+    accuracy_k, cross_entropy_k_backward, linear_forward, load_split, rotate_image,
+    spatial_phase_features, LinearLayer, PhaseFeature,
 };
 
 fn arg(name: &str) -> Option<String> {
@@ -74,47 +74,15 @@ impl Clf {
     }
 }
 
-fn load(dir: &Path, ds: &str, cap: usize, train: bool) -> (Vec<f32>, Vec<usize>, usize) {
-    let (imf, laf) = if ds == "mnist" {
-        if train {
-            ("train-images-idx3-ubyte", "train-labels-idx1-ubyte")
-        } else {
-            ("t10k-images-idx3-ubyte", "t10k-labels-idx1-ubyte")
-        }
-    } else if train {
-        ("train-images.bin", "train-labels.bin")
-    } else {
-        ("test-images.bin", "test-labels.bin")
-    };
-    let b = std::fs::read(dir.join(imf)).expect("images");
-    let (n, g, off) = if ds == "mnist" {
-        (
-            u32::from_be_bytes([b[4], b[5], b[6], b[7]]) as usize,
-            u32::from_be_bytes([b[8], b[9], b[10], b[11]]) as usize,
-            16,
-        )
-    } else {
-        let rd = |o: usize| u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]]) as usize;
-        (rd(0), rd(4), 12)
-    };
-    let n = n.min(cap);
-    let x = b[off..off + n * g * g]
-        .iter()
-        .map(|&p| p as f32 / 255.0 * 2.0 - 1.0)
-        .collect();
-    let lb = std::fs::read(dir.join(laf)).expect("labels");
-    let lo = if ds == "mnist" { 8 } else { 4 };
-    let y = lb[lo..lo + n].iter().map(|&l| l as usize).collect();
-    (x, y, g)
-}
-
 fn main() {
     let ds = arg("--dataset").unwrap_or_else(|| "mnist".into());
     let dir = arg("--data").expect("--data");
     let out = arg("--out").unwrap_or_else(|| "/tmp/cv_live".into());
     let d = Path::new(&dir);
-    let (x_tr, y_tr, g) = load(d, &ds, 8000, true);
-    let (x_te, y_te, _) = load(d, &ds, 4000, false);
+    let tr = load_split(&ds, d, true, 8000);
+    let te = load_split(&ds, d, false, 4000);
+    let (x_tr, y_tr, g) = (tr.x, tr.y, tr.g);
+    let (x_te, y_te) = (te.x, te.y);
     let k = y_tr.iter().chain(&y_te).copied().max().unwrap() + 1;
     let nt = y_tr.len();
     let rr = if g.is_multiple_of(7) { 7 } else { 8 }; // spatial-phase grid for the "lift" arm

@@ -20,9 +20,9 @@
 use std::path::Path;
 
 use holonomy_learn::{
-    accuracy_k, cross_entropy_k_backward, linear_backward, linear_forward, patch_project_backward,
-    patch_project_forward, rotate_image, spatial_phase_features, LinearLayer, PatchConfig,
-    PhaseFeature,
+    accuracy_k, cross_entropy_k_backward, feature_stats, linear_backward, linear_forward,
+    load_split, patch_project_backward, patch_project_forward, rot_all, spatial_phase_features,
+    standardize_with, LinearLayer, PatchConfig, PhaseFeature,
 };
 
 fn arg_str(name: &str) -> Option<String> {
@@ -32,87 +32,11 @@ fn arg_usize(name: &str, d: usize) -> usize {
     arg_str(name).and_then(|s| s.parse().ok()).unwrap_or(d)
 }
 
-/// A loaded split: images flat `(n, g*g)` in [-1,1], labels, grid side `g`.
-struct Split {
-    x: Vec<f32>,
-    y: Vec<usize>,
-    g: usize,
-}
-
-/// MNIST IDX (big-endian 16-byte image header / 8-byte label header).
-fn load_idx(dir: &Path, images: &str, labels: &str, cap: usize) -> Split {
-    let b = std::fs::read(dir.join(images)).expect("images");
-    let n = (u32::from_be_bytes([b[4], b[5], b[6], b[7]]) as usize).min(cap);
-    let g = u32::from_be_bytes([b[8], b[9], b[10], b[11]]) as usize;
-    let x = b[16..16 + n * g * g]
-        .iter()
-        .map(|&p| p as f32 / 255.0 * 2.0 - 1.0)
-        .collect();
-    let lb = std::fs::read(dir.join(labels)).expect("labels");
-    let y = lb[8..8 + n].iter().map(|&l| l as usize).collect();
-    Split { x, y, g }
-}
-
-/// Little-endian raw: `n,h,w:u32` then `n*h*w` u8; labels `n:u32` then `n` u8.
-fn load_raw(dir: &Path, images: &str, labels: &str, cap: usize) -> Split {
-    let b = std::fs::read(dir.join(images)).expect("images");
-    let rd = |o: usize| u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]]) as usize;
-    let (n0, h, w) = (rd(0), rd(4), rd(8));
-    let (n, g) = (n0.min(cap), h);
-    assert_eq!(h, w, "expected square images");
-    let x = b[12..12 + n * g * g]
-        .iter()
-        .map(|&p| p as f32 / 255.0 * 2.0 - 1.0)
-        .collect();
-    let lb = std::fs::read(dir.join(labels)).expect("labels");
-    let y = lb[4..4 + n].iter().map(|&l| l as usize).collect();
-    Split { x, y, g }
-}
-
-/// Randomly-rotated copy of a test split (deterministic per-image angle).
-fn rot_all(x: &[f32], n: usize, g: usize) -> Vec<f32> {
-    let mut out = vec![0.0f32; n * g * g];
-    let mut st = 0x2545f4914f6cdd1du64;
-    for s in 0..n {
-        st = st
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        let theta = (st >> 40) as f32 / (1u64 << 24) as f32 * std::f32::consts::TAU;
-        out[s * g * g..(s + 1) * g * g].copy_from_slice(&rotate_image(
-            &x[s * g * g..(s + 1) * g * g],
-            g,
-            theta,
-        ));
-    }
-    out
-}
-
 fn standardize(f_tr: &mut [f32], tests: &mut [&mut [f32]], dim: usize) {
-    let n = f_tr.len() / dim;
-    let (mut mu, mut sd) = (vec![0.0f32; dim], vec![0.0f32; dim]);
-    for r in f_tr.chunks(dim) {
-        for j in 0..dim {
-            mu[j] += r[j] / n as f32;
-        }
-    }
-    for r in f_tr.chunks(dim) {
-        for j in 0..dim {
-            sd[j] += (r[j] - mu[j]).powi(2) / n as f32;
-        }
-    }
-    for s in &mut sd {
-        *s = s.sqrt() + 1e-6;
-    }
-    let norm = |buf: &mut [f32]| {
-        for r in buf.chunks_mut(dim) {
-            for j in 0..dim {
-                r[j] = (r[j] - mu[j]) / sd[j];
-            }
-        }
-    };
-    norm(f_tr);
+    let (mu, sd) = feature_stats(f_tr, dim);
+    standardize_with(f_tr, &mu, &sd, dim);
     for t in tests.iter_mut() {
-        norm(t);
+        standardize_with(t, &mu, &sd, dim);
     }
 }
 
@@ -180,22 +104,10 @@ fn main() {
     let augment = std::env::args().any(|a| a == "--augment");
     let b = 18usize;
 
-    let (tr, te) = if ds == "mnist" {
-        (
-            load_idx(
-                d,
-                "train-images-idx3-ubyte",
-                "train-labels-idx1-ubyte",
-                n_tr,
-            ),
-            load_idx(d, "t10k-images-idx3-ubyte", "t10k-labels-idx1-ubyte", n_te),
-        )
-    } else {
-        (
-            load_raw(d, "train-images.bin", "train-labels.bin", n_tr),
-            load_raw(d, "test-images.bin", "test-labels.bin", n_te),
-        )
-    };
+    let (tr, te) = (
+        load_split(&ds, d, true, n_tr),
+        load_split(&ds, d, false, n_te),
+    );
     let g = tr.g;
     let k = tr.y.iter().chain(&te.y).copied().max().unwrap() + 1;
     let (nt, ne) = (tr.y.len(), te.y.len());

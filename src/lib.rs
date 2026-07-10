@@ -4,6 +4,7 @@
 //! research surface. It intentionally keeps the implementation plain Rust so
 //! benchmark behavior is easy to inspect.
 
+pub mod cv_data;
 pub mod datasets;
 pub mod features;
 pub mod learner;
@@ -23,6 +24,9 @@ pub const LOCAL_FEATURES: usize = STRUCTURAL_FEATURES + 1;
 pub const PROJECTION_RANK: usize = 6;
 pub const PROJECTION_ALPHA: f32 = 0.72;
 
+pub use cv_data::{
+    feature_stats, load_idx, load_raw, load_split, rot_all, standardize_with, Split,
+};
 pub use datasets::{
     corrupt_dataset, gather_batch, make_dataset, shuffle_point_order, Dataset, Task,
 };
