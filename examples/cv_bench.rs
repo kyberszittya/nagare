@@ -69,19 +69,20 @@ fn load_raw(dir: &Path, images: &str, labels: &str, cap: usize) -> Split {
     Split { x, y, g }
 }
 
-/// Bilinearly rotate one `g×g` image by `theta` about its centre; out-of-bounds → −1.
+/// Bilinearly rotate one `g×g` image by `theta` about its centre. Source coords are **edge-clamped**
+/// (not background-filled), so a frame-filling texture doesn't gain spurious background edges that
+/// would corrupt its orientation histogram — a fairer rotation for the invariance test.
 fn rotate(img: &[f32], g: usize, theta: f32) -> Vec<f32> {
     let (c, s) = (theta.cos(), theta.sin());
     let ctr = (g as f32 - 1.0) / 2.0;
-    let mut out = vec![-1.0f32; g * g];
+    let hi = g as f32 - 1.001;
+    let mut out = vec![0.0f32; g * g];
     for oi in 0..g {
         for oj in 0..g {
             let (dy, dx) = (oi as f32 - ctr, oj as f32 - ctr);
-            let (sy, sx) = (ctr + dx * s + dy * c, ctr + dx * c - dy * s);
+            let sy = (ctr + dx * s + dy * c).clamp(0.0, hi);
+            let sx = (ctr + dx * c - dy * s).clamp(0.0, hi);
             let (fy, fx) = (sy.floor(), sx.floor());
-            if fy < 0.0 || fx < 0.0 || fy >= g as f32 - 1.0 || fx >= g as f32 - 1.0 {
-                continue;
-            }
             let (y0, x0, ty, tx) = (fy as usize, fx as usize, sy - fy, sx - fx);
             let v = |a: usize, b: usize| img[a * g + b];
             out[oi * g + oj] = v(y0, x0) * (1.0 - ty) * (1.0 - tx)
