@@ -112,7 +112,7 @@ fn main() {
     // Fixed preconditioner + plumbing gate: central-diff feat must equal spatial_phase_features(r=1).
     let cd = central_diff_conv();
     let feat_tr_cd = pooled_feat(&cd, &win_tr, nt, g, b);
-    let (mu, sd) = feature_stats(&feat_tr_cd, nk);
+    let (mu_cd, sd_cd) = feature_stats(&feat_tr_cd, nk);
     let n_ref = nt.min(4);
     let (ref_feat, ref_dim) =
         spatial_phase_features(&tr.x[..n_ref * g * g], n_ref, g, 1, b, PhaseFeature::Dft);
@@ -128,11 +128,14 @@ fn main() {
     );
     println!("  plumbing gate ok: frozen field == phase-pool R=1 (max gap {max_gap:.2e})");
 
-    let feat_tr_cd_std = standardized(&feat_tr_cd, &mu, &sd, nk);
+    let feat_tr_cd_std = standardized(&feat_tr_cd, &mu_cd, &sd_cd, nk);
 
-    let eval_arm = |conv: &LinearLayer, head: &LinearLayer| -> (f32, f32) {
-        let up = standardized(&pooled_feat(conv, &win_up, ne, g, b), &mu, &sd, nk);
-        let ro = standardized(&pooled_feat(conv, &win_ro, ne, g, b), &mu, &sd, nk);
+    // Each arm standardises with ITS OWN train-feature stats (the fixed arm's are the constant
+    // central-diff stats; the learned arm recomputes them for its trained kernel). Only the kernel
+    // differs — the standardisation is the same procedure applied to each arm's own features.
+    let eval_arm = |conv: &LinearLayer, head: &LinearLayer, mu: &[f32], sd: &[f32]| -> (f32, f32) {
+        let up = standardized(&pooled_feat(conv, &win_up, ne, g, b), mu, sd, nk);
+        let ro = standardized(&pooled_feat(conv, &win_ro, ne, g, b), mu, sd, nk);
         (
             accuracy_k(&linear_forward(head, &up), &te.y, ne, k),
             accuracy_k(&linear_forward(head, &ro), &te.y, ne, k),
@@ -154,23 +157,26 @@ fn main() {
                 *bi -= head_lr * g;
             }
         }
-        let (a_up, a_ro) = eval_arm(&cd, &head_fx);
+        let (a_up, a_ro) = eval_arm(&cd, &head_fx, &mu_cd, &sd_cd);
 
-        // ARM B (learned): train the 9→2 kernel + head jointly through the pool.
+        // ARM B (learned): train the 9→2 kernel + head jointly through the pool. Standardise per
+        // epoch with the CURRENT feature stats (detached, BatchNorm-lite) so the head input stays
+        // O(1) as the kernel — and hence the feature scale — moves during training.
         let mut conv = LinearLayer::new(9, 2, 100 + seed as u64);
         let mut head_ln = LinearLayer::new(nk, k, 200 + seed as u64);
         for ep in 0..epochs {
             let field = linear_forward(&conv, &win_tr);
             let out = phase_pool_forward(&field, nt, g, b);
-            let feat_std = standardized(&out.feat, &mu, &sd, nk);
+            let (mu_e, sd_e) = feature_stats(&out.feat, nk);
+            let feat_std = standardized(&out.feat, &mu_e, &sd_e, nk);
             let logits = linear_forward(&head_ln, &feat_std);
             let gl = cross_entropy_k_backward(&logits, &tr.y, nt, k);
             let (grad_feat_std, hg) = linear_backward(&head_ln, &feat_std, &gl);
-            // undo the fixed standardisation on the way back: ∂/∂feat = grad_std / sd.
+            // undo the (detached) standardisation on the way back: ∂/∂feat = grad_std / sd.
             let mut grad_feat = grad_feat_std;
             for row in grad_feat.chunks_mut(nk) {
                 for j in 0..nk {
-                    row[j] /= sd[j];
+                    row[j] /= sd_e[j];
                 }
             }
             let mut grad_field = phase_pool_backward(&field, &out, &grad_feat, nt, g, b);
@@ -197,7 +203,9 @@ fn main() {
                 println!("    seed {seed} learned ep {ep:4}/{epochs}  CE {l:.4}");
             }
         }
-        let (b_up, b_ro) = eval_arm(&conv, &head_ln);
+        // Eval the learned arm with its trained kernel's own train-feature stats.
+        let (mu_ln, sd_ln) = feature_stats(&pooled_feat(&conv, &win_tr, nt, g, b), nk);
+        let (b_up, b_ro) = eval_arm(&conv, &head_ln, &mu_ln, &sd_ln);
 
         println!(
             "  seed {seed}: fixed up {a_up:.4} ro {a_ro:.4} | learned up {b_up:.4} ro {b_ro:.4}"
