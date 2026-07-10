@@ -83,5 +83,6 @@ pub use runtime::NagareRuntime;
 pub use tabular::{load_csv, load_csv_regression, shuffle_split, Tabular, TabularReg};
 pub use tabular_graph::{build_signed_cycle_pool, GraphPool};
 pub use vision::{
-    orientation_histogram, phase_feature_dim, phase_features, spatial_phase_features, PhaseFeature,
+    orientation_histogram, phase_feature_dim, phase_features, rotate_image, spatial_phase_features,
+    PhaseFeature,
 };

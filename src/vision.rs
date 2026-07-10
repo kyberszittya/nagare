@@ -54,6 +54,34 @@ pub fn orientation_histogram(imgs: &[f32], n: usize, g: usize, b: usize) -> Vec<
     h
 }
 
+/// Bilinearly rotate a `g×g` image by `theta` (radians) about its centre. Source coords are
+/// **edge-clamped** (not background-filled), so a frame-filling texture doesn't gain spurious
+/// background edges — a fairer transform for the rotation-invariance experiments and demos.
+///
+/// # Preconditions
+/// `img.len() == g * g`.
+pub fn rotate_image(img: &[f32], g: usize, theta: f32) -> Vec<f32> {
+    let (c, s) = (theta.cos(), theta.sin());
+    let ctr = (g as f32 - 1.0) / 2.0;
+    let hi = g as f32 - 1.001;
+    let mut out = vec![0.0f32; g * g];
+    for oi in 0..g {
+        for oj in 0..g {
+            let (dy, dx) = (oi as f32 - ctr, oj as f32 - ctr);
+            let sy = (ctr + dx * s + dy * c).clamp(0.0, hi);
+            let sx = (ctr + dx * c - dy * s).clamp(0.0, hi);
+            let (fy, fx) = (sy.floor(), sx.floor());
+            let (y0, x0, ty, tx) = (fy as usize, fx as usize, sy - fy, sx - fx);
+            let v = |a: usize, b: usize| img[a * g + b];
+            out[oi * g + oj] = v(y0, x0) * (1.0 - ty) * (1.0 - tx)
+                + v(y0, x0 + 1) * (1.0 - ty) * tx
+                + v(y0 + 1, x0) * ty * (1.0 - tx)
+                + v(y0 + 1, x0 + 1) * ty * tx;
+        }
+    }
+    out
+}
+
 /// Which phase-pool feature to build from an orientation histogram.
 #[derive(Clone, Copy)]
 pub enum PhaseFeature {

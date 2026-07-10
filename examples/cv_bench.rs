@@ -21,7 +21,8 @@ use std::path::Path;
 
 use holonomy_learn::{
     accuracy_k, cross_entropy_k_backward, linear_backward, linear_forward, patch_project_backward,
-    patch_project_forward, spatial_phase_features, LinearLayer, PatchConfig, PhaseFeature,
+    patch_project_forward, rotate_image, spatial_phase_features, LinearLayer, PatchConfig,
+    PhaseFeature,
 };
 
 fn arg_str(name: &str) -> Option<String> {
@@ -68,31 +69,6 @@ fn load_raw(dir: &Path, images: &str, labels: &str, cap: usize) -> Split {
     Split { x, y, g }
 }
 
-/// Bilinearly rotate one `g×g` image by `theta` about its centre. Source coords are **edge-clamped**
-/// (not background-filled), so a frame-filling texture doesn't gain spurious background edges that
-/// would corrupt its orientation histogram — a fairer rotation for the invariance test.
-fn rotate(img: &[f32], g: usize, theta: f32) -> Vec<f32> {
-    let (c, s) = (theta.cos(), theta.sin());
-    let ctr = (g as f32 - 1.0) / 2.0;
-    let hi = g as f32 - 1.001;
-    let mut out = vec![0.0f32; g * g];
-    for oi in 0..g {
-        for oj in 0..g {
-            let (dy, dx) = (oi as f32 - ctr, oj as f32 - ctr);
-            let sy = (ctr + dx * s + dy * c).clamp(0.0, hi);
-            let sx = (ctr + dx * c - dy * s).clamp(0.0, hi);
-            let (fy, fx) = (sy.floor(), sx.floor());
-            let (y0, x0, ty, tx) = (fy as usize, fx as usize, sy - fy, sx - fx);
-            let v = |a: usize, b: usize| img[a * g + b];
-            out[oi * g + oj] = v(y0, x0) * (1.0 - ty) * (1.0 - tx)
-                + v(y0, x0 + 1) * (1.0 - ty) * tx
-                + v(y0 + 1, x0) * ty * (1.0 - tx)
-                + v(y0 + 1, x0 + 1) * ty * tx;
-        }
-    }
-    out
-}
-
 /// Randomly-rotated copy of a test split (deterministic per-image angle).
 fn rot_all(x: &[f32], n: usize, g: usize) -> Vec<f32> {
     let mut out = vec![0.0f32; n * g * g];
@@ -102,7 +78,7 @@ fn rot_all(x: &[f32], n: usize, g: usize) -> Vec<f32> {
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
         let theta = (st >> 40) as f32 / (1u64 << 24) as f32 * std::f32::consts::TAU;
-        out[s * g * g..(s + 1) * g * g].copy_from_slice(&rotate(
+        out[s * g * g..(s + 1) * g * g].copy_from_slice(&rotate_image(
             &x[s * g * g..(s + 1) * g * g],
             g,
             theta,
