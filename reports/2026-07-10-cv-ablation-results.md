@@ -83,8 +83,10 @@ Plot: `reports/figures/cv-ablation-sweep.png`.
 
 ## Open / next
 
-- **Direction 1 (native-rot texture bench)** — KTH-TIPS2 / Kylberg-rotated, to measure clean
-  invariance without self-imposed rotation artifacts (the one matrix column not yet run).
+- **Direction 1 (harder texture bench) — DONE.** KTH-TIPS2-b (11 materials, 3564/1188) run; see
+  `reports/2026-07-10-kth-tips2-11class-materials.md`. Confirms phase ≫ pixel (2–3×), adds an
+  **interior R-optimum (R=4)** between MNIST (max locality) and KTH-TIPS v1 (global), and shows
+  augmentation drives the phase arms' rotation drop to ≈0 (best robust = spatial-phase R=4, 0.564).
 - **Per-domain default:** ship the phase machinery with `R` as the documented knob (R=1 for
   rotation-nuisance, high-R for layout tasks); the ablation gives the tuning curve.
 - Signed-graph link prediction remains the flagship.
