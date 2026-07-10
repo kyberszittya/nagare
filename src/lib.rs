@@ -63,6 +63,7 @@ pub use ops::mse::{mse_backward, mse_forward, r2_score};
 pub use ops::patch_projection::{
     patch_project_backward, patch_project_forward, PatchCache, PatchConfig,
 };
+pub use ops::phase_pool::{phase_pool_backward, phase_pool_dim, phase_pool_forward, PhasePoolOut};
 pub use ops::project_alpha_mix::{
     project_alpha_mix_backward, project_alpha_mix_forward, ProjectAlphaMixBackward,
     ProjectAlphaMixShape,

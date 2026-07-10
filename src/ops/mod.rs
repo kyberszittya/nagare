@@ -28,6 +28,7 @@ pub mod linear;
 pub mod loss;
 pub mod mse;
 pub mod patch_projection;
+pub mod phase_pool;
 pub mod project_alpha_mix;
 pub mod scatter;
 pub mod signed_scatter;
