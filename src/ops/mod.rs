@@ -30,6 +30,7 @@ pub mod mse;
 pub mod patch_projection;
 pub mod phase_pool;
 pub mod project_alpha_mix;
+pub mod rotor_holonomy;
 pub mod scatter;
 pub mod signed_scatter;
 pub mod softmax_k;
