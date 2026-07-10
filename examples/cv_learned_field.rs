@@ -113,7 +113,9 @@ fn main() {
     let cd = central_diff_conv();
     let feat_tr_cd = pooled_feat(&cd, &win_tr, nt, g, b);
     let (mu, sd) = feature_stats(&feat_tr_cd, nk);
-    let (ref_feat, ref_dim) = spatial_phase_features(&tr.x, nt.min(4), g, 1, b, PhaseFeature::Dft);
+    let n_ref = nt.min(4);
+    let (ref_feat, ref_dim) =
+        spatial_phase_features(&tr.x[..n_ref * g * g], n_ref, g, 1, b, PhaseFeature::Dft);
     assert_eq!(ref_dim, nk);
     let max_gap = ref_feat
         .iter()
