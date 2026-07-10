@@ -15,6 +15,7 @@ pub mod projection;
 pub mod runtime;
 pub mod tabular;
 pub mod tabular_graph;
+pub mod vision;
 
 pub const VERTEX_FEATURES: usize = 7;
 pub const STRUCTURAL_FEATURES: usize = 4 * VERTEX_FEATURES;
@@ -81,3 +82,4 @@ pub use projection::{default_holonomy_basis, fit_class_mean_basis, ProjectionBas
 pub use runtime::NagareRuntime;
 pub use tabular::{load_csv, load_csv_regression, shuffle_split, Tabular, TabularReg};
 pub use tabular_graph::{build_signed_cycle_pool, GraphPool};
+pub use vision::{orientation_histogram, phase_features, PhaseFeature};
