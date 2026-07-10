@@ -142,9 +142,66 @@ fn main() {
         )
     };
 
-    let (mut fx_up, mut fx_ro, mut ln_up, mut ln_ro) = (vec![], vec![], vec![], vec![]);
+    // Train the 9→2 kernel + head jointly through the pool from an arbitrary initial kernel.
+    // Per-epoch detached (BatchNorm-lite) standardisation keeps the head input O(1) as the kernel
+    // moves. Returns (upright acc, rotated acc, final train CE) — CE surfaces undertraining.
+    let train_learned =
+        |conv0: LinearLayer, head_seed: u64, tag: &str, seed: usize| -> (f32, f32, f32) {
+            let mut conv = conv0;
+            let mut head = LinearLayer::new(nk, k, head_seed);
+            let mut last_ce = 0.0f32;
+            for ep in 0..epochs {
+                let field = linear_forward(&conv, &win_tr);
+                let out = phase_pool_forward(&field, nt, g, b);
+                let (mu_e, sd_e) = feature_stats(&out.feat, nk);
+                let feat_std = standardized(&out.feat, &mu_e, &sd_e, nk);
+                let logits = linear_forward(&head, &feat_std);
+                let gl = cross_entropy_k_backward(&logits, &tr.y, nt, k);
+                let (grad_feat_std, hg) = linear_backward(&head, &feat_std, &gl);
+                let mut grad_feat = grad_feat_std; // ∂/∂feat = grad_std / sd (detached stats)
+                for r in grad_feat.chunks_mut(nk) {
+                    for j in 0..nk {
+                        r[j] /= sd_e[j];
+                    }
+                }
+                let mut grad_field = phase_pool_backward(&field, &out, &grad_feat, nt, g, b);
+                let norm = grad_field.iter().map(|v| v * v).sum::<f32>().sqrt();
+                if norm > clip {
+                    let sc = clip / norm;
+                    grad_field.iter_mut().for_each(|v| *v *= sc);
+                }
+                let (_gx, cg) = linear_backward(&conv, &win_tr, &grad_field);
+                for (w, g) in conv.w.iter_mut().zip(&cg.w) {
+                    *w -= conv_lr * g;
+                }
+                for (bi, g) in conv.b.iter_mut().zip(&cg.b) {
+                    *bi -= conv_lr * g;
+                }
+                for (w, g) in head.w.iter_mut().zip(&hg.w) {
+                    *w -= head_lr * g;
+                }
+                for (bi, g) in head.b.iter_mut().zip(&hg.b) {
+                    *bi -= head_lr * g;
+                }
+                if ep % 150 == 0 || ep == epochs - 1 {
+                    last_ce =
+                        cross_entropy_k_forward(&linear_forward(&head, &feat_std), &tr.y, nt, k);
+                    println!("    seed {seed} {tag:9} ep {ep:4}/{epochs}  CE {last_ce:.4}");
+                }
+            }
+            let (mu_ln, sd_ln) = feature_stats(&pooled_feat(&conv, &win_tr, nt, g, b), nk);
+            let (up, ro) = eval_arm(&conv, &head, &mu_ln, &sd_ln);
+            (up, ro, last_ce)
+        };
+
+    let mut fx_up = vec![];
+    let mut fx_ro = vec![];
+    let mut sc_up = vec![];
+    let mut sc_ro = vec![];
+    let mut ws_up = vec![];
+    let mut ws_ro = vec![];
     for seed in 0..seeds {
-        // ARM A (fixed): frozen central-diff field, train head only on the fixed feature.
+        // ARM A (fixed): frozen central-diff kernel, train head only.
         let mut head_fx = LinearLayer::new(nk, k, 7 + seed as u64);
         for _ in 0..epochs {
             let gl =
@@ -158,80 +215,46 @@ fn main() {
             }
         }
         let (a_up, a_ro) = eval_arm(&cd, &head_fx, &mu_cd, &sd_cd);
-
-        // ARM B (learned): train the 9→2 kernel + head jointly through the pool. Standardise per
-        // epoch with the CURRENT feature stats (detached, BatchNorm-lite) so the head input stays
-        // O(1) as the kernel — and hence the feature scale — moves during training.
-        let mut conv = LinearLayer::new(9, 2, 100 + seed as u64);
-        let mut head_ln = LinearLayer::new(nk, k, 200 + seed as u64);
-        for ep in 0..epochs {
-            let field = linear_forward(&conv, &win_tr);
-            let out = phase_pool_forward(&field, nt, g, b);
-            let (mu_e, sd_e) = feature_stats(&out.feat, nk);
-            let feat_std = standardized(&out.feat, &mu_e, &sd_e, nk);
-            let logits = linear_forward(&head_ln, &feat_std);
-            let gl = cross_entropy_k_backward(&logits, &tr.y, nt, k);
-            let (grad_feat_std, hg) = linear_backward(&head_ln, &feat_std, &gl);
-            // undo the (detached) standardisation on the way back: ∂/∂feat = grad_std / sd.
-            let mut grad_feat = grad_feat_std;
-            for row in grad_feat.chunks_mut(nk) {
-                for j in 0..nk {
-                    row[j] /= sd_e[j];
-                }
-            }
-            let mut grad_field = phase_pool_backward(&field, &out, &grad_feat, nt, g, b);
-            let norm = grad_field.iter().map(|v| v * v).sum::<f32>().sqrt();
-            if norm > clip {
-                let sc = clip / norm;
-                grad_field.iter_mut().for_each(|v| *v *= sc);
-            }
-            let (_gx, cg) = linear_backward(&conv, &win_tr, &grad_field);
-            for (w, g) in conv.w.iter_mut().zip(&cg.w) {
-                *w -= conv_lr * g;
-            }
-            for (bi, g) in conv.b.iter_mut().zip(&cg.b) {
-                *bi -= conv_lr * g;
-            }
-            for (w, g) in head_ln.w.iter_mut().zip(&hg.w) {
-                *w -= head_lr * g;
-            }
-            for (bi, g) in head_ln.b.iter_mut().zip(&hg.b) {
-                *bi -= head_lr * g;
-            }
-            if ep % 100 == 0 || ep == epochs - 1 {
-                let l = cross_entropy_k_forward(&linear_forward(&head_ln, &feat_std), &tr.y, nt, k);
-                println!("    seed {seed} learned ep {ep:4}/{epochs}  CE {l:.4}");
-            }
-        }
-        // Eval the learned arm with its trained kernel's own train-feature stats.
-        let (mu_ln, sd_ln) = feature_stats(&pooled_feat(&conv, &win_tr, nt, g, b), nk);
-        let (b_up, b_ro) = eval_arm(&conv, &head_ln, &mu_ln, &sd_ln);
+        // ARM B (learned-scratch): random-init kernel — learnability from scratch.
+        let (s_up, s_ro, s_ce) = train_learned(
+            LinearLayer::new(9, 2, 100 + seed as u64),
+            200 + seed as u64,
+            "scratch",
+            seed,
+        );
+        // ARM C (learned-warmstart): kernel INIT at central-diff — can training improve the
+        // hand-designed field? (the decisive arm: stay ⇒ local optimum, up ⇒ learning wins.)
+        let (w_up, w_ro, w_ce) =
+            train_learned(central_diff_conv(), 300 + seed as u64, "warmstart", seed);
 
         println!(
-            "  seed {seed}: fixed up {a_up:.4} ro {a_ro:.4} | learned up {b_up:.4} ro {b_ro:.4}"
+            "  seed {seed}: fixed {a_up:.4}/{a_ro:.4} | scratch {s_up:.4}/{s_ro:.4} (ce {s_ce:.3}) | warmstart {w_up:.4}/{w_ro:.4} (ce {w_ce:.3})"
         );
         fx_up.push(a_up);
         fx_ro.push(a_ro);
-        ln_up.push(b_up);
-        ln_ro.push(b_ro);
+        sc_up.push(s_up);
+        sc_ro.push(s_ro);
+        ws_up.push(w_up);
+        ws_ro.push(w_ro);
     }
 
-    let row = |name: &str, v: Vec<f32>| {
-        let (m, lo, hi) = median_iqr(v);
-        println!("  {name:24} {m:.4}  [{lo:.4}, {hi:.4}]");
+    let row = |name: &str, v: &[f32]| {
+        let (m, lo, hi) = median_iqr(v.to_vec());
+        println!("  {name:18} {m:.4}  [{lo:.4}, {hi:.4}]");
     };
-    println!("\n== median [IQR] over {seeds} seeds ==");
-    row("fixed  upright", fx_up.clone());
-    row("fixed  rotated", fx_ro.clone());
-    row("learned upright", ln_up.clone());
-    row("learned rotated", ln_ro.clone());
-    let (fu, _, _) = median_iqr(fx_up);
-    let (lu, _, _) = median_iqr(ln_up);
-    let (fr, _, _) = median_iqr(fx_ro);
-    let (lr, _, _) = median_iqr(ln_ro);
+    println!("\n== median [IQR] over {seeds} seeds (upright then rotated) ==");
+    row("fixed     up", &fx_up);
+    row("fixed     ro", &fx_ro);
+    row("scratch   up", &sc_up);
+    row("scratch   ro", &sc_ro);
+    row("warmstart up", &ws_up);
+    row("warmstart ro", &ws_ro);
+    let med = |v: &[f32]| median_iqr(v.to_vec()).0;
     println!(
-        "\n  Δ(learned−fixed): upright {:+.4}, rotated {:+.4}",
-        lu - fu,
-        lr - fr
+        "\n  Δ(scratch−fixed):   up {:+.4}, ro {:+.4}\n  Δ(warmstart−fixed): up {:+.4}, ro {:+.4}",
+        med(&sc_up) - med(&fx_up),
+        med(&sc_ro) - med(&fx_ro),
+        med(&ws_up) - med(&fx_up),
+        med(&ws_ro) - med(&fx_ro),
     );
 }
