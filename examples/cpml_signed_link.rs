@@ -996,6 +996,23 @@ fn main() {
     let (te_e, _, te_y) = mk(te_i);
     let sd = seed.wrapping_add(1);
 
+    // Robustness grid (`--grid --init I`): fixed data split (`--seed`), model init offset by `I`, so a
+    // (data-seed × init-seed) sweep isolates whether the holonomy channel's Δ is init-robust. Runs only
+    // the inner core (L=3) and +holonomy(M=1) with the SAME model init, prints one line, exits fast.
+    if std::env::args().any(|a| a == "--grid") {
+        let init_off = arg_f("--init", 0.0) as u64;
+        let ms = sd.wrapping_add(init_off.wrapping_mul(7919));
+        let g_inner = run(3, &x0, &tris, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, ms);
+        let g_holo =
+            run_holonomy(&x0, &tris, &tri_signs, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, ms, 1);
+        let name = path.rsplit(['/', '\\']).next().unwrap_or(&path);
+        println!(
+            "GRID {name} seed={seed} init={init_off}  inner {g_inner:.4}  holo {g_holo:.4}  d {:+.5}",
+            g_holo - g_inner
+        );
+        return;
+    }
+
     let a1 = run(1, &x0, &tris, &tier1, n, &tr_e, &tr_y, &te_e, &te_y, sd);
     let a3 = run(3, &x0, &tris, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, sd);
     let ah = run_hgconv(
