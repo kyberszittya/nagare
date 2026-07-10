@@ -679,6 +679,13 @@ fn unit_rows_backward(qn: &[f32], norms: &[f32], grad_qn: &[f32], n: usize) -> V
     g
 }
 
+/// Soft-bin scalar `w∈[-1,1]` into `b` bins → `(lo, frac)`: `bin[lo]+=1-frac`, `bin[lo+1]+=frac`.
+fn softbin(w: f32, b: usize) -> (usize, f32) {
+    let p = ((w.clamp(-1.0, 1.0) + 1.0) * 0.5 * b as f32).min(b as f32 - 1e-4);
+    let lo = (p.floor() as usize).min(b - 1);
+    (lo, p - p.floor())
+}
+
 // ---- Holonomy channel: the inner CPML core + M rotor-holonomy heads per cycle ----
 // Per triangle edge (a,b,sign): M learned linear(2F+1 → 4) maps → M per-edge quaternions (unit-
 // normalized — a rotor IS a unit quaternion); rotor_holonomy over each head's 3 edge-quats → M
@@ -701,13 +708,22 @@ fn run_holonomy(
     seed: u64,
     n_heads: usize,
     invariant: bool,
+    hist_bins: usize,
 ) -> f64 {
     let n_tri = tris.len() / 3;
     let n_tiers = 3;
     let mut m = CpmlLinkModel::new(n_tiers, seed); // tiers reused; its edge_head is unused here
     let base_dim = m.emb_dim; // F + n_tiers·D
-                              // Feature per head: 1 gauge-invariant scalar w=Re(H)=cos(θ/2) (invariant), else the raw quaternion.
-    let comp = if invariant { 1 } else { 4 };
+                              // Feature per head: raw quaternion (4); else invariant magnitude w=Re(H), pooled per vertex as its
+                              // mean (comp=1) or a soft hist_bins-bin DISTRIBUTION (comp=hist_bins) — the richer invariant.
+    let histo = invariant && hist_bins > 0;
+    let comp = if !invariant {
+        4
+    } else if histo {
+        hist_bins
+    } else {
+        1
+    };
     let hd = comp * n_heads; // holonomy feature width
     let full_dim = base_dim + hd;
     let mut holo_lins: Vec<LinearLayer> = (0..n_heads)
@@ -748,8 +764,18 @@ fn run_holonomy(
             let (q_edge, q_norms) = unit_rows(&q_raw, n_tri * 3);
             let (holo, prefixes) = rotor_holonomy_forward(&q_edge, n_tri, 3);
             for c in 0..n_tri {
-                holo_all[c * hd + h * comp..c * hd + h * comp + comp]
-                    .copy_from_slice(&holo[c * 4..c * 4 + comp]);
+                let base = c * hd + h * comp;
+                if histo {
+                    let (lo, frac) = softbin(holo[c * 4], comp);
+                    holo_all[base + lo] += 1.0 - frac;
+                    if lo + 1 < comp {
+                        holo_all[base + lo + 1] += frac;
+                    } else {
+                        holo_all[base + lo] += frac;
+                    }
+                } else {
+                    holo_all[base..base + comp].copy_from_slice(&holo[c * 4..c * 4 + comp]);
+                }
             }
             saved.push((q_edge, q_norms, prefixes));
         }
@@ -836,8 +862,21 @@ fn run_holonomy(
         for (h, (q_edge, q_norms, prefixes)) in saved.iter().enumerate() {
             let mut grad_holo_h = vec![0.0f32; n_tri * 4];
             for c in 0..n_tri {
-                grad_holo_h[c * 4..c * 4 + comp]
-                    .copy_from_slice(&grad_holo_all[c * hd + h * comp..c * hd + h * comp + comp]);
+                let base = c * hd + h * comp;
+                if histo {
+                    // Soft-bin adjoint: grad flows to w=Re(H)=P_{k-1}[0]; ∂bin/∂w = ±b/2.
+                    let w = prefixes[(c * 3 + 2) * 4]; // H_c = P_2 (k=3)
+                    let (lo, _frac) = softbin(w, comp);
+                    grad_holo_h[c * 4] = if lo + 1 < comp {
+                        (grad_holo_all[base + lo + 1] - grad_holo_all[base + lo])
+                            * (comp as f32 * 0.5)
+                    } else {
+                        0.0
+                    };
+                } else {
+                    grad_holo_h[c * 4..c * 4 + comp]
+                        .copy_from_slice(&grad_holo_all[base..base + comp]);
+                }
             }
             let grad_q_edge = rotor_holonomy_backward(q_edge, prefixes, &grad_holo_h, n_tri, 3);
             let grad_q_raw = unit_rows_backward(q_edge, q_norms, &grad_q_edge, n_tri * 3);
@@ -1003,17 +1042,18 @@ fn main() {
     // (data-seed × init-seed) sweep isolates whether the holonomy channel's Δ is init-robust. Runs only
     // the inner core (L=3) and +holonomy(M=1) with the SAME model init, prints one line, exits fast.
     let inv = std::env::args().any(|a| a == "--holo-invariant");
+    let hist = arg_f("--holo-hist", 0.0) as usize;
     if std::env::args().any(|a| a == "--grid") {
         let init_off = arg_f("--init", 0.0) as u64;
         let mh = arg_f("--holo-heads", 1.0) as usize;
         let ms = sd.wrapping_add(init_off.wrapping_mul(7919));
         let g_inner = run(3, &x0, &tris, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, ms);
         let g_holo = run_holonomy(
-            &x0, &tris, &tri_signs, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, ms, mh, inv,
+            &x0, &tris, &tri_signs, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, ms, mh, inv, hist,
         );
         let name = path.rsplit(['/', '\\']).next().unwrap_or(&path);
         println!(
-            "GRID {name} seed={seed} init={init_off} inv={inv} M={mh}  inner {g_inner:.4}  holo {g_holo:.4}  d {:+.5}",
+            "GRID {name} seed={seed} init={init_off} inv={inv} M={mh} hist={hist}  inner {g_inner:.4}  holo {g_holo:.4}  d {:+.5}",
             g_holo - g_inner
         );
         return;
@@ -1040,11 +1080,11 @@ fn main() {
     );
     let cascade_secs = t_cascade.elapsed().as_secs_f64();
     let aholo = run_holonomy(
-        &x0, &tris, &tri_signs, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, sd, 1, inv,
+        &x0, &tris, &tri_signs, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, sd, 1, inv, hist,
     );
     let holo_heads = arg_f("--holo-heads", 4.0) as usize;
     let aholo_m = run_holonomy(
-        &x0, &tris, &tri_signs, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, sd, holo_heads, inv,
+        &x0, &tris, &tri_signs, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, sd, holo_heads, inv, hist,
     );
 
     let name = path.rsplit(['/', '\\']).next().unwrap_or(&path);
