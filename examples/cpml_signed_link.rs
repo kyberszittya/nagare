@@ -24,8 +24,8 @@ use holonomy_learn::{
     adam_step, cycle_incidence_degrees, gomb_outer_backward, gomb_outer_forward,
     hg_edge_to_node_backward, hg_edge_to_node_forward, hg_node_to_edge_backward,
     hg_node_to_edge_forward, hsikan_backward, hsikan_forward, linear_backward, linear_forward,
-    scatter_mean_backward, scatter_mean_forward, tier_cycle_indices, AdamState, HsikanConfig,
-    HsikanEdges, HsikanParams, LinearLayer, TierSpec,
+    rotor_holonomy_backward, rotor_holonomy_forward, scatter_mean_backward, scatter_mean_forward,
+    tier_cycle_indices, AdamState, HsikanConfig, HsikanEdges, HsikanParams, LinearLayer, TierSpec,
 };
 use hymeko_graph::{CliffordFIR, TopKCyclesBatch};
 use rand::{rngs::StdRng, Rng, SeedableRng};
@@ -648,6 +648,183 @@ fn run_cascade(
     auroc(&linear_forward(&head, &ein), te_y)
 }
 
+/// Unit-normalize each 4-vector row (a rotor *is* a unit quaternion) → `(normalized, norms)`.
+fn unit_rows(q: &[f32], n: usize) -> (Vec<f32>, Vec<f32>) {
+    let mut out = vec![0.0f32; n * 4];
+    let mut norms = vec![0.0f32; n];
+    for i in 0..n {
+        let s = q[i * 4..i * 4 + 4]
+            .iter()
+            .map(|x| x * x)
+            .sum::<f32>()
+            .sqrt()
+            + 1e-6;
+        norms[i] = s;
+        for j in 0..4 {
+            out[i * 4 + j] = q[i * 4 + j] / s;
+        }
+    }
+    (out, norms)
+}
+
+/// Backward of [`unit_rows`]: `∂/∂raw = (grad − (grad·q̂) q̂) / ‖raw‖` with `q̂` the normalized row.
+fn unit_rows_backward(qn: &[f32], norms: &[f32], grad_qn: &[f32], n: usize) -> Vec<f32> {
+    let mut g = vec![0.0f32; n * 4];
+    for i in 0..n {
+        let dot: f32 = (0..4).map(|j| grad_qn[i * 4 + j] * qn[i * 4 + j]).sum();
+        for j in 0..4 {
+            g[i * 4 + j] = (grad_qn[i * 4 + j] - dot * qn[i * 4 + j]) / norms[i];
+        }
+    }
+    g
+}
+
+// ---- Holonomy channel: the inner CPML core + a rotor-holonomy feature per cycle ----
+// Per triangle edge (a,b,sign): learned linear(2F+1 → 4) → per-edge quaternion; rotor_holonomy over
+// the 3 edge-quats → per-cycle holonomy; scatter-mean to vertices → 4-dim per-vertex feature concat
+// into the inner-core embedding. A/B vs the inner core alone (run(3)): does the order-sensitive rotor
+// holonomy carry signal the tier-degree features miss? Reuses linear + rotor_holonomy + scatter_mean.
+#[allow(clippy::too_many_arguments)]
+fn run_holonomy(
+    x0: &[f32],
+    tris: &[u32],
+    tri_signs: &[f32],
+    tier_of: &[usize],
+    n: usize,
+    tr_e: &[(u32, u32)],
+    tr_y: &[f32],
+    te_e: &[(u32, u32)],
+    te_y: &[u8],
+    seed: u64,
+) -> f64 {
+    let n_tri = tris.len() / 3;
+    let n_tiers = 3;
+    let mut m = CpmlLinkModel::new(n_tiers, seed); // tiers reused; its edge_head is unused here
+    let base_dim = m.emb_dim; // F + n_tiers·D
+    let full_dim = base_dim + 4; // + holonomy(4)
+    let mut holo_lin = LinearLayer::new(2 * F + 1, 4, seed + 21);
+    let mut head = LinearLayer::new(2 * full_dim, 1, seed + 22);
+    let mut tier_states: Vec<AdamState> = m
+        .tier_lins
+        .iter()
+        .map(|l| AdamState::new(l.w.len() + l.b.len()))
+        .collect();
+    let mut s_holo = AdamState::new(holo_lin.w.len() + holo_lin.b.len());
+    let mut s_head = AdamState::new(head.w.len() + head.b.len());
+
+    // Fixed per-edge feature matrix [x0[a], x0[b], sign] (x0 frozen, signs fixed) — build once.
+    let ew = 2 * F + 1;
+    let mut edge_feat = vec![0.0f32; n_tri * 3 * ew];
+    for c in 0..n_tri {
+        let t = [tris[3 * c], tris[3 * c + 1], tris[3 * c + 2]];
+        for j in 0..3 {
+            let (a, b) = (t[j] as usize, t[(j + 1) % 3] as usize);
+            let row = (c * 3 + j) * ew;
+            edge_feat[row..row + F].copy_from_slice(&x0[a * F..a * F + F]);
+            edge_feat[row + F..row + 2 * F].copy_from_slice(&x0[b * F..b * F + F]);
+            edge_feat[row + 2 * F] = tri_signs[3 * c + j];
+        }
+    }
+
+    let combine = |emb_tier: &[f32], holo_vert: &[f32]| -> Vec<f32> {
+        let mut emb = vec![0.0f32; n * full_dim];
+        for v in 0..n {
+            emb[v * full_dim..v * full_dim + base_dim]
+                .copy_from_slice(&emb_tier[v * base_dim..v * base_dim + base_dim]);
+            emb[v * full_dim + base_dim..v * full_dim + full_dim]
+                .copy_from_slice(&holo_vert[v * 4..v * 4 + 4]);
+        }
+        emb
+    };
+
+    let ntr = tr_y.len() as f32;
+    for it in 0..250 {
+        let (emb_tier, caches) = m.node_embed(x0, tris, tier_of, n);
+        let q_raw = linear_forward(&holo_lin, &edge_feat);
+        let (q_edge, q_norms) = unit_rows(&q_raw, n_tri * 3); // rotors are unit quaternions
+        let (holo, prefixes) = rotor_holonomy_forward(&q_edge, n_tri, 3);
+        let (holo_vert, holo_counts) = scatter_mean_forward(tris, 3, &holo, 4, n);
+        let emb = combine(&emb_tier, &holo_vert);
+        let ein = edge_in(&emb, tr_e, full_dim);
+        let logits = linear_forward(&head, &ein);
+
+        let mut gl = vec![0.0f32; tr_e.len()];
+        let mut loss = 0.0f32;
+        for i in 0..tr_e.len() {
+            let p = 1.0 / (1.0 + (-logits[i]).exp());
+            gl[i] = (p - tr_y[i]) / ntr;
+            let pc = p.clamp(1e-7, 1.0 - 1e-7);
+            loss -= (tr_y[i] * pc.ln() + (1.0 - tr_y[i]) * (1.0 - pc).ln()) / ntr;
+        }
+        if it % 50 == 0 || it == 249 {
+            println!("    holonomy it {it:3}/250  BCE {loss:.4}");
+        }
+        let (grad_ein, grad_head) = linear_backward(&head, &ein, &gl);
+        let mut grad_emb = vec![0.0f32; n * full_dim];
+        for (e, &(u, v)) in tr_e.iter().enumerate() {
+            let b = e * 2 * full_dim;
+            for j in 0..full_dim {
+                grad_emb[u as usize * full_dim + j] += grad_ein[b + j];
+                grad_emb[v as usize * full_dim + j] += grad_ein[b + full_dim + j];
+            }
+        }
+        // Split → tier part + holonomy part.
+        let mut grad_emb_tier = vec![0.0f32; n * base_dim];
+        let mut grad_holo_vert = vec![0.0f32; n * 4];
+        for v in 0..n {
+            grad_emb_tier[v * base_dim..v * base_dim + base_dim]
+                .copy_from_slice(&grad_emb[v * full_dim..v * full_dim + base_dim]);
+            grad_holo_vert[v * 4..v * 4 + 4]
+                .copy_from_slice(&grad_emb[v * full_dim + base_dim..v * full_dim + full_dim]);
+        }
+        // Tier backward (mirror `run`).
+        let mut tier_grads: Vec<LinearLayer> = Vec::with_capacity(n_tiers);
+        for (ell, lin) in m.tier_lins.iter().enumerate() {
+            let cache = &caches[ell];
+            if cache.m == 0 {
+                tier_grads.push(lin.zero_grad());
+                continue;
+            }
+            let mut grad_h = vec![0.0f32; n * D];
+            for v in 0..n {
+                let base = v * base_dim + F + ell * D;
+                grad_h[v * D..v * D + D].copy_from_slice(&grad_emb_tier[base..base + D]);
+            }
+            let gpc = scatter_mean_backward(&cache.sub, 3, &grad_h, D, &cache.counts, n);
+            let mut glo = vec![0.0f32; cache.m * 3 * D];
+            for c in 0..cache.m {
+                for i in 0..3 {
+                    for j in 0..D {
+                        glo[(c * 3 + i) * D + j] = gpc[c * D + j] / 3.0;
+                    }
+                }
+            }
+            let (_gc, glin) = linear_backward(lin, &cache.corners, &glo);
+            tier_grads.push(glin);
+        }
+        // Holonomy backward: scatter → rotor_holonomy → linear.
+        let grad_holo = scatter_mean_backward(tris, 3, &grad_holo_vert, 4, &holo_counts, n);
+        let grad_q_edge = rotor_holonomy_backward(&q_edge, &prefixes, &grad_holo, n_tri, 3);
+        let grad_q_raw = unit_rows_backward(&q_edge, &q_norms, &grad_q_edge, n_tri * 3);
+        let (_ge, grad_holo_lin) = linear_backward(&holo_lin, &edge_feat, &grad_q_raw);
+
+        for (t, lin) in m.tier_lins.iter_mut().enumerate() {
+            adam_layer(lin, &tier_grads[t], &mut tier_states[t], 0.02);
+        }
+        adam_layer(&mut holo_lin, &grad_holo_lin, &mut s_holo, 0.02);
+        adam_layer(&mut head, &grad_head, &mut s_head, 0.02);
+    }
+
+    let (emb_tier, _) = m.node_embed(x0, tris, tier_of, n);
+    let q_raw = linear_forward(&holo_lin, &edge_feat);
+    let (q_edge, _) = unit_rows(&q_raw, n_tri * 3);
+    let (holo, _) = rotor_holonomy_forward(&q_edge, n_tri, 3);
+    let (holo_vert, _) = scatter_mean_forward(tris, 3, &holo, 4, n);
+    let emb = combine(&emb_tier, &holo_vert);
+    let ein = edge_in(&emb, te_e, full_dim);
+    auroc(&linear_forward(&head, &ein), te_y)
+}
+
 fn main() {
     let path = arg_str("--data").expect("--data <edgelist.csv>");
     let seed = arg_f("--seed", 0.0) as u64;
@@ -806,6 +983,9 @@ fn main() {
         &x0, &tris, &tri_signs, &tier3, 3, n, &tr_e, &tr_y, &te_e, &te_y, sd,
     );
     let cascade_secs = t_cascade.elapsed().as_secs_f64();
+    let aholo = run_holonomy(
+        &x0, &tris, &tri_signs, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, sd,
+    );
 
     let name = path.rsplit(['/', '\\']).next().unwrap_or(&path);
     println!(
@@ -818,6 +998,7 @@ fn main() {
     println!(
         "  FULL cascade L=3 (outer FIR→HSiKAN→inner): test AUROC {ac:.4}  ({cascade_secs:.1}s)"
     );
+    println!("  inner core L=3 + rotor-holonomy channel:   test AUROC {aholo:.4}");
     let verdict = |name: &str, val: f64, base: f64| {
         let tag = if val > base + 0.003 {
             "HELPS"
@@ -834,4 +1015,5 @@ fn main() {
     verdict("tier-stratification", a3, a1);
     verdict("hypergraph conv    ", ah, a1);
     verdict("FULL cascade vs inner core", ac, a3);
+    verdict("holonomy channel vs inner core", aholo, a3);
 }
