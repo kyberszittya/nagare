@@ -65,40 +65,107 @@ pub enum PhaseFeature {
     DftEntropy,
 }
 
+/// Feature dimension of one histogram under `mode` (`b` bins).
+pub fn phase_feature_dim(b: usize, mode: PhaseFeature) -> usize {
+    match mode {
+        PhaseFeature::Raw => b,
+        PhaseFeature::Dft => b / 2 + 1,
+        PhaseFeature::DftEntropy => b / 2 + 2,
+    }
+}
+
+/// One histogram `hs (b)` → its feature vector (`Raw`, `|DFT|`, or `|DFT|`⊕entropy).
+fn hist_feature(hs: &[f32], b: usize, mode: PhaseFeature) -> Vec<f32> {
+    if let PhaseFeature::Raw = mode {
+        return hs.to_vec();
+    }
+    let nk = b / 2 + 1;
+    let mut f = Vec::with_capacity(nk + 1);
+    for k in 0..nk {
+        let (mut re, mut im) = (0.0f32, 0.0f32);
+        for (bi, &hv) in hs.iter().enumerate() {
+            let ang = -TAU * k as f32 * bi as f32 / b as f32;
+            re += hv * ang.cos();
+            im += hv * ang.sin();
+        }
+        f.push((re * re + im * im).sqrt());
+    }
+    if matches!(mode, PhaseFeature::DftEntropy) {
+        let tot: f32 = hs.iter().sum::<f32>() + 1e-6;
+        let mut ent = 0.0f32;
+        for &hv in hs {
+            let pr = hv / tot;
+            if pr > 1e-9 {
+                ent -= pr * pr.ln();
+            }
+        }
+        f.push(ent);
+    }
+    f
+}
+
 /// Build the requested feature from per-image histograms `(n, b)` → `(features, dim)`.
 ///
 /// # Preconditions
 /// `hist.len() == n * b`.
 pub fn phase_features(hist: &[f32], n: usize, b: usize, mode: PhaseFeature) -> (Vec<f32>, usize) {
     assert_eq!(hist.len(), n * b);
-    if let PhaseFeature::Raw = mode {
-        return (hist.to_vec(), b);
-    }
-    let nk = b / 2 + 1;
-    let with_entropy = matches!(mode, PhaseFeature::DftEntropy);
-    let dim = nk + usize::from(with_entropy);
+    let dim = phase_feature_dim(b, mode);
     let mut f = vec![0.0f32; n * dim];
     for s in 0..n {
-        let hs = &hist[s * b..s * b + b];
-        for (k, fk) in f[s * dim..s * dim + nk].iter_mut().enumerate() {
-            let (mut re, mut im) = (0.0f32, 0.0f32);
-            for (bi, &hv) in hs.iter().enumerate() {
-                let ang = -TAU * k as f32 * bi as f32 / b as f32;
-                re += hv * ang.cos();
-                im += hv * ang.sin();
-            }
-            *fk = (re * re + im * im).sqrt();
-        }
-        if with_entropy {
-            let tot: f32 = hs.iter().sum::<f32>() + 1e-6;
-            let mut ent = 0.0f32;
-            for &hv in hs {
-                let pr = hv / tot;
-                if pr > 1e-9 {
-                    ent -= pr * pr.ln();
+        let fs = hist_feature(&hist[s * b..s * b + b], b, mode);
+        f[s * dim..s * dim + dim].copy_from_slice(&fs);
+    }
+    (f, dim)
+}
+
+/// **Spatial phase map**: divide each `g×g` image into an `r×r` grid of cells, build a per-cell
+/// orientation histogram, take its phase feature, and concatenate across cells → `(n, r·r·cell_dim)`.
+///
+/// `r = 1` is the global [`phase_features`] (full global-rotation invariance, no layout); larger `r`
+/// keeps coarser spatial layout — each cell is *locally* rotation-invariant, but the arrangement of
+/// cells is not global-rotation-invariant. Sweeping `r` traces the invariance↔locality trade.
+///
+/// # Preconditions
+/// `imgs.len() == n * g * g`, `1 <= r <= g`, `b >= 2`.
+pub fn spatial_phase_features(
+    imgs: &[f32],
+    n: usize,
+    g: usize,
+    r: usize,
+    b: usize,
+    mode: PhaseFeature,
+) -> (Vec<f32>, usize) {
+    assert_eq!(imgs.len(), n * g * g);
+    assert!(r >= 1 && r <= g && b >= 2);
+    let cell_dim = phase_feature_dim(b, mode);
+    let dim = r * r * cell_dim;
+    let mut f = vec![0.0f32; n * dim];
+    for s in 0..n {
+        let img = &imgs[s * g * g..(s + 1) * g * g];
+        for cr in 0..r {
+            for cc in 0..r {
+                let (y0, y1, x0, x1) = (cr * g / r, (cr + 1) * g / r, cc * g / r, (cc + 1) * g / r);
+                let mut h = vec![0.0f32; b];
+                for i in y0..y1 {
+                    for j in x0..x1 {
+                        let (gx, gy) = grad_at(img, g, i, j);
+                        let m = (gx * gx + gy * gy).sqrt();
+                        if m < 1e-6 {
+                            continue;
+                        }
+                        let theta = gy.atan2(gx).rem_euclid(TAU);
+                        let pos = theta / TAU * b as f32;
+                        let lo = pos.floor() as usize % b;
+                        let frac = pos - pos.floor();
+                        h[lo] += m * (1.0 - frac);
+                        h[(lo + 1) % b] += m * frac;
+                    }
                 }
+                let cf = hist_feature(&h, b, mode);
+                let base = s * dim + (cr * r + cc) * cell_dim;
+                f[base..base + cell_dim].copy_from_slice(&cf);
             }
-            f[s * dim + nk] = ent;
         }
     }
     (f, dim)
@@ -138,5 +205,27 @@ mod tests {
         let (raw, _) = phase_features(&h, 1, b, PhaseFeature::Raw);
         let (rawr, _) = phase_features(&hr, 1, b, PhaseFeature::Raw);
         assert!(raw.iter().zip(&rawr).any(|(a, c)| (a - c).abs() > 1e-3));
+    }
+
+    #[test]
+    fn spatial_phase_r1_equals_global() {
+        // r=1 spatial phase map == the global phase feature.
+        let g = 8;
+        let img: Vec<f32> = (0..g * g).map(|i| (i as f32 * 0.3).sin()).collect();
+        let b = 12;
+        let (global, gd) = phase_features(
+            &orientation_histogram(&img, 1, g, b),
+            1,
+            b,
+            PhaseFeature::Dft,
+        );
+        let (spatial, sd) = spatial_phase_features(&img, 1, g, 1, b, PhaseFeature::Dft);
+        assert_eq!(gd, sd);
+        for (a, c) in global.iter().zip(&spatial) {
+            assert!((a - c).abs() < 1e-4, "r=1 spatial != global: {a} vs {c}");
+        }
+        // r=2 has 4× the cells → 4× the dim.
+        let (_s2, sd2) = spatial_phase_features(&img, 1, g, 2, b, PhaseFeature::Dft);
+        assert_eq!(sd2, 4 * sd);
     }
 }

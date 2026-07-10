@@ -82,4 +82,6 @@ pub use projection::{default_holonomy_basis, fit_class_mean_basis, ProjectionBas
 pub use runtime::NagareRuntime;
 pub use tabular::{load_csv, load_csv_regression, shuffle_split, Tabular, TabularReg};
 pub use tabular_graph::{build_signed_cycle_pool, GraphPool};
-pub use vision::{orientation_histogram, phase_features, PhaseFeature};
+pub use vision::{
+    orientation_histogram, phase_feature_dim, phase_features, spatial_phase_features, PhaseFeature,
+};

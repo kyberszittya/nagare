@@ -20,9 +20,8 @@
 use std::path::Path;
 
 use holonomy_learn::{
-    accuracy_k, cross_entropy_k_backward, linear_backward, linear_forward, orientation_histogram,
-    patch_project_backward, patch_project_forward, phase_features, LinearLayer, PatchConfig,
-    PhaseFeature,
+    accuracy_k, cross_entropy_k_backward, linear_backward, linear_forward, patch_project_backward,
+    patch_project_forward, spatial_phase_features, LinearLayer, PatchConfig, PhaseFeature,
 };
 
 fn arg_str(name: &str) -> Option<String> {
@@ -202,6 +201,8 @@ fn main() {
     let dir = arg_str("--data").expect("--data <dir>");
     let d = Path::new(&dir);
     let (n_tr, n_te) = (arg_usize("--n-train", 8000), arg_usize("--n-test", 2000));
+    let augment = std::env::args().any(|a| a == "--augment");
+    let b = 18usize;
 
     let (tr, te) = if ds == "mnist" {
         (
@@ -222,46 +223,70 @@ fn main() {
     let g = tr.g;
     let k = tr.y.iter().chain(&te.y).copied().max().unwrap() + 1;
     let (nt, ne) = (tr.y.len(), te.y.len());
-    let patch = if g.is_multiple_of(7) { 7 } else { g / 8 }; // MNIST 28→7; KTH 64→8
+    let patch = if g.is_multiple_of(7) { 7 } else { g / 8 };
     let x_te_rot = rot_all(&te.x, ne, g);
-    println!("{ds}: {nt} train, {ne} test, {g}×{g}, {k} classes; eval upright + rotated.");
-
-    // Arm 1 — raw-pixel linear.
-    let (mut px_tr, mut px_up, mut px_ro) = (tr.x.clone(), te.x.clone(), x_te_rot.clone());
-    standardize(&mut px_tr, &mut [&mut px_up, &mut px_ro], g * g);
-    let pl = fit_linear(&px_tr, g * g, k, &tr.y, 200);
-    let (pixel_up, pixel_ro) = (
-        acc_linear(&pl, &px_up, &te.y, k),
-        acc_linear(&pl, &px_ro, &te.y, k),
+    // Rotation-augment the TRAINING set when requested (spatial arms learn rotation-robustness).
+    let train_x = if augment {
+        rot_all(&tr.x, nt, g)
+    } else {
+        tr.x.clone()
+    };
+    println!(
+        "{ds}: {nt} train, {ne} test, {g}×{g}, {k} classes; train={}, eval upright + rotated.",
+        if augment { "rot-augmented" } else { "upright" }
     );
 
-    // Arm 2 — patch-embed.
-    let pm = fit_patch(&tr.x, g, k, &tr.y, patch);
-    let (patch_up, patch_ro) = (
+    // Shared fixed-feature arm: build train/upright/rotated features, standardise, fit, eval both.
+    type FeatBuild<'a> = dyn Fn(&[f32], usize) -> (Vec<f32>, usize) + 'a;
+    let eval_fixed = |build: &FeatBuild| -> (f32, f32) {
+        let (mut ftr, dim) = build(&train_x, nt);
+        let (mut fup, _) = build(&te.x, ne);
+        let (mut fro, _) = build(&x_te_rot, ne);
+        standardize(&mut ftr, &mut [&mut fup, &mut fro], dim);
+        let m = fit_linear(&ftr, dim, k, &tr.y, 200);
+        (
+            acc_linear(&m, &fup, &te.y, k),
+            acc_linear(&m, &fro, &te.y, k),
+        )
+    };
+    let sp = |r: usize| {
+        move |x: &[f32], n: usize| spatial_phase_features(x, n, g, r, b, PhaseFeature::Dft)
+    };
+
+    // Fixed-feature arms.
+    let pixel = eval_fixed(&|x: &[f32], _n| (x.to_vec(), g * g));
+    let phase1 = eval_fixed(&sp(1)); // = global phase-pool
+    let phase2 = eval_fixed(&sp(2));
+    let phase4 = eval_fixed(&sp(4));
+    let phasep = eval_fixed(&sp(patch));
+    // Mix: raw pixels ⊕ global phase (spatial signal + rotation-invariant signal).
+    let mix = eval_fixed(&|x: &[f32], n| {
+        let (ph, pd) = spatial_phase_features(x, n, g, 1, b, PhaseFeature::Dft);
+        let dim = g * g + pd;
+        let mut f = vec![0.0f32; n * dim];
+        for s in 0..n {
+            f[s * dim..s * dim + g * g].copy_from_slice(&x[s * g * g..(s + 1) * g * g]);
+            f[s * dim + g * g..(s + 1) * dim].copy_from_slice(&ph[s * pd..(s + 1) * pd]);
+        }
+        (f, dim)
+    });
+
+    // Learned patch-embed (spatial).
+    let pm = fit_patch(&train_x, g, k, &tr.y, patch);
+    let patch_arm = (
         acc_patch(&pm, &te.x, &te.y, k),
         acc_patch(&pm, &x_te_rot, &te.y, k),
     );
 
-    // Arm 3 — phase-pool |DFT|.
-    let b = 18usize;
-    let pf = |x: &[f32], n: usize| {
-        phase_features(&orientation_histogram(x, n, g, b), n, b, PhaseFeature::Dft)
+    println!("  arm                     upright   rotated   drop");
+    let row = |name: &str, r: (f32, f32)| {
+        println!("  {name:23} {:.4}    {:.4}    {:+.4}", r.0, r.1, r.1 - r.0)
     };
-    let (mut ftr, dim) = pf(&tr.x, nt);
-    let (mut fup, _) = pf(&te.x, ne);
-    let (mut fro, _) = pf(&x_te_rot, ne);
-    standardize(&mut ftr, &mut [&mut fup, &mut fro], dim);
-    let ph = fit_linear(&ftr, dim, k, &tr.y, 200);
-    let (phase_up, phase_ro) = (
-        acc_linear(&ph, &fup, &te.y, k),
-        acc_linear(&ph, &fro, &te.y, k),
-    );
-
-    println!("  arm                upright   rotated   drop");
-    let row = |name: &str, up: f32, ro: f32| {
-        println!("  {name:18} {up:.4}    {ro:.4}    {:+.4}", ro - up)
-    };
-    row("raw-pixel linear", pixel_up, pixel_ro);
-    row("patch-embed", patch_up, patch_ro);
-    row("phase-pool |DFT|", phase_up, phase_ro);
+    row("raw-pixel linear", pixel);
+    row("patch-embed (spatial)", patch_arm);
+    row("phase-pool R=1 (global)", phase1);
+    row("spatial-phase R=2", phase2);
+    row("spatial-phase R=4", phase4);
+    row(&format!("spatial-phase R={patch}"), phasep);
+    row("mix: pixels + phase", mix);
 }
