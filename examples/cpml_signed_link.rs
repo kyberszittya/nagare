@@ -700,12 +700,15 @@ fn run_holonomy(
     te_y: &[u8],
     seed: u64,
     n_heads: usize,
+    invariant: bool,
 ) -> f64 {
     let n_tri = tris.len() / 3;
     let n_tiers = 3;
     let mut m = CpmlLinkModel::new(n_tiers, seed); // tiers reused; its edge_head is unused here
     let base_dim = m.emb_dim; // F + n_tiers·D
-    let hd = 4 * n_heads; // holonomy feature width (M heads × quaternion)
+                              // Feature per head: 1 gauge-invariant scalar w=Re(H)=cos(θ/2) (invariant), else the raw quaternion.
+    let comp = if invariant { 1 } else { 4 };
+    let hd = comp * n_heads; // holonomy feature width
     let full_dim = base_dim + hd;
     let mut holo_lins: Vec<LinearLayer> = (0..n_heads)
         .map(|h| LinearLayer::new(2 * F + 1, 4, seed + 21 + h as u64))
@@ -745,8 +748,8 @@ fn run_holonomy(
             let (q_edge, q_norms) = unit_rows(&q_raw, n_tri * 3);
             let (holo, prefixes) = rotor_holonomy_forward(&q_edge, n_tri, 3);
             for c in 0..n_tri {
-                holo_all[c * hd + h * 4..c * hd + h * 4 + 4]
-                    .copy_from_slice(&holo[c * 4..c * 4 + 4]);
+                holo_all[c * hd + h * comp..c * hd + h * comp + comp]
+                    .copy_from_slice(&holo[c * 4..c * 4 + comp]);
             }
             saved.push((q_edge, q_norms, prefixes));
         }
@@ -833,8 +836,8 @@ fn run_holonomy(
         for (h, (q_edge, q_norms, prefixes)) in saved.iter().enumerate() {
             let mut grad_holo_h = vec![0.0f32; n_tri * 4];
             for c in 0..n_tri {
-                grad_holo_h[c * 4..c * 4 + 4]
-                    .copy_from_slice(&grad_holo_all[c * hd + h * 4..c * hd + h * 4 + 4]);
+                grad_holo_h[c * 4..c * 4 + comp]
+                    .copy_from_slice(&grad_holo_all[c * hd + h * comp..c * hd + h * comp + comp]);
             }
             let grad_q_edge = rotor_holonomy_backward(q_edge, prefixes, &grad_holo_h, n_tri, 3);
             let grad_q_raw = unit_rows_backward(q_edge, q_norms, &grad_q_edge, n_tri * 3);
@@ -999,15 +1002,18 @@ fn main() {
     // Robustness grid (`--grid --init I`): fixed data split (`--seed`), model init offset by `I`, so a
     // (data-seed × init-seed) sweep isolates whether the holonomy channel's Δ is init-robust. Runs only
     // the inner core (L=3) and +holonomy(M=1) with the SAME model init, prints one line, exits fast.
+    let inv = std::env::args().any(|a| a == "--holo-invariant");
     if std::env::args().any(|a| a == "--grid") {
         let init_off = arg_f("--init", 0.0) as u64;
+        let mh = arg_f("--holo-heads", 1.0) as usize;
         let ms = sd.wrapping_add(init_off.wrapping_mul(7919));
         let g_inner = run(3, &x0, &tris, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, ms);
-        let g_holo =
-            run_holonomy(&x0, &tris, &tri_signs, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, ms, 1);
+        let g_holo = run_holonomy(
+            &x0, &tris, &tri_signs, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, ms, mh, inv,
+        );
         let name = path.rsplit(['/', '\\']).next().unwrap_or(&path);
         println!(
-            "GRID {name} seed={seed} init={init_off}  inner {g_inner:.4}  holo {g_holo:.4}  d {:+.5}",
+            "GRID {name} seed={seed} init={init_off} inv={inv} M={mh}  inner {g_inner:.4}  holo {g_holo:.4}  d {:+.5}",
             g_holo - g_inner
         );
         return;
@@ -1034,11 +1040,11 @@ fn main() {
     );
     let cascade_secs = t_cascade.elapsed().as_secs_f64();
     let aholo = run_holonomy(
-        &x0, &tris, &tri_signs, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, sd, 1,
+        &x0, &tris, &tri_signs, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, sd, 1, inv,
     );
     let holo_heads = arg_f("--holo-heads", 4.0) as usize;
     let aholo_m = run_holonomy(
-        &x0, &tris, &tri_signs, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, sd, holo_heads,
+        &x0, &tris, &tri_signs, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, sd, holo_heads, inv,
     );
 
     let name = path.rsplit(['/', '\\']).next().unwrap_or(&path);
