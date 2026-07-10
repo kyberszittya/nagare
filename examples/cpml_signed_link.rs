@@ -21,11 +21,14 @@
 use std::collections::HashMap;
 
 use holonomy_learn::{
-    adam_step, cycle_incidence_degrees, hg_edge_to_node_backward, hg_edge_to_node_forward,
-    hg_node_to_edge_backward, hg_node_to_edge_forward, linear_backward, linear_forward,
-    scatter_mean_backward, scatter_mean_forward, tier_cycle_indices, AdamState, LinearLayer,
-    TierSpec,
+    adam_step, cycle_incidence_degrees, gomb_outer_backward, gomb_outer_forward,
+    hg_edge_to_node_backward, hg_edge_to_node_forward, hg_node_to_edge_backward,
+    hg_node_to_edge_forward, hsikan_backward, hsikan_forward, linear_backward, linear_forward,
+    scatter_mean_backward, scatter_mean_forward, tier_cycle_indices, AdamState, HsikanConfig,
+    HsikanEdges, HsikanParams, LinearLayer, TierSpec,
 };
+use hymeko_graph::{CliffordFIR, TopKCyclesBatch};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 
 const F: usize = 4; // per-vertex feature dim
 const D: usize = 4; // per-tier aggregator output dim
@@ -368,6 +371,283 @@ fn run_hgconv(
     auroc(&linear_forward(&head, &ein), te_y)
 }
 
+// ---- Gömb-Soma Step-1 gate: the FULL three-shell cascade as a signed-link predictor ----
+// x0 → outer Clifford-FIR (MB banks) → scatter → HSiKAN → scatter → inner CPML tiers → node emb
+// → edge head. Same data/edges/AUROC/Adam budget as the inner-core arms; the question is whether
+// the outer+middle shells beat the inner core alone. Transcribes the tested `gomb_three_shell`
+// forward + composed backward at runtime size.
+const MB: usize = 2; // outer Clifford-FIR banks
+const HC: usize = MB * F; // cascade hidden width = MB · D_FEAT (D_FEAT = F)
+const SC: usize = 2; // hsikan spline segments
+const GC: usize = 6; // hsikan grid
+const CB: usize = 4; // hsikan Chebyshev order
+const DL: usize = D; // inner per-tier output width
+
+fn rand_vec(n: usize, scale: f32, rng: &mut StdRng) -> Vec<f32> {
+    (0..n)
+        .map(|_| (rng.random::<f32>() * 2.0 - 1.0) * scale)
+        .collect()
+}
+
+/// Per-tier inner aggregator over `x_core` (width `HC`): gather corners → linear → mean → scatter.
+/// Returns the per-vertex tier features `(n·DL)` and the cache the backward needs.
+fn cascade_tier_fwd(
+    x_core: &[f32],
+    tris: &[u32],
+    tier_of: &[usize],
+    ell: usize,
+    lin: &LinearLayer,
+    n: usize,
+) -> (Vec<f32>, TierCache) {
+    let idx = tier_cycle_indices(tris, 3, tier_of, ell);
+    let mut sub = vec![0u32; idx.len() * 3];
+    for (j, &c) in idx.iter().enumerate() {
+        sub[j * 3..j * 3 + 3].copy_from_slice(&tris[c * 3..c * 3 + 3]);
+    }
+    let m = idx.len();
+    if m == 0 {
+        return (
+            vec![0.0f32; n * DL],
+            TierCache {
+                sub,
+                corners: Vec::new(),
+                counts: Vec::new(),
+                m,
+            },
+        );
+    }
+    let corners = gather(x_core, &sub, HC);
+    let lo = linear_forward(lin, &corners);
+    let mut per_cycle = vec![0.0f32; m * DL];
+    for c in 0..m {
+        for j in 0..DL {
+            per_cycle[c * DL + j] = (0..3).map(|i| lo[(c * 3 + i) * DL + j]).sum::<f32>() / 3.0;
+        }
+    }
+    let (h, counts) = scatter_mean_forward(&sub, 3, &per_cycle, DL, n);
+    (
+        h,
+        TierCache {
+            sub,
+            corners,
+            counts,
+            m,
+        },
+    )
+}
+
+/// Backward of `cascade_tier_fwd` → (grad w.r.t. x_core `(n·HC)`, grad w.r.t. the tier linear).
+fn cascade_tier_bwd(
+    grad_h: &[f32],
+    cache: &TierCache,
+    lin: &LinearLayer,
+    n: usize,
+) -> (Vec<f32>, LinearLayer) {
+    let mut grad_x_core = vec![0.0f32; n * HC];
+    if cache.m == 0 {
+        return (grad_x_core, lin.zero_grad());
+    }
+    let gpc = scatter_mean_backward(&cache.sub, 3, grad_h, DL, &cache.counts, n);
+    let mut glo = vec![0.0f32; cache.m * 3 * DL];
+    for c in 0..cache.m {
+        for i in 0..3 {
+            for j in 0..DL {
+                glo[(c * 3 + i) * DL + j] = gpc[c * DL + j] / 3.0;
+            }
+        }
+    }
+    let (grad_corners, glin) = linear_backward(lin, &cache.corners, &glo);
+    for (corner, &v) in cache.sub.iter().enumerate() {
+        for j in 0..HC {
+            grad_x_core[v as usize * HC + j] += grad_corners[corner * HC + j];
+        }
+    }
+    (grad_x_core, glin)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_cascade(
+    x0: &[f32],
+    tris: &[u32],
+    tri_signs: &[f32],
+    tier_of: &[usize],
+    n_tiers: usize,
+    n: usize,
+    tr_e: &[(u32, u32)],
+    tr_y: &[f32],
+    te_e: &[(u32, u32)],
+    te_y: &[u8],
+    seed: u64,
+) -> f64 {
+    let n_tri = tris.len() / 3;
+    let emb_dim = HC + n_tiers * DL;
+    let batch = TopKCyclesBatch {
+        cycles: tris.to_vec(),
+        signs: tri_signs.iter().map(|&s| s.signum() as i8).collect(),
+        scores: vec![0.0f64; n_tri],
+        k: 3,
+    };
+    let mut rng = StdRng::seed_from_u64(seed);
+    let mut banks: Vec<CliffordFIR> = (0..MB)
+        .map(|_| CliffordFIR::new(rand_vec(3, 0.4, &mut rng), rand_vec(3, 0.4, &mut rng)))
+        .collect();
+    let mut inner = rand_vec(SC * HC * CB, 0.3, &mut rng);
+    let mut outer = rand_vec(SC * HC * CB, 0.3, &mut rng);
+    let mut gw = rand_vec(HC * HC, 0.2, &mut rng);
+    let mut gb = vec![-1.0f32; HC];
+    let mut tier_lins: Vec<LinearLayer> = (0..n_tiers)
+        .map(|t| LinearLayer::new(HC, DL, seed + 10 + t as u64))
+        .collect();
+    let mut head = LinearLayer::new(2 * emb_dim, 1, seed + 3);
+    let cfg = HsikanConfig::new(n_tri, 3, HC, SC, GC, CB, true);
+    let edges = HsikanEdges {
+        vertices: &batch.cycles,
+        signs: &batch.signs,
+    };
+
+    // Adam states (one per param group).
+    let mut s_bank = AdamState::new(MB * 6);
+    let mut s_inner = AdamState::new(inner.len());
+    let mut s_outer = AdamState::new(outer.len());
+    let mut s_gw = AdamState::new(gw.len());
+    let mut s_gb = AdamState::new(gb.len());
+    let mut s_tiers: Vec<AdamState> = tier_lins
+        .iter()
+        .map(|l| AdamState::new(l.w.len() + l.b.len()))
+        .collect();
+    let mut s_head = AdamState::new(head.w.len() + head.b.len());
+    let ntr = tr_y.len() as f32;
+
+    for it in 0..250 {
+        // Forward.
+        let y_out = gomb_outer_forward(&batch, x0, &banks, n, F);
+        let (x_out, cnt_out) = scatter_mean_forward(&batch.cycles, 3, &y_out, HC, n);
+        let params = HsikanParams {
+            inner_coef: &inner,
+            outer_coef: &outer,
+            gate_w: &gw,
+            gate_b: &gb,
+        };
+        let (h_mid, hcache) = hsikan_forward(params, &x_out, edges, cfg);
+        let (x_core, cnt_mid) = scatter_mean_forward(&batch.cycles, 3, &h_mid, HC, n);
+        let mut emb = vec![0.0f32; n * emb_dim];
+        for v in 0..n {
+            emb[v * emb_dim..v * emb_dim + HC].copy_from_slice(&x_core[v * HC..v * HC + HC]);
+        }
+        let mut tier_caches = Vec::with_capacity(n_tiers);
+        for (ell, lin) in tier_lins.iter().enumerate() {
+            let (h, cache) = cascade_tier_fwd(&x_core, &batch.cycles, tier_of, ell, lin, n);
+            for v in 0..n {
+                let base = v * emb_dim + HC + ell * DL;
+                emb[base..base + DL].copy_from_slice(&h[v * DL..v * DL + DL]);
+            }
+            tier_caches.push(cache);
+        }
+        let ein = edge_in(&emb, tr_e, emb_dim);
+        let logits = linear_forward(&head, &ein);
+
+        // BCE grad.
+        let mut gl = vec![0.0f32; tr_e.len()];
+        let mut loss = 0.0f32;
+        for i in 0..tr_e.len() {
+            let p = 1.0 / (1.0 + (-logits[i]).exp());
+            gl[i] = (p - tr_y[i]) / ntr;
+            let pc = p.clamp(1e-7, 1.0 - 1e-7);
+            loss -= (tr_y[i] * pc.ln() + (1.0 - tr_y[i]) * (1.0 - pc).ln()) / ntr;
+        }
+        if it % 50 == 0 || it == 249 {
+            println!("    cascade L={n_tiers} it {it:3}/250  BCE {loss:.4}");
+        }
+        let (grad_ein, grad_head) = linear_backward(&head, &ein, &gl);
+        let mut grad_emb = vec![0.0f32; n * emb_dim];
+        for (e, &(u, v)) in tr_e.iter().enumerate() {
+            let b = e * 2 * emb_dim;
+            for j in 0..emb_dim {
+                grad_emb[u as usize * emb_dim + j] += grad_ein[b + j];
+                grad_emb[v as usize * emb_dim + j] += grad_ein[b + emb_dim + j];
+            }
+        }
+        // Split → grad on x_core + per-tier.
+        let mut grad_x_core = vec![0.0f32; n * HC];
+        for v in 0..n {
+            grad_x_core[v * HC..v * HC + HC]
+                .copy_from_slice(&grad_emb[v * emb_dim..v * emb_dim + HC]);
+        }
+        let mut grad_tier_lins = Vec::with_capacity(n_tiers);
+        for (ell, lin) in tier_lins.iter().enumerate() {
+            let mut grad_h = vec![0.0f32; n * DL];
+            for v in 0..n {
+                let base = v * emb_dim + HC + ell * DL;
+                grad_h[v * DL..v * DL + DL].copy_from_slice(&grad_emb[base..base + DL]);
+            }
+            let (gx, glin) = cascade_tier_bwd(&grad_h, &tier_caches[ell], lin, n);
+            for (a, bb) in grad_x_core.iter_mut().zip(&gx) {
+                *a += bb;
+            }
+            grad_tier_lins.push(glin);
+        }
+        // Back through the two scatters + hsikan + outer.
+        let grad_h_mid = scatter_mean_backward(&batch.cycles, 3, &grad_x_core, HC, &cnt_mid, n);
+        let params = HsikanParams {
+            inner_coef: &inner,
+            outer_coef: &outer,
+            gate_w: &gw,
+            gate_b: &gb,
+        };
+        let hb = hsikan_backward(params, edges, &hcache, &grad_h_mid, cfg);
+        let grad_y_out = scatter_mean_backward(&batch.cycles, 3, &hb.grad_x, HC, &cnt_out, n);
+        let (_gf, grad_banks) = gomb_outer_backward(&batch, x0, &banks, &grad_y_out, n, F);
+
+        // Adam updates.
+        let mut bank_flat: Vec<f32> = banks
+            .iter()
+            .flat_map(|b| b.a.iter().chain(&b.b).copied())
+            .collect();
+        let bank_grad: Vec<f32> = grad_banks
+            .iter()
+            .flat_map(|g| g.a.iter().chain(&g.b).copied())
+            .collect();
+        adam_step(&mut bank_flat, &bank_grad, &mut s_bank, 0.02);
+        for (bk, chunk) in banks.iter_mut().zip(bank_flat.chunks(6)) {
+            bk.a.copy_from_slice(&chunk[..3]);
+            bk.b.copy_from_slice(&chunk[3..6]);
+        }
+        adam_step(&mut inner, &hb.grad_inner_coef, &mut s_inner, 0.02);
+        adam_step(&mut outer, &hb.grad_outer_coef, &mut s_outer, 0.02);
+        adam_step(&mut gw, &hb.grad_gate_w, &mut s_gw, 0.02);
+        adam_step(&mut gb, &hb.grad_gate_b, &mut s_gb, 0.02);
+        for (t, lin) in tier_lins.iter_mut().enumerate() {
+            adam_layer(lin, &grad_tier_lins[t], &mut s_tiers[t], 0.02);
+        }
+        adam_layer(&mut head, &grad_head, &mut s_head, 0.02);
+    }
+
+    // Eval.
+    let y_out = gomb_outer_forward(&batch, x0, &banks, n, F);
+    let (x_out, _) = scatter_mean_forward(&batch.cycles, 3, &y_out, HC, n);
+    let params = HsikanParams {
+        inner_coef: &inner,
+        outer_coef: &outer,
+        gate_w: &gw,
+        gate_b: &gb,
+    };
+    let (h_mid, _) = hsikan_forward(params, &x_out, edges, cfg);
+    let (x_core, _) = scatter_mean_forward(&batch.cycles, 3, &h_mid, HC, n);
+    let mut emb = vec![0.0f32; n * emb_dim];
+    for v in 0..n {
+        emb[v * emb_dim..v * emb_dim + HC].copy_from_slice(&x_core[v * HC..v * HC + HC]);
+    }
+    for (ell, lin) in tier_lins.iter().enumerate() {
+        let (h, _) = cascade_tier_fwd(&x_core, &batch.cycles, tier_of, ell, lin, n);
+        for v in 0..n {
+            let base = v * emb_dim + HC + ell * DL;
+            emb[base..base + DL].copy_from_slice(&h[v * DL..v * DL + DL]);
+        }
+    }
+    let ein = edge_in(&emb, te_e, emb_dim);
+    auroc(&linear_forward(&head, &ein), te_y)
+}
+
 fn main() {
     let path = arg_str("--data").expect("--data <edgelist.csv>");
     let seed = arg_f("--seed", 0.0) as u64;
@@ -521,6 +801,11 @@ fn main() {
         &te_y,
         sd,
     );
+    let t_cascade = std::time::Instant::now();
+    let ac = run_cascade(
+        &x0, &tris, &tri_signs, &tier3, 3, n, &tr_e, &tr_y, &te_e, &te_y, sd,
+    );
+    let cascade_secs = t_cascade.elapsed().as_secs_f64();
 
     let name = path.rsplit(['/', '\\']).next().unwrap_or(&path);
     println!(
@@ -530,6 +815,9 @@ fn main() {
     println!("  L=1 flat  inner (fixed):      test AUROC {a1:.4}");
     println!("  L=3 tiered inner (fixed):     test AUROC {a3:.4}");
     println!("  signed hypergraph conv (learned): test AUROC {ah:.4}");
+    println!(
+        "  FULL cascade L=3 (outer FIR→HSiKAN→inner): test AUROC {ac:.4}  ({cascade_secs:.1}s)"
+    );
     let verdict = |name: &str, val: f64, base: f64| {
         let tag = if val > base + 0.003 {
             "HELPS"
@@ -545,4 +833,5 @@ fn main() {
     };
     verdict("tier-stratification", a3, a1);
     verdict("hypergraph conv    ", ah, a1);
+    verdict("FULL cascade vs inner core", ac, a3);
 }
