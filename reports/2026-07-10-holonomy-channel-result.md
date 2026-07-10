@@ -9,6 +9,14 @@ tags: [nagare, holonomy, rotor, cpml, signed-link, positive-result]
 
 Date: 2026-07-10 · Mac (author box) · Nagare at `3163b0a`+ · 3 seeds × 2 graphs
 
+> **⚠ CORRECTION (2026-07-10, see `reports/2026-07-10-holonomy-multihead-result.md`).** The "helps 6/6,
+> never hurts" headline below over-claimed OTC robustness. Changing *only* the edge-head init seed
+> (`seed+22`→`seed+90`) leaves Alpha's +0.008 intact (robust) but **flips OTC from +0.003 to −0.001**.
+> Corrected characterization: the holonomy channel is **robustly positive on Bitcoin-Alpha,
+> marginal / init-sensitive on Bitcoin-OTC** — a small, real, but init/graph-dependent effect, not a
+> clean cross-graph win. The verdict needs a (data-seed × init-seed) grid. The mechanism and the
+> Alpha result below stand.
+
 ## The test
 
 Hajdu's reframe (after the Gömb-Soma gate): the shells weren't useless — using Clifford-FIR as an
