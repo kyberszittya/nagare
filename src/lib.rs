@@ -72,6 +72,9 @@ pub use ops::project_alpha_mix::{
     project_alpha_mix_backward, project_alpha_mix_forward, ProjectAlphaMixBackward,
     ProjectAlphaMixShape,
 };
+pub use ops::quadtree::{
+    node_pool_backward, node_pool_forward, quadtree_build, Quadtree, QuadtreeConfig,
+};
 pub use ops::rotor_holonomy::{rotor_holonomy_backward, rotor_holonomy_forward};
 pub use ops::scatter::{scatter_mean_backward, scatter_mean_forward};
 pub use ops::signed_scatter::{
