@@ -12,7 +12,9 @@
 use std::io::Write;
 use std::path::Path;
 
-use holonomy_learn::{rotate_image, spatial_phase_features, PhaseFeature};
+use std::f32::consts::TAU;
+
+use holonomy_learn::rotate_image;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 
 fn arg(name: &str) -> Option<String> {
@@ -172,6 +174,133 @@ fn crop(img: &[f32], cy: f32, cx: f32, s: usize) -> Vec<f32> {
     out
 }
 
+/// Central difference on a generic `s×s` crop.
+fn cdiff_s(img: &[f32], s: usize, i: usize, j: usize) -> (f32, f32) {
+    let at = |a: i32, b: i32| {
+        let a = a.clamp(0, s as i32 - 1) as usize;
+        let b = b.clamp(0, s as i32 - 1) as usize;
+        img[a * s + b]
+    };
+    (
+        at(i as i32, j as i32 + 1) - at(i as i32, j as i32 - 1),
+        at(i as i32 + 1, j as i32) - at(i as i32 - 1, j as i32),
+    )
+}
+
+/// Orientation `|DFT|` descriptor of an `s×s` crop. `b` bins; `circ` = disk support; `canon` =
+/// **canonical-orientation alignment**: estimate the dominant edge orientation via the 2nd circular
+/// moment (`θ₀ = ½·atan2(Σ m·sin2θ, Σ m·cos2θ)`, the elongated-object long-edge direction) and histogram
+/// `θ−θ₀` — so the descriptor is aligned to the object's own frame instead of relying on `|DFT|`
+/// shift-invariance (which breaks for sharp near-delta orientation peaks).
+fn phase_desc(crop: &[f32], s: usize, b: usize, circ: bool, canon: bool) -> Vec<f32> {
+    let ctr = (s as f32 - 1.0) * 0.5;
+    let r2 = (ctr - 1.0).powi(2);
+    let mut grads: Vec<(f32, f32)> = Vec::new(); // (magnitude, orientation)
+    for i in 0..s {
+        for j in 0..s {
+            if circ && (i as f32 - ctr).powi(2) + (j as f32 - ctr).powi(2) > r2 {
+                continue;
+            }
+            let (gx, gy) = cdiff_s(crop, s, i, j);
+            let m = (gx * gx + gy * gy).sqrt();
+            if m >= 1e-6 {
+                grads.push((m, gy.atan2(gx)));
+            }
+        }
+    }
+    let theta0 = if canon {
+        let (mut cs, mut sn) = (0.0f32, 0.0f32);
+        for &(m, th) in &grads {
+            cs += m * (2.0 * th).cos();
+            sn += m * (2.0 * th).sin();
+        }
+        0.5 * sn.atan2(cs)
+    } else {
+        0.0
+    };
+    let mut hist = vec![0.0f32; b];
+    for &(m, th) in &grads {
+        let p = (th - theta0).rem_euclid(TAU) / TAU * b as f32;
+        let lo = p.floor() as usize % b;
+        let fr = p - p.floor();
+        hist[lo] += m * (1.0 - fr);
+        hist[(lo + 1) % b] += m * fr;
+    }
+    let nk = b / 2 + 1;
+    let mut d = vec![0.0f32; nk];
+    for (k, dk) in d.iter_mut().enumerate() {
+        let (mut re, mut im) = (0.0f32, 0.0f32);
+        for (bi, &hv) in hist.iter().enumerate() {
+            let a = -TAU * k as f32 * bi as f32 / b as f32;
+            re += hv * a.cos();
+            im += hv * a.sin();
+        }
+        *dk = (re * re + im * im).sqrt();
+    }
+    d
+}
+
+/// Render a filled rotated rectangle (value +1) centred on an `s×s` canvas (background −1) — a CLEAN
+/// render at angle `theta` (no resampling), to isolate the descriptor's true orientation-invariance from
+/// the bilinear-rotation resampling artifact.
+fn render_rect(s: usize, w: f32, h: f32, theta: f32) -> Vec<f32> {
+    let mut img = vec![-1.0f32; s * s];
+    let ctr = s as f32 * 0.5;
+    let (c, sn) = (theta.cos(), theta.sin());
+    for i in 0..s {
+        for j in 0..s {
+            let (dx, dy) = (j as f32 - ctr, i as f32 - ctr);
+            let rx = dx * c + dy * sn;
+            let ry = -dx * sn + dy * c;
+            if rx.abs() <= w * 0.5 && ry.abs() <= h * 0.5 {
+                img[i * s + j] = 1.0;
+            }
+        }
+    }
+    img
+}
+
+fn rel_l2(a: &[f32], b: &[f32]) -> f32 {
+    let norm: f32 = a.iter().map(|v| v * v).sum::<f32>().sqrt() + 1e-6;
+    a.iter()
+        .zip(b)
+        .map(|(x, y)| (x - y).powi(2))
+        .sum::<f32>()
+        .sqrt()
+        / norm
+}
+
+/// Clean-render drift: descriptor of the SAME rectangle rendered fresh at each angle (no resampling).
+fn clean_drift(s: usize, b: usize, circ: bool, canon: bool, n_ang: usize) -> f32 {
+    let (w, h) = (20.0f32, 12.0f32);
+    let d0 = phase_desc(&render_rect(s, w, h, 0.0), s, b, circ, canon);
+    (1..=n_ang)
+        .map(|a| {
+            let phi = a as f32 / n_ang as f32 * TAU;
+            rel_l2(
+                &d0,
+                &phase_desc(&render_rect(s, w, h, phi), s, b, circ, canon),
+            )
+        })
+        .sum::<f32>()
+        / n_ang as f32
+}
+
+/// Mean relative L2 drift of `phase_desc` over `n_ang` bilinear rotations of a crop.
+fn desc_drift(crop: &[f32], s: usize, b: usize, circ: bool, canon: bool, n_ang: usize) -> f32 {
+    let d0 = phase_desc(crop, s, b, circ, canon);
+    (1..=n_ang)
+        .map(|a| {
+            let phi = a as f32 / n_ang as f32 * TAU;
+            rel_l2(
+                &d0,
+                &phase_desc(&rotate_image(crop, s, phi), s, b, circ, canon),
+            )
+        })
+        .sum::<f32>()
+        / n_ang as f32
+}
+
 fn main() {
     let out = arg("--out").unwrap_or_else(|| "/tmp/sbsh".into());
     let seed = arg("--seed").and_then(|s| s.parse().ok()).unwrap_or(0u64);
@@ -243,28 +372,27 @@ fn main() {
     let mean_on_side = on_side.0 / on_side.1.max(1) as f32;
     let mean_off_side = off_side.0 / off_side.1.max(1) as f32;
 
-    // H2: rotation-robustness of a shape crop's |DFT| phase-pool descriptor.
-    let b = 18;
-    let s = 40usize;
-    let o0 = objs[0];
-    let cr = crop(&img, o0.cy, o0.cx, s);
-    let (d0, dim) = spatial_phase_features(&cr, 1, s, 1, b, PhaseFeature::Dft);
-    let mut drift_sum = 0.0f32;
+    // H2: rotation-robustness — sweep descriptor variants (bins × circular support), averaged over all
+    // objects, to fix the sparse-histogram aliasing + square-crop-boundary drift diagnosed in the smoke.
+    let s = 48usize;
     let n_ang = 8;
-    for a in 1..=n_ang {
-        let phi = a as f32 / n_ang as f32 * std::f32::consts::TAU;
-        let rot = rotate_image(&cr, s, phi);
-        let (dphi, _) = spatial_phase_features(&rot, 1, s, 1, b, PhaseFeature::Dft);
-        let l2: f32 = d0
-            .iter()
-            .zip(&dphi)
-            .map(|(a, c)| (a - c).powi(2))
-            .sum::<f32>()
-            .sqrt();
-        let norm: f32 = d0.iter().map(|v| v * v).sum::<f32>().sqrt() + 1e-6;
-        drift_sum += l2 / norm;
-    }
-    let mean_rel_drift = drift_sum / n_ang as f32;
+    // (bins, circ, canon)
+    let variants = [
+        (18usize, false, false),
+        (18, false, true),
+        (18, true, true),
+        (12, false, true),
+    ];
+    let drifts: Vec<(usize, bool, bool, f32)> = variants
+        .iter()
+        .map(|&(bb, circ, canon)| {
+            let acc: f32 = objs
+                .iter()
+                .map(|o| desc_drift(&crop(&img, o.cy, o.cx, s), s, bb, circ, canon, n_ang))
+                .sum();
+            (bb, circ, canon, acc / objs.len() as f32)
+        })
+        .collect();
 
     // --- Report ---
     println!("SBSH tree smoke (seed {seed}, {G}×{G}, k={k} objects, obj_area {obj_area:.3})");
@@ -273,9 +401,37 @@ fn main() {
     println!("     on-object cell fraction: adaptive {adaptive_on:.3}  vs  uniform {uniform_on:.3}  (obj_area {obj_area:.3})");
     println!("     mean leaf side         : on-object {mean_on_side:.1}px  vs  off-object {mean_off_side:.1}px  (finer-on-object = {})",
         if mean_on_side < mean_off_side { "YES" } else { "no" });
-    println!("  H2 rotation robustness:");
-    println!("     phase-pool |DFT| dim {dim}, mean rel. drift over {n_ang} rotations: {mean_rel_drift:.4}  ({})",
-        if mean_rel_drift < 0.15 { "ROBUST" } else { "weak" });
+    let tag = |dr: f32| {
+        if dr < 0.10 {
+            "ROBUST"
+        } else if dr < 0.15 {
+            "ok"
+        } else {
+            "weak"
+        }
+    };
+    println!(
+        "  H2 rotation robustness (mean rel. drift over {n_ang} rot × {k} objs; target <0.10):"
+    );
+    println!("   [bilinear-rotate a crop]");
+    for (bb, circ, canon, dr) in &drifts {
+        println!(
+            "     b={bb:<2} circ={circ:<5} canon={canon:<5}  drift {dr:.4}  ({})",
+            tag(*dr)
+        );
+    }
+    // Clean-render (no resampling) — isolates the descriptor; canonical vs not.
+    println!("   [clean-render the same rect at each angle]");
+    println!(
+        "     b=18 canon=false  drift {:.4}  ({})",
+        clean_drift(s, 18, false, false, n_ang),
+        tag(clean_drift(s, 18, false, false, n_ang))
+    );
+    println!(
+        "     b=18 canon=true   drift {:.4}  ({})",
+        clean_drift(s, 18, false, true, n_ang),
+        tag(clean_drift(s, 18, false, true, n_ang))
+    );
 
     // --- Viz dump ---
     std::fs::create_dir_all(&out).unwrap();
