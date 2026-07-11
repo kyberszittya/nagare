@@ -64,6 +64,9 @@ pub use ops::kochanek_bartels::{kb_backward, kb_forward, KbBackward, KbCache};
 pub use ops::linear::{linear_backward, linear_forward, LinearLayer};
 pub use ops::loss::{bce_with_logits_backward, bce_with_logits_forward};
 pub use ops::mse::{mse_backward, mse_forward, r2_score};
+pub use ops::oriented_descriptor::{
+    oriented_descriptor_backward, oriented_descriptor_forward, oriented_dim, OrientedOut,
+};
 pub use ops::patch_projection::{
     patch_project_backward, patch_project_forward, PatchCache, PatchConfig,
 };
