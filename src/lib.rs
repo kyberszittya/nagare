@@ -50,6 +50,7 @@ pub use ops::fused_entropy_update::{
     fused_entropy_update_backward, fused_entropy_update_forward, FusedEntropyUpdateBackward,
     FusedEntropyUpdateShape,
 };
+pub use ops::gaussian_kld::{gaussian_kld_backward, gaussian_kld_forward, KldCache, Obox};
 pub use ops::gomb_shell::{gomb_outer_backward, gomb_outer_forward};
 pub use ops::hg_message::{
     hg_edge_to_node_backward, hg_edge_to_node_forward, hg_node_to_edge_backward,
@@ -66,6 +67,9 @@ pub use ops::loss::{bce_with_logits_backward, bce_with_logits_forward};
 pub use ops::mse::{mse_backward, mse_forward, r2_score};
 pub use ops::oriented_descriptor::{
     oriented_descriptor_backward, oriented_descriptor_forward, oriented_dim, OrientedOut,
+};
+pub use ops::oriented_head::{
+    anchor_of_cell, assign_nodes, decode_backward, decode_forward, Anchor,
 };
 pub use ops::patch_projection::{
     patch_project_backward, patch_project_forward, PatchCache, PatchConfig,
