@@ -155,6 +155,7 @@ def main():
         ("bitcoin-otc", "soc-sign-bitcoinotc.csv"),
         ("slashdot", "soc-sign-Slashdot090221.txt"),
         ("epinions", "soc-sign-epinions.txt"),
+        ("reddit-body", "soc-sign-reddit-body.csv"),
     ]
     rng = random.Random(0)
     summary = {}
@@ -186,7 +187,7 @@ def main():
     import matplotlib.pyplot as plt
 
     fig, (axl, axr) = plt.subplots(1, 2, figsize=(13, 5.4))
-    colors = ["#4575b4", "#74add1", "#f46d43", "#d73027"]
+    colors = ["#4575b4", "#74add1", "#f46d43", "#d73027", "#762a83"][: len(graphs)]
     for n, c in zip(ns, ["#762a83", "#5aae61", "#f46d43", "#2166ac"]):
         axl.plot(qs, pbal[n], lw=2, marker="o", ms=3, label=f"K{n}", color=c)
     axl.set_title("Balance is fragile for random signs\nP(all cycles balanced) vs negative-edge fraction q")

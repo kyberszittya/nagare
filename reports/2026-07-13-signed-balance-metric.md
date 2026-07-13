@@ -23,8 +23,12 @@ produced the 2026-07-07 figure (a reproducibility gap: the figure existed, the c
 | bitcoin-otc | 5,881 | 21,492 | 0.136 | **0.893** | 0.900 | 0.744 | 0.149 | 0.100 | 0.007 |
 | slashdot | 82,140 | 500,481 | 0.236 | **0.860** | 0.882 | 0.724 | 0.136 | 0.119 | 0.021 |
 | epinions | 131,580 | 711,210 | 0.170 | **0.891** | 0.904 | 0.807 | 0.084 | 0.096 | 0.013 |
+| reddit-body | 21,836 | 66,570 | 0.059 | **0.822** | 0.823 | 0.798 | 0.024 | 0.177 | 0.001 |
 
-(200k triangle-uniform samples; chance = 0.5.) Figure: `reports/figures/balance-metrics.png` — left: balance
+(200k triangle-uniform samples; chance = 0.5.) **Reddit-body is the least balanced (0.822)** despite the
+fewest negatives — a structural anomaly: its rare negative edges sit in *unbalanced* `++-` triads (0.177), not
+the balanced `+--` (0.024), so weak Davis balance barely moves it (0.823). Trust networks (Bitcoin) put
+negatives into balanced `+--` configurations; Reddit's sentiment negatives do not. Figure: `reports/figures/balance-metrics.png` — left: balance
 is fragile for random signs (P(all cycles balanced) vs q, K₃–K₆, collapses faster with more cycles); right:
 all four real graphs sit at 0.86–0.89, far above chance, despite q up to 0.24. **That gap is structural
 balance** — the low-entropy state signed networks occupy, and exactly why signed-holonomy features predict.

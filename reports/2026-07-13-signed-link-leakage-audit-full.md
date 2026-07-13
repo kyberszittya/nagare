@@ -21,6 +21,7 @@ leakage directly.
 | bitcoin-otc | 0.9023 | **0.4806** | 0.9519 | 0.8697 | **82%** |
 | slashdot | 0.8922 | **0.4936** | 0.9283 | 0.8224 | **75%** |
 | epinions | 0.9330 | **0.5284** | 0.9584 | 0.8877 | **85%** |
+| reddit-body | **0.6783** | **0.4889** | 0.8495 | 0.8009 | **86%** |
 
 (Inner-core L=3 AUROC, median over 5 seeds, `--max-tri 40000`. Leakage = share of the transductive model's
 *above-chance* score that survives shuffling: `(transd_shuffle − 0.5) / (transd_real − 0.5)`.) Figure:
@@ -75,11 +76,21 @@ transductive convention *contaminates* it (shuffle→retained).
 Gates: `cargo fmt --check`, `cargo clippy --all-targets -D warnings` clean; full suite **145/0**. No new deps,
 no CORE.YAML.
 
-## Status — the paper's Table 2 is now filled (CPML core)
+## Reddit-body — the strongest illustration (added: 5th graph)
 
-Both sides are measured across 4 graphs: the honest strict protocol (real high, shuffle chance) and the leaky
-transductive convention (real inflated, shuffle retained → 75–85% leakage). Reddit Hyperlinks (the 5th dataset
-in the draft) is not in `nagare_data/signed/` — add that edgelist to extend the table to 5 graphs.
+Reddit Hyperlinks (body network, subreddit→subreddit links signed by comment sentiment; multi-edges aggregated
+to net-sentiment sign per pair; V=21,836, 66,570 signed pairs, only **5.9% negative**) is the sharpest case.
+Its honest **strict-real AUROC is only 0.678** — the task is genuinely hard (extreme class imbalance, and it is
+the *least balanced* graph at strong-CH 0.822, its rare negatives sitting in unbalanced `++-` triads). Yet the
+transductive convention inflates it to **0.850** — an illusory **+0.17 AUROC that is 86% leakage**. Here leakage
+does not merely pad an already-good score; it **manufactures the majority of the apparent performance** on a
+hard dataset. This is the cleanest argument for the strict protocol: without it, a hard problem looks solved.
+
+## Status — the paper's Table 2 is now filled (CPML core, 5 graphs)
+
+Both sides measured across **5 graphs**: the honest strict protocol (real high — except the honestly-hard
+reddit at 0.68 — shuffle chance) and the leaky transductive convention (real inflated, shuffle retained →
+75–86% leakage). The draft's dataset set is complete.
 
 ## Provenance
 

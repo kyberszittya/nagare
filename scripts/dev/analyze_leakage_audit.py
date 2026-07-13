@@ -25,7 +25,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-ORDER = ["bitcoin-alpha", "bitcoin-otc", "slashdot", "epinions"]
+ORDER = ["bitcoin-alpha", "bitcoin-otc", "slashdot", "epinions", "reddit-body"]
 # canonical condition key -> (label, source-cond-in-tsv)
 REMAP = {"real": "strict-real", "shuffle": "strict-shuffle",
          "transd-real": "transd-real", "transd-shuffle": "transd-shuffle"}
