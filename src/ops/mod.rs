@@ -35,6 +35,7 @@ pub mod phase_pool;
 pub mod project_alpha_mix;
 pub mod quadtree;
 pub mod rotor_holonomy;
+pub mod rotor_spike;
 pub mod scatter;
 pub mod signed_scatter;
 pub mod softmax_k;
