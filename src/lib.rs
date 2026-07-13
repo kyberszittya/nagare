@@ -58,8 +58,8 @@ pub use ops::fused_entropy_update::{
 pub use ops::gaussian_kld::{gaussian_kld_backward, gaussian_kld_forward, KldCache, Obox};
 pub use ops::gomb_shell::{gomb_outer_backward, gomb_outer_forward};
 pub use ops::hg_message::{
-    hg_edge_to_node_backward, hg_edge_to_node_forward, hg_node_to_edge_backward,
-    hg_node_to_edge_forward,
+    hg_edge_to_node_backward, hg_edge_to_node_forward, hg_edge_to_node_sign_grad,
+    hg_node_to_edge_backward, hg_node_to_edge_forward, hg_node_to_edge_sign_grad,
 };
 pub use ops::hsikan::{
     hsikan_backward, hsikan_forward, hsikan_forward_chunked, HsikanBackward, HsikanCache,

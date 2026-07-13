@@ -141,6 +141,58 @@ pub fn hg_edge_to_node_backward(
     grad_he
 }
 
+/// Gradient of [`hg_node_to_edge_forward`] w.r.t. the corner **signs** (the op
+/// otherwise treats signs as constant): `∂L/∂σ[c,i] = Σ_d grad_he[c,d]·s[v]·x[v,d]/k`,
+/// `v = cycles[c,i]`. Returns `grad_signs` flat `(n_edges, k)`. FD-verified.
+pub fn hg_node_to_edge_sign_grad(
+    x: &[f32],
+    cycles: &[u32],
+    scale: &[f32],
+    grad_he: &[f32],
+    n_edges: usize,
+    k: usize,
+    d: usize,
+) -> Vec<f32> {
+    assert_eq!(cycles.len(), n_edges * k);
+    let inv_k = 1.0 / k as f32;
+    let mut gs = vec![0.0f32; n_edges * k];
+    for c in 0..n_edges {
+        let g = &grad_he[c * d..c * d + d];
+        for i in 0..k {
+            let v = cycles[c * k + i] as usize;
+            let xv = &x[v * d..v * d + d];
+            let dot: f32 = g.iter().zip(xv).map(|(&gj, &xj)| gj * xj).sum();
+            gs[c * k + i] = dot * scale[v] * inv_k;
+        }
+    }
+    gs
+}
+
+/// Gradient of [`hg_edge_to_node_forward`] w.r.t. the corner **signs**:
+/// `∂L/∂σ[c,i] = Σ_d grad_out[v,d]·s[v]·h_e[c,d]`, `v = cycles[c,i]`. Returns
+/// `grad_signs` flat `(n_edges, k)`. FD-verified.
+pub fn hg_edge_to_node_sign_grad(
+    h_e: &[f32],
+    cycles: &[u32],
+    scale: &[f32],
+    grad_out: &[f32],
+    k: usize,
+    d: usize,
+) -> Vec<f32> {
+    let n_edges = cycles.len() / k;
+    let mut gs = vec![0.0f32; n_edges * k];
+    for c in 0..n_edges {
+        let he = &h_e[c * d..c * d + d];
+        for i in 0..k {
+            let v = cycles[c * k + i] as usize;
+            let go = &grad_out[v * d..v * d + d];
+            let dot: f32 = he.iter().zip(go).map(|(&hj, &gj)| hj * gj).sum();
+            gs[c * k + i] = dot * scale[v];
+        }
+    }
+    gs
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,6 +258,48 @@ mod tests {
         );
         for (a, b) in ghe.iter().zip(&num) {
             assert!((a - b).abs() < 1e-3, "grad_he {a} vs {b}");
+        }
+    }
+
+    #[test]
+    fn node_to_edge_sign_grad_matches_fd() {
+        let (cycles, signs, scale, ne, k, d) = fixture();
+        let n = 5;
+        let x: Vec<f32> = (0..n * d).map(|i| 0.3 * ((i as f32 * 1.3).sin())).collect();
+        let grad_he = vec![1.0f32; ne * d];
+        let gs = hg_node_to_edge_sign_grad(&x, &cycles, &scale, &grad_he, ne, k, d);
+        let num = fd_grad(
+            |sf| {
+                hg_node_to_edge_forward(&x, &cycles, sf, &scale, ne, k, d)
+                    .iter()
+                    .sum()
+            },
+            &signs,
+        );
+        for (a, b) in gs.iter().zip(&num) {
+            assert!((a - b).abs() < 1e-3, "grad_sign {a} vs {b}");
+        }
+    }
+
+    #[test]
+    fn edge_to_node_sign_grad_matches_fd() {
+        let (cycles, signs, scale, ne, k, d) = fixture();
+        let n = 5;
+        let he: Vec<f32> = (0..ne * d)
+            .map(|i| 0.4 * ((i as f32 * 0.9).cos()))
+            .collect();
+        let grad_out = vec![1.0f32; n * d];
+        let gs = hg_edge_to_node_sign_grad(&he, &cycles, &scale, &grad_out, k, d);
+        let num = fd_grad(
+            |sf| {
+                hg_edge_to_node_forward(&he, &cycles, sf, &scale, n, k, d)
+                    .iter()
+                    .sum()
+            },
+            &signs,
+        );
+        for (a, b) in gs.iter().zip(&num) {
+            assert!((a - b).abs() < 1e-3, "grad_sign {a} vs {b}");
         }
     }
 

@@ -23,10 +23,10 @@ use std::collections::HashMap;
 use holonomy_learn::{
     adam_step, chebyshev_cr_backward, chebyshev_cr_forward, cycle_incidence_degrees,
     gomb_outer_backward, gomb_outer_forward, hg_edge_to_node_backward, hg_edge_to_node_forward,
-    hg_node_to_edge_backward, hg_node_to_edge_forward, hsikan_backward, hsikan_forward,
-    linear_backward, linear_forward, rotor_holonomy_backward, rotor_holonomy_forward,
-    scatter_mean_backward, scatter_mean_forward, tier_cycle_indices, AdamState, HsikanConfig,
-    HsikanEdges, HsikanParams, LinearLayer, TierSpec,
+    hg_edge_to_node_sign_grad, hg_node_to_edge_backward, hg_node_to_edge_forward,
+    hg_node_to_edge_sign_grad, hsikan_backward, hsikan_forward, linear_backward, linear_forward,
+    rotor_holonomy_backward, rotor_holonomy_forward, scatter_mean_backward, scatter_mean_forward,
+    tier_cycle_indices, AdamState, HsikanConfig, HsikanEdges, HsikanParams, LinearLayer, TierSpec,
 };
 use hymeko_graph::{CliffordFIR, TopKCyclesBatch};
 use rand::{rngs::StdRng, Rng, SeedableRng};
@@ -34,6 +34,11 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 const F: usize = 4; // per-vertex feature dim
 const D: usize = 4; // per-tier aggregator output dim
 const DH: usize = 8; // HGConv hidden dim
+
+// Learnable Chebyshev-CR edge-weight encoder (shared by --cr-holo / --cr-hg).
+const CR_K: usize = 6; // Chebyshev coefficients
+const CR_GRID: usize = 8; // CR control points
+const CR_WARM_FRAC: usize = 3; // freeze spline (identity) for the first 1/3 of training
 
 fn arg_str(name: &str) -> Option<String> {
     std::env::args().skip_while(|a| a != name).nth(1)
@@ -312,6 +317,7 @@ fn run_hgconv(
     te_e: &[(u32, u32)],
     te_y: &[u8],
     seed: u64,
+    cr_hg: bool,
 ) -> f64 {
     let n_tri = tris.len() / 3;
     let ed = F + DH; // embedding width
@@ -324,8 +330,16 @@ fn run_hgconv(
         AdamState::new(head.w.len() + head.b.len()),
     );
 
-    // Forward → (node embedding, per-edge h_e cache for the backward).
-    let embed = |vproj: &LinearLayer, elin: &LinearLayer| -> (Vec<f32>, Vec<f32>) {
+    // Learnable Chebyshev-CR on the hypergraph signs (warm-started identity).
+    let mut cr_coef = vec![0.0f32; CR_K];
+    cr_coef[1] = 1.0;
+    let mut s_cr = AdamState::new(CR_K);
+
+    // Forward → (emb, h_e, x_p, h_e2) — the last two feed the sign gradients.
+    let embed = |vproj: &LinearLayer,
+                 elin: &LinearLayer,
+                 tsig: &[f32]|
+     -> (Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>) {
         let x_p = linear_forward(vproj, x0);
         let h_e = hg_node_to_edge_forward(&x_p, tris, tsig, s_n2e, n_tri, 3, DH);
         let h_e2 = linear_forward(elin, &h_e);
@@ -335,12 +349,21 @@ fn run_hgconv(
             emb[v * ed..v * ed + F].copy_from_slice(&x0[v * F..v * F + F]);
             emb[v * ed + F..v * ed + ed].copy_from_slice(&out[v * DH..v * DH + DH]);
         }
-        (emb, h_e)
+        (emb, h_e, x_p, h_e2)
     };
 
     let ntr = tr_y.len() as f32;
-    for _ in 0..250 {
-        let (emb, h_e) = embed(&vproj, &elin);
+    let iters = 250usize;
+    for it in 0..iters {
+        // Re-encode the hypergraph signs via the learnable CR each step.
+        let (tsig_cur, cr_st) = if cr_hg {
+            let (enc, cache, control, basis) =
+                chebyshev_cr_forward(&cr_coef, tsig, tsig.len(), 1, CR_GRID, CR_K);
+            (enc, Some((cache, control, basis)))
+        } else {
+            (tsig.to_vec(), None)
+        };
+        let (emb, h_e, x_p, h_e2) = embed(&vproj, &elin, &tsig_cur);
         let ein = edge_in(&emb, tr_e, ed);
         let logits = linear_forward(&head, &ein);
         let mut gl = vec![0.0f32; tr_e.len()];
@@ -358,16 +381,32 @@ fn run_hgconv(
                 grad_out[v as usize * DH + j] += grad_ein[b + ed + F + j];
             }
         }
-        // Backprop the two HGConv kernels + the linears.
-        let grad_h_e2 = hg_edge_to_node_backward(tris, tsig, s_e2n, &grad_out, n_tri, 3, DH);
+        // Backprop the two HGConv kernels + the linears (using the CR-encoded signs).
+        let grad_h_e2 = hg_edge_to_node_backward(tris, &tsig_cur, s_e2n, &grad_out, n_tri, 3, DH);
         let (grad_h_e, grad_elin) = linear_backward(&elin, &h_e, &grad_h_e2);
-        let grad_x_p = hg_node_to_edge_backward(tris, tsig, s_n2e, &grad_h_e, n, 3, DH);
+        let grad_x_p = hg_node_to_edge_backward(tris, &tsig_cur, s_n2e, &grad_h_e, n, 3, DH);
         let (_gx0, grad_vproj) = linear_backward(&vproj, x0, &grad_x_p);
+        // Learnable-CR coef update: signs enter BOTH kernels, so sum both sign
+        // gradients (edge→node and node→edge) → CR backward. Warm-started.
+        if let Some((cache, control, basis)) = cr_st {
+            if it >= iters / CR_WARM_FRAC {
+                let ge2n = hg_edge_to_node_sign_grad(&h_e2, tris, s_e2n, &grad_out, 3, DH);
+                let gn2e = hg_node_to_edge_sign_grad(&x_p, tris, s_n2e, &grad_h_e, n_tri, 3, DH);
+                let grad_tsig: Vec<f32> = ge2n.iter().zip(&gn2e).map(|(&a, &b)| a + b).collect();
+                let back = chebyshev_cr_backward(&control, &basis, &cache, &grad_tsig, CR_K);
+                adam_step(&mut cr_coef, &back.grad_coef, &mut s_cr, 0.005);
+            }
+        }
         adam_layer(&mut vproj, &grad_vproj, &mut sv, 0.02);
         adam_layer(&mut elin, &grad_elin, &mut se, 0.02);
         adam_layer(&mut head, &grad_head, &mut sh, 0.02);
     }
-    let (emb, _) = embed(&vproj, &elin);
+    let tsig_final = if cr_hg {
+        chebyshev_cr_forward(&cr_coef, tsig, tsig.len(), 1, CR_GRID, CR_K).0
+    } else {
+        tsig.to_vec()
+    };
+    let (emb, _, _, _) = embed(&vproj, &elin, &tsig_final);
     let ein = edge_in(&emb, te_e, ed);
     auroc(&linear_forward(&head, &ein), te_y)
 }
@@ -712,10 +751,6 @@ fn run_holonomy(
     hist_bins: usize,
     cr_holo: bool,
 ) -> f64 {
-    // Learnable Chebyshev-CR edge-weight encoder on the holonomy sign feature.
-    const CR_K: usize = 6;
-    const CR_GRID: usize = 8;
-    const CR_WARM_FRAC: usize = 3; // freeze spline (identity) for the first 1/3
     let n_tri = tris.len() / 3;
     let n_tiers = 3;
     let mut m = CpmlLinkModel::new(n_tiers, seed); // tiers reused; its edge_head is unused here
@@ -1152,6 +1187,7 @@ fn main() {
     let inv = std::env::args().any(|a| a == "--holo-invariant");
     let hist = arg_f("--holo-hist", 0.0) as usize;
     let cr_holo = std::env::args().any(|a| a == "--cr-holo");
+    let cr_hg = std::env::args().any(|a| a == "--cr-hg");
     if std::env::args().any(|a| a == "--grid") {
         let init_off = arg_f("--init", 0.0) as u64;
         let mh = arg_f("--holo-heads", 1.0) as usize;
@@ -1183,6 +1219,7 @@ fn main() {
         &te_e,
         &te_y,
         sd,
+        cr_hg,
     );
     let t_cascade = std::time::Instant::now();
     let ac = run_cascade(
