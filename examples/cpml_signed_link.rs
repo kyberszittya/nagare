@@ -945,6 +945,29 @@ fn main() {
     let cut = order.len() * 4 / 5;
     let (tr_i, te_i) = order.split_at(cut);
 
+    // Label-shuffle audit (`--shuffle`): permute the SIGNS of the TRAINING edges
+    // (test signs untouched). Under the strict protocol every feature and every
+    // triangle is built from training edges only, so a genuine structural learner
+    // must collapse toward chance (0.5) here — the shuffled train graph carries no
+    // information about the real test signs. A transductive (leaky) model would
+    // instead RETAIN its score, because test-edge signs sit in its cycle features.
+    // The real→shuffle drop is the structural-learning / no-leakage test.
+    if std::env::args().any(|a| a == "--shuffle") {
+        let mut sh: Vec<f32> = tr_i.iter().map(|&i| edges[i].2).collect();
+        let mut s2 = seed
+            .wrapping_mul(2862933555777941757)
+            .wrapping_add(3037000493);
+        for k in (1..sh.len()).rev() {
+            s2 = s2
+                .wrapping_mul(2862933555777941757)
+                .wrapping_add(3037000493);
+            sh.swap(k, (s2 >> 33) as usize % (k + 1));
+        }
+        for (idx, &i) in tr_i.iter().enumerate() {
+            edges[i].2 = sh[idx];
+        }
+    }
+
     // Train adjacency (undirected) + signed-degree tallies + per-edge signs.
     let mut adj: HashMap<u32, Vec<u32>> = HashMap::new();
     let mut esign: HashMap<(u32, u32), f32> = HashMap::new();
