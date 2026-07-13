@@ -15,7 +15,9 @@ use holonomy_learn::{
 use std::io::Write;
 
 fn main() {
-    let out_path = std::env::args().nth(1).unwrap_or_else(|| "reports/figures/pose-smoke.json".into());
+    let out_path = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "reports/figures/pose-smoke.json".into());
     let g = 24usize;
     let tau = 0.6f32;
     // A 6-joint stick figure (col=x, row=y) on the g×g grid + skeleton edges.
@@ -68,7 +70,10 @@ fn main() {
     println!("pose smoke: MSE {l0:.3} -> {l1:.5}; max joint error {max_err:.3} px (g={g})");
 
     let arr2 = |v: &[[f32; 2]]| {
-        v.iter().map(|p| format!("[{:.2},{:.2}]", p[0], p[1])).collect::<Vec<_>>().join(",")
+        v.iter()
+            .map(|p| format!("[{:.2},{:.2}]", p[0], p[1]))
+            .collect::<Vec<_>>()
+            .join(",")
     };
     let pred_pairs: Vec<[f32; 2]> = (0..n).map(|j| [pred[j * 2], pred[j * 2 + 1]]).collect();
     let json = format!(
@@ -81,6 +86,9 @@ fn main() {
     if let Some(par) = std::path::Path::new(&out_path).parent() {
         std::fs::create_dir_all(par).ok();
     }
-    std::fs::File::create(&out_path).unwrap().write_all(json.as_bytes()).unwrap();
+    std::fs::File::create(&out_path)
+        .unwrap()
+        .write_all(json.as_bytes())
+        .unwrap();
     println!("wrote {out_path}");
 }
