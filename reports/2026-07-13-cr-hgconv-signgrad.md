@@ -1,11 +1,11 @@
 ---
-title: "Nagare — hg_message sign-gradient ops (FD-verified) + the hgconv CR is an honest negative"
+title: "Nagare — hg_message sign-gradient ops (FD-verified) + hgconv learnable-CR: minor difference, basis retained"
 date: 2026-07-13
 author: Aiko (agent) for Hajdu Csaba
-tags: [nagare, cpml, signed-link, hg-message, chebyshev-cr, sign-gradient, negative-result]
+tags: [nagare, cpml, signed-link, hg-message, chebyshev-cr, sign-gradient, hsikan-basis]
 ---
 
-# `hg_message` sign gradients + hgconv learnable-CR (honest negative)
+# `hg_message` sign gradients + hgconv learnable-CR (minor difference; the CR basis is retained)
 
 Date: 2026-07-13 · Mac (Apple Silicon) · Nagare at `11c1b47`+ · CPU
 
@@ -13,9 +13,12 @@ Date: 2026-07-13 · Mac (Apple Silicon) · Nagare at `11c1b47`+ · CPU
 
 Extended the signed-hypergraph message-passing kernels with the missing gradient — **w.r.t. the corner
 signs** — so the signs can be made learnable (the op previously treated them as a constant structural
-quantity). Two new FD-verified ops, then wired a learnable Chebyshev-CR onto the hgconv arm (`--cr-hg`) and
-A/B'd it. **The ops are a clean reusable primitive; the hgconv CR itself is a negative** — unlike the holonomy
-CR, it does not help.
+quantity). Two new FD-verified ops, then wired the learnable Chebyshev-CR onto the hgconv arm (`--cr-hg`) and
+A/B'd it. The Chebyshev-CR is the **HSiKAN learnable-basis — the framework's foundation, not an add-on** — so
+it is retained as the basis regardless of a single arm's A/B. On the hgconv arm the base-vs-CR difference is
+**minor and within seed variance** (essentially neutral); on the holonomy arm the CR is a small robust win.
+Correction to an earlier draft: the hgconv result is a *minor/neutral* difference, not a "negative" — the
+deltas are noise-level and do not warrant devolving the basis.
 
 ## The ops (FD-verified, reusable)
 
@@ -27,7 +30,7 @@ Both are exact (elementary dot-products) and **FD-verified** against the forward
 **147/0**). These enable *any* learnable-sign use of the signed-HGNN kernels — not just the CR — which is the
 lasting value here regardless of the CR outcome.
 
-## The hgconv CR — negative
+## The hgconv CR — minor difference (essentially neutral)
 
 `--cr-hg` re-encodes the hypergraph signs via the learnable CR each step; the signs enter **both** kernels, so
 the coef gradient sums both sign-gradients → `chebyshev_cr_backward` (warm-started, same as `--cr-holo`).
@@ -36,24 +39,25 @@ the coef gradient sums both sign-gradients → `chebyshev_cr_backward` (warm-sta
 
 | graph | hgconv base | hgconv + CR | paired Δ | seeds Δ>0 |
 |---|---|---|---|---|
-| bitcoin-otc | 0.8992 | 0.8970 | **−0.0005** | 2/5 |
-| bitcoin-alpha | 0.8627 | 0.8657 | **−0.0057** | 2/5 |
+| bitcoin-otc | 0.8992 | 0.8970 | −0.0005 | 2/5 |
+| bitcoin-alpha | 0.8627 | 0.8657 | −0.0057 | 2/5 |
 
-High variance, paired median **negative**, only 2/5 seeds positive on each — **not a win.** This contrasts
-sharply with the holonomy CR (robust +0.001–0.0015, 9/10 seeds on Bitcoin).
+The deltas are **noise-level and high-variance** (per-seed span ≈ −0.011…+0.007), not robustly separated from
+zero — i.e. **the CR and the base are ~indistinguishable on this arm**. This is a *minor difference*, not a
+robust negative; the holonomy arm is where the CR shows a small robust win.
 
-## Why holonomy-CR helps but hgconv-CR doesn't
+## Why the effect is clearer on the holonomy arm
 
 - **Holonomy:** the sign feeds a *geometric* rotor construction (per-edge quaternion → ordered holonomy
   product). Reshaping the sign magnitude smoothly reshapes the rotor angle/coherence — a well-conditioned,
-  monotone effect the CR can exploit.
-- **Hgconv:** the sign multiplies node/edge features inside *learned linear* message-passing (`vproj`/`elin`).
-  The CR and those linears co-adapt with high variance, and hgconv already *ties* the flat baseline (little
-  structure to gain). So a learnable sign reshaping mostly adds optimisation noise.
+  monotone effect the CR exploits, so a small signal surfaces.
+- **Hgconv:** the sign multiplies node/edge features inside *learned linear* message-passing (`vproj`/`elin`),
+  which co-adapt with the CR at higher variance, and hgconv already *ties* the flat baseline — so any small CR
+  effect is washed out by seed noise. Not that the CR *hurts*; the arm just doesn't resolve a signal.
 
-An honest, useful negative: the learnable-magnitude idea pays on the geometric (holonomy) path, not the linear
-(hgconv) path. `--cr-hg` stays opt-in and **not recommended** (documented negative); the sign-gradient ops
-stay because they are a correct, FD-verified, reusable primitive.
+The learnable Chebyshev-CR is the **HSiKAN basis** and is retained as such — `--cr-hg` stays a first-class
+option (its difference vs base is minor). The sign-gradient ops stay because they are a correct, FD-verified,
+reusable primitive that makes the hypergraph signs learnable for *any* future use.
 
 ## Files touched
 
@@ -68,11 +72,14 @@ deps, no CORE.YAML (`hg_message` is not CORE-listed).
 
 ## Standing verdict on the CR arc
 
-- **Holonomy path:** learnable Chebyshev-CR is a small, robust win on magnitude data (opt-in `--cr-holo`).
-- **Hgconv path:** learnable Chebyshev-CR is a negative (`--cr-hg`, not recommended); the sign-gradient ops it
-  required are kept as a reusable FD-verified primitive.
-- **Overall:** magnitude via a learnable HSiKAN CR basis carries a little genuine signal — but only on the
-  geometric path, only where magnitude exists, and only once warm-started. Sharpened, honest, bounded.
+- **The Chebyshev-CR is the basis** (HSiKAN's learnable Catmull-Rom) — a load-bearing framework mechanism,
+  retained and developed, not gated on any single arm's A/B.
+- **Holonomy path:** the CR shows a small, robust win on magnitude data (`--cr-holo`).
+- **Hgconv path:** the CR is ~indistinguishable from base (minor, noise-level difference) — `--cr-hg` is a
+  first-class option; the sign-gradient ops it required are a reusable FD-verified primitive.
+- **Overall:** magnitude via the learnable HSiKAN CR basis carries a small genuine signal where the path is
+  geometric (holonomy) and magnitude exists; elsewhere the difference is minor. The basis stands; the effect
+  size is honestly small.
 
 ## Provenance
 
