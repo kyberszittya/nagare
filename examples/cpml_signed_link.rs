@@ -981,7 +981,29 @@ fn main() {
         tr_i.to_vec()
     };
 
-    // Adjacency (undirected) + signed-degree tallies + per-edge signs.
+    // Edge weight representation. INDICATOR (default): binarise to sign ±1.
+    // REAL (`--real-weights`): keep the graded weight normalised to [-1,1]
+    // (`r / max|r|`), so magnitude (a strong vs a grudging rating) survives into
+    // the signed-degree tallies (weighted degree) and the triangle products
+    // (graded balance coherence, |ρ|→1 strong, →0 weak). Binary is the |w|=1
+    // special case, so this strictly generalises the default.
+    // `tanh(r / mean|r|)`: sign-preserving squash to (-1,1). A soft-normaliser,
+    // NOT `r/max` (which for heavy-tailed ratings — most Bitcoin ratings are ±1
+    // among a few ±10 — would shrink the bulk to ~0.1 and drown the small-but-
+    // real edges). tanh keeps every edge's sign meaningful (`tanh(0.5)≈0.46`)
+    // while saturating the extremes near ±1.
+    let real_weights = std::env::args().any(|a| a == "--real-weights");
+    let mean_abs =
+        (edges.iter().map(|e| e.2.abs()).sum::<f32>() / edges.len().max(1) as f32).max(1e-6);
+    let weight = |r: f32| -> f32 {
+        if real_weights {
+            (r / mean_abs).tanh()
+        } else {
+            r.signum()
+        }
+    };
+
+    // Adjacency (undirected) + signed-degree tallies + per-edge (real) weights.
     let mut adj: HashMap<u32, Vec<u32>> = HashMap::new();
     let mut esign: HashMap<(u32, u32), f32> = HashMap::new();
     let mut pos = vec![0.0f32; n];
@@ -991,10 +1013,13 @@ fn main() {
         let (u, v, r) = edges[e];
         adj.entry(u as u32).or_default().push(v as u32);
         adj.entry(v as u32).or_default().push(u as u32);
-        esign.insert(ekey(u as u32, v as u32), r.signum());
+        let w = weight(r);
+        esign.insert(ekey(u as u32, v as u32), w);
+        // Weighted degree: accumulate |w| into the pos/neg tally (|w|=1 recovers
+        // the plain count in indicator mode).
         let s = if r > 0.0 { &mut pos } else { &mut neg };
-        s[u] += 1.0;
-        s[v] += 1.0;
+        s[u] += w.abs();
+        s[v] += w.abs();
     }
     // Per-vertex features x0 (strict: train-only; transductive: leaky), standardise.
     let mut x0 = vec![0.0f32; n * F];
