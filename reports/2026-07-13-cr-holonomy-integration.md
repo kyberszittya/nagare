@@ -65,12 +65,37 @@ validated, with the honest caveat that the effect is small.
 Gates: `cargo fmt --check`, `cargo clippy --all-targets -D warnings` clean; full suite **145/0**. No new deps,
 no CORE.YAML.
 
-## Next
+## 5-graph sweep — the defaulting decision (added)
 
-- A larger sweep (all 5 graphs, more seeds) to decide whether `--cr-holo` earns being defaulted, and whether
-  `--real-weights --cr-holo` (CR over graded weights) beats `--cr-holo` alone (CR over ±1) — seed-0 hinted the
-  latter is competitive.
-- The same CR encoder could feed the `hg_message` (hgconv) arm, the other tri_signs consumer.
+Paired A/B (`--cr-holo` vs base, holo M=4, 5 seeds) across **all 5 signed graphs**
+(`reports/figures/cr-holo-sweep.png`):
+
+| graph | base | +CR | paired Δ | seeds Δ>0 | edge weights |
+|---|---|---|---|---|---|
+| bitcoin-alpha | 0.8795 | 0.8785 | **+0.0015** | 4/5 | ratings (magnitude) |
+| bitcoin-otc | 0.9070 | 0.9077 | **+0.0010** | 5/5 | ratings (magnitude) |
+| slashdot | 0.8920 | 0.8919 | −0.0001 | 1/5 | ±1 only |
+| epinions | 0.9333 | 0.9335 | +0.0001 | 3/5 | ±1 only |
+| reddit-body | 0.6750 | 0.6751 | +0.0001 | 4/5 | ±1 only |
+
+**Decision: `--cr-holo` is NOT globally defaulted; it earns opt-in for magnitude-bearing datasets.** The win
+splits cleanly on whether the edge weights carry magnitude: **robust on both Bitcoin graphs** (ratings,
+9/10 seeds, +0.001–0.0015), **neutral on the three ±1 graphs** (nothing to learn from a constant magnitude;
+Slashdot even mildly negative, 1/5). This is exactly the §6.5 #19 outcome — default only proven wins, and
+this wins only where there is magnitude to exploit.
+
+## Next — the hgconv arm needs an op-level change (not a drop-in)
+
+Feeding the CR to the other `tri_signs` consumer — the `hg_message` (hgconv) arm — is **not** the clean wiring
+the holonomy was. There, `linear_backward` already produced `grad_edge_feat`. In hgconv, the signs enter the
+`hg_message` kernels directly, and `hg_node_to_edge_backward` / `hg_edge_to_node_backward` return only the
+gradient w.r.t. the node/edge **features** — the op deliberately treats signs as a *constant structural
+quantity*. Making them learnable requires a **new FD-verified op** emitting `dL/dsigns`, which is derivable
+and clean —
+`∂L/∂σ[c,i] = Σ_d grad_he[c,d]·s[v]·x[v,d]/k` (node→edge; the edge→node dual is analogous) — but it is a
+proper op addition (+ FD test + wiring), and its expected payoff is bounded: the sweep shows CR helps only on
+magnitude data (Bitcoin), and hgconv already *ties* the flat baseline there. Scoped as a separate, careful task
+rather than rushed; the gradient is derived and ready.
 
 ## Provenance
 
