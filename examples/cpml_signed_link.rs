@@ -21,11 +21,12 @@
 use std::collections::HashMap;
 
 use holonomy_learn::{
-    adam_step, cycle_incidence_degrees, gomb_outer_backward, gomb_outer_forward,
-    hg_edge_to_node_backward, hg_edge_to_node_forward, hg_node_to_edge_backward,
-    hg_node_to_edge_forward, hsikan_backward, hsikan_forward, linear_backward, linear_forward,
-    rotor_holonomy_backward, rotor_holonomy_forward, scatter_mean_backward, scatter_mean_forward,
-    tier_cycle_indices, AdamState, HsikanConfig, HsikanEdges, HsikanParams, LinearLayer, TierSpec,
+    adam_step, chebyshev_cr_backward, chebyshev_cr_forward, cycle_incidence_degrees,
+    gomb_outer_backward, gomb_outer_forward, hg_edge_to_node_backward, hg_edge_to_node_forward,
+    hg_node_to_edge_backward, hg_node_to_edge_forward, hsikan_backward, hsikan_forward,
+    linear_backward, linear_forward, rotor_holonomy_backward, rotor_holonomy_forward,
+    scatter_mean_backward, scatter_mean_forward, tier_cycle_indices, AdamState, HsikanConfig,
+    HsikanEdges, HsikanParams, LinearLayer, TierSpec,
 };
 use hymeko_graph::{CliffordFIR, TopKCyclesBatch};
 use rand::{rngs::StdRng, Rng, SeedableRng};
@@ -709,7 +710,12 @@ fn run_holonomy(
     n_heads: usize,
     invariant: bool,
     hist_bins: usize,
+    cr_holo: bool,
 ) -> f64 {
+    // Learnable Chebyshev-CR edge-weight encoder on the holonomy sign feature.
+    const CR_K: usize = 6;
+    const CR_GRID: usize = 8;
+    const CR_WARM_FRAC: usize = 3; // freeze spline (identity) for the first 1/3
     let n_tri = tris.len() / 3;
     let n_tiers = 3;
     let mut m = CpmlLinkModel::new(n_tiers, seed); // tiers reused; its edge_head is unused here
@@ -755,33 +761,39 @@ fn run_holonomy(
         }
     }
 
+    // Learnable Chebyshev-CR on the holonomy sign feature (warm-started identity).
+    let mut cr_coef = vec![0.0f32; CR_K];
+    cr_coef[1] = 1.0;
+    let mut s_cr = AdamState::new(CR_K);
+
     // Multi-head holonomy forward → (per-vertex 4M feature, scatter counts, per-head saved backward state).
-    let holo_forward = |holo_lins: &[LinearLayer]| -> (Vec<f32>, Vec<u32>, Vec<HeadSaved>) {
-        let mut holo_all = vec![0.0f32; n_tri * hd];
-        let mut saved = Vec::with_capacity(n_heads);
-        for (h, lin) in holo_lins.iter().enumerate() {
-            let q_raw = linear_forward(lin, &edge_feat);
-            let (q_edge, q_norms) = unit_rows(&q_raw, n_tri * 3);
-            let (holo, prefixes) = rotor_holonomy_forward(&q_edge, n_tri, 3);
-            for c in 0..n_tri {
-                let base = c * hd + h * comp;
-                if histo {
-                    let (lo, frac) = softbin(holo[c * 4], comp);
-                    holo_all[base + lo] += 1.0 - frac;
-                    if lo + 1 < comp {
-                        holo_all[base + lo + 1] += frac;
+    let holo_forward =
+        |holo_lins: &[LinearLayer], edge_feat: &[f32]| -> (Vec<f32>, Vec<u32>, Vec<HeadSaved>) {
+            let mut holo_all = vec![0.0f32; n_tri * hd];
+            let mut saved = Vec::with_capacity(n_heads);
+            for (h, lin) in holo_lins.iter().enumerate() {
+                let q_raw = linear_forward(lin, edge_feat);
+                let (q_edge, q_norms) = unit_rows(&q_raw, n_tri * 3);
+                let (holo, prefixes) = rotor_holonomy_forward(&q_edge, n_tri, 3);
+                for c in 0..n_tri {
+                    let base = c * hd + h * comp;
+                    if histo {
+                        let (lo, frac) = softbin(holo[c * 4], comp);
+                        holo_all[base + lo] += 1.0 - frac;
+                        if lo + 1 < comp {
+                            holo_all[base + lo + 1] += frac;
+                        } else {
+                            holo_all[base + lo] += frac;
+                        }
                     } else {
-                        holo_all[base + lo] += frac;
+                        holo_all[base..base + comp].copy_from_slice(&holo[c * 4..c * 4 + comp]);
                     }
-                } else {
-                    holo_all[base..base + comp].copy_from_slice(&holo[c * 4..c * 4 + comp]);
                 }
+                saved.push((q_edge, q_norms, prefixes));
             }
-            saved.push((q_edge, q_norms, prefixes));
-        }
-        let (holo_vert, counts) = scatter_mean_forward(tris, 3, &holo_all, hd, n);
-        (holo_vert, counts, saved)
-    };
+            let (holo_vert, counts) = scatter_mean_forward(tris, 3, &holo_all, hd, n);
+            (holo_vert, counts, saved)
+        };
 
     let combine = |emb_tier: &[f32], holo_vert: &[f32]| -> Vec<f32> {
         let mut emb = vec![0.0f32; n * full_dim];
@@ -795,9 +807,21 @@ fn run_holonomy(
     };
 
     let ntr = tr_y.len() as f32;
-    for it in 0..250 {
+    let iters = 250usize;
+    for it in 0..iters {
         let (emb_tier, caches) = m.node_embed(x0, tris, tier_of, n);
-        let (holo_vert, holo_counts, saved) = holo_forward(&holo_lins);
+        // Learnable CR: re-encode the holonomy sign feature from tri_signs each step.
+        let cr_state = if cr_holo {
+            let (enc, cache, control, basis) =
+                chebyshev_cr_forward(&cr_coef, tri_signs, n_tri * 3, 1, CR_GRID, CR_K);
+            for (r, &e) in enc.iter().enumerate() {
+                edge_feat[r * ew + 2 * F] = e;
+            }
+            Some((cache, control, basis))
+        } else {
+            None
+        };
+        let (holo_vert, holo_counts, saved) = holo_forward(&holo_lins, &edge_feat);
         let emb = combine(&emb_tier, &holo_vert);
         let ein = edge_in(&emb, tr_e, full_dim);
         let logits = linear_forward(&head, &ein);
@@ -859,6 +883,8 @@ fn run_holonomy(
         // Holonomy backward: scatter → per-head (rotor_holonomy → unit → linear).
         let grad_holo_all = scatter_mean_backward(tris, 3, &grad_holo_vert, hd, &holo_counts, n);
         let mut holo_grads: Vec<LinearLayer> = Vec::with_capacity(n_heads);
+        // Accumulate the gradient into the CR-encoded sign feature across heads.
+        let mut grad_enc = vec![0.0f32; n_tri * 3];
         for (h, (q_edge, q_norms, prefixes)) in saved.iter().enumerate() {
             let mut grad_holo_h = vec![0.0f32; n_tri * 4];
             for c in 0..n_tri {
@@ -880,8 +906,23 @@ fn run_holonomy(
             }
             let grad_q_edge = rotor_holonomy_backward(q_edge, prefixes, &grad_holo_h, n_tri, 3);
             let grad_q_raw = unit_rows_backward(q_edge, q_norms, &grad_q_edge, n_tri * 3);
-            let (_ge, glin) = linear_backward(&holo_lins[h], &edge_feat, &grad_q_raw);
+            let (ge, glin) = linear_backward(&holo_lins[h], &edge_feat, &grad_q_raw);
+            if cr_holo {
+                // Sign feature sits at column 2F of each edge_feat row.
+                for (r, ge_row) in ge.chunks_exact(ew).enumerate() {
+                    grad_enc[r] += ge_row[2 * F];
+                }
+            }
             holo_grads.push(glin);
+        }
+
+        // Learnable-CR coef update (warm-started: spline frozen at identity the
+        // first 1/3 so the holonomy heads become good before the encoder moves).
+        if let Some((cache, control, basis)) = cr_state {
+            if it >= iters / CR_WARM_FRAC {
+                let back = chebyshev_cr_backward(&control, &basis, &cache, &grad_enc, CR_K);
+                adam_step(&mut cr_coef, &back.grad_coef, &mut s_cr, 0.005);
+            }
         }
 
         for (t, lin) in m.tier_lins.iter_mut().enumerate() {
@@ -894,7 +935,13 @@ fn run_holonomy(
     }
 
     let (emb_tier, _) = m.node_embed(x0, tris, tier_of, n);
-    let (holo_vert, _, _) = holo_forward(&holo_lins);
+    if cr_holo {
+        let (enc, _, _, _) = chebyshev_cr_forward(&cr_coef, tri_signs, n_tri * 3, 1, CR_GRID, CR_K);
+        for (r, &e) in enc.iter().enumerate() {
+            edge_feat[r * ew + 2 * F] = e;
+        }
+    }
+    let (holo_vert, _, _) = holo_forward(&holo_lins, &edge_feat);
     let emb = combine(&emb_tier, &holo_vert);
     let ein = edge_in(&emb, te_e, full_dim);
     auroc(&linear_forward(&head, &ein), te_y)
@@ -1104,6 +1151,7 @@ fn main() {
     // the inner core (L=3) and +holonomy(M=1) with the SAME model init, prints one line, exits fast.
     let inv = std::env::args().any(|a| a == "--holo-invariant");
     let hist = arg_f("--holo-hist", 0.0) as usize;
+    let cr_holo = std::env::args().any(|a| a == "--cr-holo");
     if std::env::args().any(|a| a == "--grid") {
         let init_off = arg_f("--init", 0.0) as u64;
         let mh = arg_f("--holo-heads", 1.0) as usize;
@@ -1111,6 +1159,7 @@ fn main() {
         let g_inner = run(3, &x0, &tris, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, ms);
         let g_holo = run_holonomy(
             &x0, &tris, &tri_signs, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, ms, mh, inv, hist,
+            cr_holo,
         );
         let name = path.rsplit(['/', '\\']).next().unwrap_or(&path);
         println!(
@@ -1141,11 +1190,12 @@ fn main() {
     );
     let cascade_secs = t_cascade.elapsed().as_secs_f64();
     let aholo = run_holonomy(
-        &x0, &tris, &tri_signs, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, sd, 1, inv, hist,
+        &x0, &tris, &tri_signs, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, sd, 1, inv, hist, cr_holo,
     );
     let holo_heads = arg_f("--holo-heads", 4.0) as usize;
     let aholo_m = run_holonomy(
         &x0, &tris, &tri_signs, &tier3, n, &tr_e, &tr_y, &te_e, &te_y, sd, holo_heads, inv, hist,
+        cr_holo,
     );
 
     let name = path.rsplit(['/', '\\']).next().unwrap_or(&path);
