@@ -6,6 +6,7 @@
 
 pub mod cv_data;
 pub mod datasets;
+pub mod detector;
 pub mod features;
 pub mod learner;
 pub mod metrics;
@@ -29,6 +30,10 @@ pub use cv_data::{
 };
 pub use datasets::{
     corrupt_dataset, gather_batch, make_dataset, shuffle_point_order, Dataset, Task,
+};
+pub use detector::{
+    gen_scene, leaf_center_object, leaf_on_object, obox_contains, DetectorConfig, NodePred,
+    SbshDetector,
 };
 pub use learner::{
     evaluate_local, forward_timing, run_stress_ablation, Config, EntropyPoolLocalLearner, GateMode,

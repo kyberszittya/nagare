@@ -24,10 +24,30 @@ fn main() {
         feats[k * feat_dim + k] = 1.0;
     }
     let anchors = [
-        Anchor { cx: 4.0, cy: 4.0, w: 4.0, h: 2.0 },
-        Anchor { cx: 12.0, cy: 5.0, w: 3.0, h: 3.0 },
-        Anchor { cx: 6.0, cy: 11.0, w: 5.0, h: 2.0 },
-        Anchor { cx: 13.0, cy: 12.0, w: 2.0, h: 4.0 },
+        Anchor {
+            cx: 4.0,
+            cy: 4.0,
+            w: 4.0,
+            h: 2.0,
+        },
+        Anchor {
+            cx: 12.0,
+            cy: 5.0,
+            w: 3.0,
+            h: 3.0,
+        },
+        Anchor {
+            cx: 6.0,
+            cy: 11.0,
+            w: 5.0,
+            h: 2.0,
+        },
+        Anchor {
+            cx: 13.0,
+            cy: 12.0,
+            w: 2.0,
+            h: 4.0,
+        },
     ];
     let targets = [
         [5.0f32, 3.5, 5.0, 1.5, 0.3],
@@ -88,11 +108,12 @@ fn main() {
 
     // Minimal hand-rolled JSON (no serde dep).
     let box_json = |b: &[f32; 5]| {
-        format!("[{:.4},{:.4},{:.4},{:.4},{:.4}]", b[0], b[1], b[2], b[3], b[4])
+        format!(
+            "[{:.4},{:.4},{:.4},{:.4},{:.4}]",
+            b[0], b[1], b[2], b[3], b[4]
+        )
     };
-    let arr = |bs: &[[f32; 5]]| {
-        bs.iter().map(box_json).collect::<Vec<_>>().join(",")
-    };
+    let arr = |bs: &[[f32; 5]]| bs.iter().map(box_json).collect::<Vec<_>>().join(",");
     let curve_json = curve
         .iter()
         .map(|(it, l)| format!("[{it},{l:.6}]"))

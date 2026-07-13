@@ -19,6 +19,7 @@
 //! (a commutative group-mean; the adjoint is the broadcast-by-1/N_c — the `scatter_mean` pattern).
 
 /// Dynamic-quadtree build parameters.
+#[derive(Clone, Copy, Debug)]
 pub struct QuadtreeConfig {
     /// Image side (`energy.len() == g*g`).
     pub g: usize,
