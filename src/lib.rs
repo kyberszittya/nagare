@@ -48,6 +48,7 @@ pub use ops::catmull_rom::{
 };
 pub use ops::cayley_rotor::{cayley_rotor_backward, cayley_rotor_forward};
 pub use ops::clifford_fir::{clifford_fir_backward, clifford_fir_forward, CliffordFIR};
+pub use ops::conv2d::{conv2d_backward, conv2d_forward, ConvLayer, ConvShape};
 pub use ops::cpml_tier::{cycle_incidence_degrees, tier_cycle_indices, TierSpec};
 pub use ops::dihedral::{dihedral_steer_backward, dihedral_steer_forward, DihedralGroup};
 pub use ops::fsr_mixer::{FsrMixer, FsrMixerBackward, FsrMixerCache, FsrRoute};

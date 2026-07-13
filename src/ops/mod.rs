@@ -15,6 +15,7 @@ pub mod adam;
 pub mod catmull_rom;
 pub mod cayley_rotor;
 pub mod clifford_fir;
+pub mod conv2d;
 pub mod cpml_tier;
 pub mod dihedral;
 pub mod fsr_mixer;
