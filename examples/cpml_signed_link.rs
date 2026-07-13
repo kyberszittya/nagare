@@ -968,13 +968,26 @@ fn main() {
         }
     }
 
-    // Train adjacency (undirected) + signed-degree tallies + per-edge signs.
+    // Feature-enumeration edge set. STRICT (default): train edges only — no
+    // test-edge sign reaches any feature. TRANSDUCTIVE (`--transductive`, the
+    // leaky convention the paper audits): train+test edges, so test-edge signs
+    // enter the signed-degree tallies AND the triangle sign-products. Under
+    // `--shuffle` the transductive model then RETAINS its AUROC (it reads the
+    // real test signs out of its features), whereas the strict model collapses.
+    let transductive = std::env::args().any(|a| a == "--transductive");
+    let feat_i: Vec<usize> = if transductive {
+        tr_i.iter().chain(te_i.iter()).copied().collect()
+    } else {
+        tr_i.to_vec()
+    };
+
+    // Adjacency (undirected) + signed-degree tallies + per-edge signs.
     let mut adj: HashMap<u32, Vec<u32>> = HashMap::new();
     let mut esign: HashMap<(u32, u32), f32> = HashMap::new();
     let mut pos = vec![0.0f32; n];
     let mut neg = vec![0.0f32; n];
     let ekey = |a: u32, b: u32| if a < b { (a, b) } else { (b, a) };
-    for &e in tr_i {
+    for &e in &feat_i {
         let (u, v, r) = edges[e];
         adj.entry(u as u32).or_default().push(v as u32);
         adj.entry(v as u32).or_default().push(u as u32);
@@ -983,7 +996,7 @@ fn main() {
         s[u] += 1.0;
         s[v] += 1.0;
     }
-    // Per-vertex features x0 (leakage-free: train graph only), then standardise.
+    // Per-vertex features x0 (strict: train-only; transductive: leaky), standardise.
     let mut x0 = vec![0.0f32; n * F];
     for v in 0..n {
         let (p, ng) = (pos[v], neg[v]);

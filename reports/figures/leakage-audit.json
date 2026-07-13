@@ -1,0 +1,110 @@
+{
+  "bitcoin-alpha": {
+    "strict-real": {
+      "median": 0.8818,
+      "q25": 0.8817,
+      "q75": 0.8852,
+      "n": 5
+    },
+    "strict-shuffle": {
+      "median": 0.503,
+      "q25": 0.4798,
+      "q75": 0.5084,
+      "n": 5
+    },
+    "transd-real": {
+      "median": 0.9409,
+      "q25": 0.9393,
+      "q75": 0.9434,
+      "n": 5
+    },
+    "transd-shuffle": {
+      "median": 0.8628,
+      "q25": 0.8541,
+      "q75": 0.8656,
+      "n": 5
+    },
+    "leakage_frac": 0.82286232705829
+  },
+  "bitcoin-otc": {
+    "strict-real": {
+      "median": 0.9023,
+      "q25": 0.9016,
+      "q75": 0.9041,
+      "n": 5
+    },
+    "strict-shuffle": {
+      "median": 0.4806,
+      "q25": 0.4796,
+      "q75": 0.5022,
+      "n": 5
+    },
+    "transd-real": {
+      "median": 0.9519,
+      "q25": 0.9494,
+      "q75": 0.9552,
+      "n": 5
+    },
+    "transd-shuffle": {
+      "median": 0.8697,
+      "q25": 0.8611,
+      "q75": 0.8734,
+      "n": 5
+    },
+    "leakage_frac": 0.818101349856163
+  },
+  "slashdot": {
+    "strict-real": {
+      "median": 0.8922,
+      "q25": 0.8907,
+      "q75": 0.8942,
+      "n": 5
+    },
+    "strict-shuffle": {
+      "median": 0.4936,
+      "q25": 0.491,
+      "q75": 0.4949,
+      "n": 5
+    },
+    "transd-real": {
+      "median": 0.9283,
+      "q25": 0.9259,
+      "q75": 0.9293,
+      "n": 5
+    },
+    "transd-shuffle": {
+      "median": 0.8224,
+      "q25": 0.8206,
+      "q75": 0.8465,
+      "n": 5
+    },
+    "leakage_frac": 0.7527434041559654
+  },
+  "epinions": {
+    "strict-real": {
+      "median": 0.933,
+      "q25": 0.9322,
+      "q75": 0.9342,
+      "n": 5
+    },
+    "strict-shuffle": {
+      "median": 0.5284,
+      "q25": 0.5258,
+      "q75": 0.5312,
+      "n": 5
+    },
+    "transd-real": {
+      "median": 0.9584,
+      "q25": 0.9582,
+      "q75": 0.9592,
+      "n": 5
+    },
+    "transd-shuffle": {
+      "median": 0.8877,
+      "q25": 0.8861,
+      "q75": 0.8937,
+      "n": 5
+    },
+    "leakage_frac": 0.8457678883071553
+  }
+}
