@@ -38,5 +38,6 @@ pub mod rotor_holonomy;
 pub mod rotor_spike;
 pub mod scatter;
 pub mod signed_scatter;
+pub mod soft_argmax;
 pub mod softmax_k;
 pub mod spectral_entropy;

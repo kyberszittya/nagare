@@ -95,6 +95,7 @@ pub use ops::scatter::{scatter_mean_backward, scatter_mean_forward};
 pub use ops::signed_scatter::{
     signed_scatter_backward, signed_scatter_forward, SignedScatterLanes, SignedScatterLayout,
 };
+pub use ops::soft_argmax::{soft_argmax_backward, soft_argmax_forward, SoftArgmaxOut};
 pub use ops::softmax_k::{
     accuracy_k, cross_entropy_k_backward, cross_entropy_k_forward, softmax_k,
 };
