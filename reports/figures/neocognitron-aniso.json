@@ -1,0 +1,6 @@
+{
+  "c1": false,
+  "train_auc": 0.6700,
+  "test_auc": 0.7303,
+  "energy_auc": 0.4689
+}
