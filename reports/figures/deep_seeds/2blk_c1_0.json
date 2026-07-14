@@ -1,0 +1,6 @@
+{
+  "onelayer": false,
+  "c1": true,
+  "train_auc": 0.5658,
+  "test_auc": 0.5310
+}

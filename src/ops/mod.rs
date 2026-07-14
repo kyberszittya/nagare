@@ -38,6 +38,7 @@ pub mod project_alpha_mix;
 pub mod quadtree;
 pub mod rotor_holonomy;
 pub mod rotor_spike;
+pub mod sc_block;
 pub mod scatter;
 pub mod signed_scatter;
 pub mod soft_argmax;

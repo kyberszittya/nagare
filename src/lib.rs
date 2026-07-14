@@ -93,6 +93,7 @@ pub use ops::rotor_holonomy::{rotor_holonomy_backward, rotor_holonomy_forward};
 pub use ops::rotor_spike::{
     rotor_spike_backward, rotor_spike_dim, rotor_spike_forward, RotorSpikeOut,
 };
+pub use ops::sc_block::{sc_block_backward, sc_block_forward, ScBlock, ScBlockCache, ScBlockGrad};
 pub use ops::scatter::{scatter_mean_backward, scatter_mean_forward};
 pub use ops::signed_scatter::{
     signed_scatter_backward, signed_scatter_forward, SignedScatterLanes, SignedScatterLayout,
