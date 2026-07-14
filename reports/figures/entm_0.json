@@ -1,0 +1,8 @@
+{
+  "mean_top": true,
+  "train_auc": 0.5000,
+  "test_auc": 0.5323,
+  "pose_mae_deg": -1.000,
+  "us_per_update": 310.032,
+  "updates_per_s": 3225.5
+}

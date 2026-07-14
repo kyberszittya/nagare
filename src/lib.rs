@@ -57,6 +57,10 @@ pub use ops::fused_entropy_update::{
     FusedEntropyUpdateShape,
 };
 pub use ops::gaussian_kld::{gaussian_kld_backward, gaussian_kld_forward, KldCache, Obox};
+pub use ops::global_entropy_pool::{
+    global_entropy_pool_backward, global_entropy_pool_forward, GlobalEntropyPoolOut,
+    FEATS_PER_CHANNEL,
+};
 pub use ops::gomb_shell::{gomb_outer_backward, gomb_outer_forward};
 pub use ops::group_pool::{group_pool_backward, group_pool_forward, GroupPoolOut};
 pub use ops::hg_message::{

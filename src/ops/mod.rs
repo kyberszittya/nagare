@@ -21,6 +21,7 @@ pub mod dihedral;
 pub mod fsr_mixer;
 pub mod fused_entropy_update;
 pub mod gaussian_kld;
+pub mod global_entropy_pool;
 pub mod gomb_shell;
 pub mod group_pool;
 pub mod hg_message;
