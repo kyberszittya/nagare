@@ -1,0 +1,6 @@
+{
+  "hg": false,
+  "all_joint_mae": 1.7987,
+  "clean_elbow_err": 2.7003,
+  "occ_elbow_err": 0.8314
+}
