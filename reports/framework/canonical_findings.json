@@ -230,6 +230,21 @@
       "regression_tests": ["online::single_block_equals_dense", "online::block_matches_dense_when_separable"],
       "superseded_findings": [],
       "open_questions": ["junction-tree (block-tridiagonal) precision for genuine cross-hyperedge coupling", "update the block precision THROUGH hg_message (higher-order tensor apply)", "SBSH width certificate as the tractability guarantee"]
+    },
+    {
+      "id": "F-EVO-6",
+      "claim": "The INFORMATION FORM (junction-tree) evolvent -- accumulate J = Phi^T Phi + ridge*I and b = Phi^T y, solve J w = b -- is EXACT (= dense RLS, keeps ALL cross-hyperedge/separator coupling) while J is SPARSE for local (bounded-width) measurements. Measured (kato15, 5 seeds x 4 sizes, local-window chain): INFO R2 == DENSE R2 to printed precision at EVERY (n,seed) cell; info-matrix storage 21.6% -> 11.1% -> 5.6% -> 2.8% of dense as n 48->96->192->384 (halves per doubling: nnz(J)=O(n*w) vs dense O(n^2)). Block-diagonal (E3) trails by <=0.0003 -- it drops the separator coupling INFO keeps exactly. This is the exact version of the E3 path and realises the hypergraph<->tensor conjugation: J IS the signed-hypergraph incidence made numerical (nonzero J[i,k] == GMRF conditional-dependence edge).",
+      "classification": "NEW_CANONICAL_CAPABILITY (classical primitive, novel-to-framework wiring)",
+      "source_experiment": "evolvent E4 (examples/evolvent_junction.rs, kato15 5 seeds x 4 n)",
+      "raw_evidence": ["reports/2026-07-15-evolvent-e4-junction-tree.md", "reports/figures/evolvent-junction.png", "reports/figures/evolvent_e4_results.json"],
+      "confidence": "high (5 seeds x 4 sizes; INFO==DENSE is an algebraic identity, the run confirms the implementation)",
+      "scope": "local / bounded-width measurements (sparse J); linear-in-features single-output readout. NOT a win for dense/global measurements (J fills -> same O(d^2) as dense).",
+      "limitations": "sparsity is a property of the DATA not the head; current solve is dense Gaussian elimination O(d^3) -- the O(d*w^2) block-tridiagonal Cholesky that exploits nnz is NOT yet implemented (E4 measures the STORAGE + EXACTNESS win, not a solve-TIME win); InfoEvolventHead is a CLASSICAL primitive (information filter / Lauritzen-Spiegelhalter junction tree) -- no algorithmic-novelty claim, the framework value is the exact+sparse evolvent head + hypergraph conjugation.",
+      "framework_consequence": "New component InfoEvolventHead (DEPLOYABLE for local-measurement structure) registered. Completes the evolvent precision family: dense P O(d^2) exact -> block-diagonal O(d*w) approximate -> information J O(d*w) EXACT. Answers the user's 'make P sparse and tensor-like -- conjugation between hypergraph and tensor interface'.",
+      "code_changes": ["src/online.rs InfoEvolventHead + 1 test", "src/lib.rs re-export", "examples/evolvent_junction.rs"],
+      "regression_tests": ["online::info_form_equals_dense_and_is_sparse"],
+      "superseded_findings": [],
+      "open_questions": ["sparse block-tridiagonal Cholesky O(d*w^2) -- turn the storage win into a solve-time win", "a NON-additive cross-hyperedge target where BLOCK loses materially and INFO/dense hold (the discriminating block-vs-info test)", "update J THROUGH hg_message on the signed-hypergraph substrate", "SBSH bounded-width certificate as the solve tractability guarantee"]
     }
   ]
 }

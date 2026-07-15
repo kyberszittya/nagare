@@ -1,0 +1,13 @@
+{
+  "experiment": "evolvent-e4-junction-tree",
+  "host": "kato15 (32-core, RTX6000; CPU-only run)",
+  "seeds": [0,1,2,3,4],
+  "W": 6, "B": 6, "NS": 8000,
+  "note": "INFO R2 == DENSE R2 at every (n,seed) to printed precision (information form is exact). Block trails by <=0.0003 (drops separator coupling). info nnz % of dense halves as n doubles (info O(n*W), dense O(n^2)).",
+  "rows": [
+    {"n": 48,  "dense_r2": 0.9998, "block_r2": 0.9997, "info_r2": 0.9998, "dense_nnz": 2304,   "info_nnz": 498,  "info_pct": 21.6},
+    {"n": 96,  "dense_r2": 0.9998, "block_r2": 0.9998, "info_r2": 0.9998, "dense_nnz": 9216,   "info_nnz": 1026, "info_pct": 11.1},
+    {"n": 192, "dense_r2": 0.9998, "block_r2": 0.9998, "info_r2": 0.9998, "dense_nnz": 36864,  "info_nnz": 2082, "info_pct": 5.6},
+    {"n": 384, "dense_r2": 0.9998, "block_r2": 0.9996, "info_r2": 0.9998, "dense_nnz": 147456, "info_nnz": 4194, "info_pct": 2.8}
+  ]
+}

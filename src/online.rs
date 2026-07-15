@@ -274,6 +274,104 @@ impl BlockEvolventHead {
     }
 }
 
+/// Information-form (junction-tree) evolvent — keeps the CROSS-hyperedge coupling
+/// that [`BlockEvolventHead`] drops. Maintains the information matrix
+/// `J = Phi^T Phi + ridge I` and info vector `b = Phi^T y`, updated LOCALLY per
+/// sample (`J += phi phi^T` touches only `phi`'s support), then solves `J w = b`.
+///
+/// This is **exact** (= dense RLS), but `J` is SPARSE for local (bounded-width)
+/// measurements, so storage is `O(nnz(J)) = O(d*w)`; an exact sparse solve is
+/// `O(d*w^2)`. A general dense solve is used here for simplicity — `nnz()` reports
+/// the sparsity that a sparse (block-tridiagonal / junction-tree) solve exploits.
+#[derive(Clone, Debug)]
+pub struct InfoEvolventHead {
+    j: Vec<f32>,
+    b: Vec<f32>,
+    d: usize,
+}
+
+impl InfoEvolventHead {
+    /// New head over `d` features with prior precision `ridge > 0` (`J0 = ridge I`).
+    ///
+    /// # Panics
+    /// If `ridge <= 0`.
+    pub fn new(d: usize, ridge: f32) -> Self {
+        assert!(ridge > 0.0, "ridge must be > 0");
+        let mut j = vec![0.0f32; d * d];
+        for i in 0..d {
+            j[i * d + i] = ridge;
+        }
+        InfoEvolventHead {
+            j,
+            b: vec![0.0; d],
+            d,
+        }
+    }
+
+    /// Local information update: `J += phi phi^T`, `b += phi*y` over `phi`'s
+    /// support only (`O(nnz(phi)^2)`). Never forms a dense outer product.
+    ///
+    /// # Panics
+    /// If `phi.len() != d`.
+    pub fn update(&mut self, phi: &[f32], y: f32) {
+        assert_eq!(phi.len(), self.d);
+        let d = self.d;
+        let active: Vec<usize> = (0..d).filter(|&i| phi[i] != 0.0).collect();
+        for &i in &active {
+            self.b[i] += phi[i] * y;
+            let pi = phi[i];
+            for &k in &active {
+                self.j[i * d + k] += pi * phi[k];
+            }
+        }
+    }
+
+    /// Nonzeros in the information matrix (vs `d^2` for a dense precision).
+    pub fn nnz(&self) -> usize {
+        self.j.iter().filter(|&&v| v.abs() > 1e-12).count()
+    }
+
+    /// Solve `J w = b` (SPD) via Gaussian elimination with partial pivoting.
+    pub fn solve(&self) -> Vec<f32> {
+        let d = self.d;
+        let mut a = self.j.clone();
+        let mut b = self.b.clone();
+        for col in 0..d {
+            let mut piv = col;
+            for r in col + 1..d {
+                if a[r * d + col].abs() > a[piv * d + col].abs() {
+                    piv = r;
+                }
+            }
+            if piv != col {
+                for c in 0..d {
+                    a.swap(col * d + c, piv * d + c);
+                }
+                b.swap(col, piv);
+            }
+            let diag = a[col * d + col];
+            for r in 0..d {
+                if r == col {
+                    continue;
+                }
+                let f = a[r * d + col] / diag;
+                if f != 0.0 {
+                    for c in col..d {
+                        a[r * d + c] -= f * a[col * d + c];
+                    }
+                    b[r] -= f * b[col];
+                }
+            }
+        }
+        (0..d).map(|i| b[i] / a[i * d + i]).collect()
+    }
+
+    /// Prediction `phi . w` for weights `w` from [`InfoEvolventHead::solve`].
+    pub fn predict(phi: &[f32], w: &[f32]) -> f32 {
+        phi.iter().zip(w).map(|(&a, &b)| a * b).sum()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -448,6 +546,35 @@ mod tests {
         assert!(
             block.precision_nnz() < d * d,
             "block must store fewer than d^2"
+        );
+    }
+
+    /// Information-form solve equals dense RLS exactly (both = ridge normal eqns),
+    /// and the info matrix is sparse when samples are LOCAL.
+    #[test]
+    fn info_form_equals_dense_and_is_sparse() {
+        let (d, n) = (10usize, 400usize);
+        let mut nx = lcg(31);
+        let mut dense = EvolventHead::new(d, 1, 1.0, 1.0);
+        let mut info = InfoEvolventHead::new(d, 1.0);
+        for _ in 0..n {
+            // LOCAL sample: only a contiguous window of 3 features active
+            let start = ((nx() + 0.5) * (d - 3) as f32) as usize % (d - 2);
+            let mut phi = vec![0.0f32; d];
+            for slot in phi.iter_mut().skip(start).take(3) {
+                *slot = nx();
+            }
+            let y = nx();
+            dense.update(&phi, &[y]);
+            info.update(&phi, y);
+        }
+        let w = info.solve();
+        for (i, (&a, &b)) in dense.w.iter().zip(&w).enumerate() {
+            assert!((a - b).abs() < 1e-3, "w[{i}] dense {a} vs info {b}");
+        }
+        assert!(
+            info.nnz() < d * d,
+            "info matrix must be sparse for local samples"
         );
     }
 

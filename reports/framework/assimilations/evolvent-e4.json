@@ -1,0 +1,25 @@
+{
+  "experiment_id": "evolvent-e4",
+  "date": "2026-07-15",
+  "result": "Information-form (junction-tree) evolvent is EXACT (= dense RLS, keeps all coupling) at SPARSE O(d*w) storage for local measurements. kato15 5 seeds x 4 n: INFO R2 == DENSE R2 at every cell; info-matrix storage 21.6%->2.8% of dense as n 48->384 (halves per doubling). Block-diagonal (E3) trails <=0.0003 (drops separator coupling INFO keeps).",
+  "novelty_classification": {"NEW_CANONICAL_CAPABILITY": ["F-EVO-6"], "note": "InfoEvolventHead is a CLASSICAL primitive (information filter / Lauritzen-Spiegelhalter junction tree); NO algorithmic-novelty claim. Framework value = exact+sparse evolvent head + hypergraph<->tensor conjugation."},
+  "framework_impact": {
+    "interfaces_changed": ["InfoEvolventHead (information-form RLS: new/update/nnz/solve/predict)"],
+    "defaults_changed": [],
+    "components_added_or_updated": ["InfoEvolventHead (DEPLOYABLE for local-measurement structure)", "BlockEvolventHead note (E4 = exact version of the E3 path)"],
+    "guards_added": ["online::info_form_equals_dense_and_is_sparse (exactness + sparsity regression)"],
+    "superseded": []
+  },
+  "source_changes": ["src/online.rs InfoEvolventHead + 1 test", "src/lib.rs re-export InfoEvolventHead", "examples/evolvent_junction.rs", "scripts/dev/plot_evolvent_junction.py", "reports/figures/evolvent_e4_results.json"],
+  "regression_tests_added": ["online::info_form_equals_dense_and_is_sparse"],
+  "gates": {"suite": "175/0", "fmt": "clean", "clippy": "clean"},
+  "corrections": {},
+  "precision_family_now_complete": {
+    "dense_P": "O(d^2) exact (E0/E1)",
+    "block_diagonal": "O(d*w) approximate, drops separator coupling (E3)",
+    "information_J": "O(d*w) EXACT, keeps all coupling (E4)"
+  },
+  "honest_scope": ["sparsity is a property of the DATA (local measurements), not the head", "current solve is dense O(d^3); block-tridiagonal Cholesky O(d*w^2) not yet implemented -- E4 measures STORAGE+EXACTNESS not solve-TIME", "single-output, linear-in-features"],
+  "next_experiment_authorized": false,
+  "next_experiment_proposal": {"name": "sparse block-tridiagonal Cholesky of J (solve-time win) + a non-additive cross-hyperedge target (block-vs-info discriminating test)", "reuses": ["InfoEvolventHead", "hg_message", "SBSH width certificate"], "constrained_by": ["F-EVO-6"]}
+}

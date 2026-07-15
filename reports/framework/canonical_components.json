@@ -197,7 +197,27 @@
       "supersedes": null,
       "superseded_by": null,
       "default": false,
-      "note": "F-EVO-5: matches dense-hyperedge R2 0.997 at 20x less precision storage; pairwise precision provably cannot represent the 3-way term. Path to CANONICAL: junction-tree (block-tridiagonal) form + update through hg_message + SBSH width certificate."
+      "note": "F-EVO-5: matches dense-hyperedge R2 0.997 at 20x less precision storage; pairwise precision provably cannot represent the 3-way term. Path to CANONICAL: junction-tree (block-tridiagonal) form + update through hg_message + SBSH width certificate. E4 (InfoEvolventHead) is the EXACT version of this path."
+    },
+    {
+      "name": "InfoEvolventHead",
+      "purpose": "Information-form (junction-tree) evolvent precision -- the EXACT sparse alternative to the dense O(d^2) pairwise P. Accumulates J = Phi^T Phi + ridge*I and b = Phi^T y (each update J += phi phi^T touches only phi's support); solves J w = b. EXACT (= dense RLS, keeps ALL cross-hyperedge coupling) but J is SPARSE for local (bounded-width) measurements -> storage O(nnz(J)) = O(d*w). This is the hypergraph<->tensor conjugation: J IS the signed-hypergraph incidence made numerical (nonzero J[i,k] == GMRF conditional dependence edge).",
+      "owning_module": "src/online.rs",
+      "symbols": ["InfoEvolventHead", "InfoEvolventHead::new (d,ridge)", "InfoEvolventHead::update", "InfoEvolventHead::nnz", "InfoEvolventHead::solve", "InfoEvolventHead::predict"],
+      "version": "1.0",
+      "status": "DEPLOYABLE",
+      "source_experiment": "evolvent E4 (examples/evolvent_junction.rs, kato15 5 seeds x 4 n)",
+      "evidence_paths": ["reports/2026-07-15-evolvent-e4-junction-tree.md", "reports/figures/evolvent-junction.png", "reports/figures/evolvent_e4_results.json"],
+      "supported_tasks": ["exact online least-squares readout with LOCAL/bounded-width measurements", "GMRF / junction-tree precision at O(d*w) storage", "the exact form of the E3 hyperedge-clique precision (keeps separator coupling BlockEvolventHead drops)"],
+      "observation_schema": "phi: &[f32] (d features, locally supported), y: f32",
+      "output_schema": "solve -> Vec<f32> w (== dense RLS solution exactly); predict(phi,w) -> f32; nnz -> info-matrix sparsity",
+      "dependencies": [],
+      "known_limitations": ["sparsity is a property of the DATA (local measurements) not the head: dense/global measurements fill J -> no advantage over dense O(d^2)", "current solve is dense Gaussian elimination O(d^3); the O(d*w^2) block-tridiagonal Cholesky that exploits nnz is NOT yet implemented (nnz() accounts the sparsity a sparse solve would use)", "single-output (regression); linear-in-features (higher-order terms must be explicit features)", "measures STORAGE + EXACTNESS win, not yet a solve-TIME win"],
+      "canonical_tests": ["online::info_form_equals_dense_and_is_sparse"],
+      "supersedes": null,
+      "superseded_by": null,
+      "default": false,
+      "note": "F-EVO-6: INFO R2 == DENSE R2 exactly at every (n,seed); info-matrix storage 21.6%->2.8% of dense as n 48->384 (O(d*w) vs O(d^2), halves per doubling). Classical primitive (information filter / Lauritzen-Spiegelhalter junction tree) -- framework value is the exact+sparse evolvent head + hypergraph conjugation, NOT algorithmic novelty. Path to a solve-time win: block-tridiagonal Cholesky + SBSH width certificate."
     }
   ]
 }
