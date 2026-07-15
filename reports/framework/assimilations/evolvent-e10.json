@@ -1,0 +1,25 @@
+{
+  "experiment_id": "evolvent-e10",
+  "date": "2026-07-16",
+  "host": "Hajdus-MacBook-Pro (arm64, CPU) — criterion 0.5",
+  "result": "Contiguous-storage rewrite of JunctionTreeCholesky closes E9's ~5x headroom. Flat arenas + precomputed offsets + precomputed assembly map + reused scratch (no per-clique alloc, no position() search). SAME API, SAME exact answer (4 tests + byte-identical examples). MF solve 2.6-2.8x faster (d=889: 31.7us vs 85us); measured speedup vs dense 5.9-255x -> 16.7-682x; flop/measured gap 5.0x -> 1.86x.",
+  "novelty_classification": {"OPTIMIZATION": ["F-EVO-12"], "note": "Resolves F-EVO-11's open 'contiguous-storage rewrite' item; confirms E9's diagnosis (allocation overhead) was correct. In-place component update (no v2/new type, §6.5 #13)."},
+  "framework_impact": {
+    "interfaces_changed": [],
+    "defaults_changed": [],
+    "components_added_or_updated": ["JunctionTreeCholesky internals -> flat-arena contiguous storage (public API unchanged); note + F-EVO-11 limitation updated"],
+    "guards_added": [],
+    "superseded": [],
+    "open_question_resolved": "F-EVO-11 'contiguous-storage multifrontal -> close the ~5x gap' -> DONE: 5x -> 1.86x, MF solve 2.7x faster"
+  },
+  "source_changes": ["src/junction_tree.rs (contiguous rewrite + buffer-based *_into helpers + dead n_sep removed + test helper flat-layout update)", "benches/evolvent_solve_bench.rs re-run", "scripts/dev/plot_evolvent_contiguous.py", "reports/figures/evolvent_e10_results.json", "canonical_components.json + canonical_findings.json"],
+  "regression_tests_added": ["(no NEW tests -- the 4 existing exactness/locality tests guard the rewrite; correctness confirmed by == dense + byte-identical E5-E8 example outputs)"],
+  "gates": {"suite": "179/0", "fmt": "clean", "clippy": "clean"},
+  "corrections": {},
+  "measured_before_after": {"mf_solve_us_d889": "85 -> 31.7 (2.7x)", "speedup_vs_dense": "5.9-255x -> 16.7-682x", "flop_over_measured_large_d": "5.0x -> 1.86x", "at_d105": "1.08x (at flop ceiling)"},
+  "honest_scope": ["682x is vs a Gaussian dense baseline (~2x flops of pure Cholesky) -> layout-independent number is the 2.7x self-speedup; Cholesky baseline would show ~2x more residual", "single machine (ratios transfer)", "remaining headroom (blocked/SIMD triangular kernels) NOT pursued -- E9 caveat closed", "rewrite changed only memory layout, arithmetic identical (guarded by exactness tests)"],
+  "anti_pattern_check": "no §6.5 anti-patterns: in-place component update (NOT JunctionTreeCholesky2/_contiguous, #13); one implementation of the linear-algebra helpers (buffer-based *_into, reused by solve + solve_block_diagonal, no duplication).",
+  "environment_note": "Run on the Mac; kato15 NOT synced -- origin main ahead, fast-forwards on next pull.",
+  "next_experiment_authorized": false,
+  "next_experiment_proposal": {"name": "blocked/SIMD triangular kernels + dense-Cholesky baseline (residual below ceiling); optimized refactorize_path incremental solver; higher-order (degree>=3) representability", "reuses": ["JunctionTreeCholesky", "evolvent_solve_bench"], "constrained_by": ["F-EVO-12"]}
+}

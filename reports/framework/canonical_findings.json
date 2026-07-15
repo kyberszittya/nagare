@@ -320,6 +320,21 @@
       "regression_tests": ["(benchmark, not a correctness test; solver exactness already guarded by E5 junction_tree tests)"],
       "superseded_findings": [],
       "open_questions": ["contiguous-storage multifrontal (one arena) -> close the ~5x gap toward the flop ceiling", "dense-Cholesky baseline for the pure-algorithmic ratio", "wall-clock of the incremental refactorize_path once built"]
+    },
+    {
+      "id": "F-EVO-12",
+      "claim": "The CONTIGUOUS-STORAGE rewrite of JunctionTreeCholesky closes E9's predicted ~5x headroom. Rewriting the internals from per-clique Vec<Vec<f32>> to FLAT ARENAS (precomputed offsets for frontals/rhs/factors + precomputed parent-local assembly map + reused scratch; no per-clique alloc, no position() search in the hot path) -- SAME public API, SAME exact answer (4 exactness tests pass, E5/E6/E7/E8 example numbers byte-identical) -- makes the multifrontal solve 2.6-2.8x faster (criterion): d=889 31.7us vs 85us. Measured speedup vs dense Gauss 5.9-255x -> 16.7-682x; flop/measured gap 5.0x -> 1.86x (large d), at d=105 essentially AT the flop ceiling (1.08x).",
+      "classification": "OPTIMIZATION (measured; closes F-EVO-11's open question)",
+      "source_experiment": "evolvent E10 (src/junction_tree.rs rewrite + benches/evolvent_solve_bench.rs re-run, criterion, Mac)",
+      "raw_evidence": ["reports/2026-07-16-evolvent-e10-contiguous.md", "reports/figures/evolvent-contiguous.png", "reports/figures/evolvent_e10_results.json"],
+      "confidence": "high (criterion tight CIs; 2.7x self-speedup flat across d; correctness guarded by 4 exactness tests + byte-identical example outputs)",
+      "scope": "single machine (ratios transfer); the rewrite changed only memory layout + assembly-map precompute, arithmetic identical.",
+      "limitations": "the 682x is vs a Gaussian-elim dense baseline (~2x flops of pure Cholesky) -> the layout-INDEPENDENT number is the 2.7x self-speedup; a Cholesky baseline would show ~2x more residual (true algorithmic residual vs Cholesky ~3-4x). Remaining headroom (frontal-extraction + triangular solves not blocked/SIMD) NOT pursued -- E9's ~5x caveat is closed.",
+      "framework_consequence": "JunctionTreeCholesky component UPDATED in place (no v2, no new type -- §6.5 #13): flat-arena internals. Resolves F-EVO-11's open 'contiguous-storage rewrite' item and the E5-E8 'flops not wall-clock' caveat lineage. Deployable speedup is now 16.7x-682x. The measured 2.7x confirms E9's diagnosis (allocation overhead) was correct.",
+      "code_changes": ["src/junction_tree.rs (contiguous rewrite: flat arenas, precomputed offsets+assembly map, reused scratch, buffer-based *_into helpers, dead n_sep removed)", "benches/evolvent_solve_bench.rs re-run", "scripts/dev/plot_evolvent_contiguous.py", "canonical_components.json + F-EVO-11 limitation update"],
+      "regression_tests": ["junction_tree::single_clique_equals_dense", "junction_tree::branching_tree_equals_dense_at_bounded_width", "junction_tree::star_tree_equals_dense_with_shared_separator", "junction_tree::online_update_only_perturbs_path_to_root (all guard the rewrite's exactness)"],
+      "superseded_findings": [],
+      "open_questions": ["blocked/SIMD triangular kernels + dense-Cholesky baseline -> the residual below the ceiling", "optimized refactorize_path (leaf->root only) incremental online solver + wall-clock", "higher-order interactions (degree>=3 -> width>=order+1)"]
     }
   ]
 }

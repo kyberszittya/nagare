@@ -35,27 +35,38 @@ pub struct Clique {
     pub parent: Option<usize>,
 }
 
-impl Clique {
-    fn n_sep(&self) -> usize {
-        self.vars.len() - self.n_res
-    }
-}
-
 /// Multifrontal Cholesky over a clique tree. Measurements accumulate into per-
 /// clique frontal blocks; [`solve`](Self::solve) factorizes and back-substitutes.
+///
+/// Storage is **contiguous**: every per-clique block (frontals, rhs, and the
+/// Cholesky factors) lives in a single flat arena addressed by precomputed
+/// offsets, and the parent-local assembly map is precomputed once. A `solve`
+/// therefore clones two flat `Vec<f32>`s and runs on reused scratch — no per-clique
+/// `Vec` allocation and no `position()` search in the hot path.
 #[derive(Clone, Debug)]
 pub struct JunctionTreeCholesky {
     cliques: Vec<Clique>,
     ridge: f32,
     d: usize,
     order: Vec<usize>, // post-order: children before parents (leaves..root)
-    // persistent accumulated measurements (never overwritten by a factorize):
-    acc_front: Vec<Vec<f32>>, // per clique |C|*|C|
-    acc_rhs: Vec<Vec<f32>>,   // per clique |C|
-    // factor storage (rebuilt each factorize), for back-substitution:
-    l_rr: Vec<Vec<f32>>, // per clique n_res*n_res lower-triangular Cholesky
-    w_rs: Vec<Vec<f32>>, // per clique n_res*n_sep = F_RR^-1 F_RS
-    yr: Vec<Vec<f32>>,   // per clique n_res = F_RR^-1 b_R
+    // contiguous per-clique geometry (precomputed once in `new`):
+    m: Vec<usize>,         // clique size |C|
+    nres: Vec<usize>,      // residual count (eliminated here)
+    nsep: Vec<usize>,      // separator count (shared with parent)
+    foff: Vec<usize>,      // offset of the |C|*|C| frontal in the flat arenas
+    boff: Vec<usize>,      // offset of the |C| rhs
+    loff: Vec<usize>,      // offset of the r*r Cholesky factor
+    woff: Vec<usize>,      // offset of the r*s W_RS block
+    yoff: Vec<usize>,      // offset of the r yr vector
+    sploc_off: Vec<usize>, // offset into `sploc` of this clique's separator map
+    sploc: Vec<usize>,     // concatenated parent-local separator positions (assembly)
+    // persistent accumulated measurements (flat; never overwritten by a factorize):
+    acc_front: Vec<f32>,
+    acc_rhs: Vec<f32>,
+    // factor storage (flat; rebuilt each factorize), for back-substitution:
+    l_rr: Vec<f32>,
+    w_rs: Vec<f32>,
+    yr: Vec<f32>,
 }
 
 impl JunctionTreeCholesky {
@@ -83,23 +94,68 @@ impl JunctionTreeCholesky {
             }
         }
         assert_eq!(n_roots, 1, "clique tree must have exactly one root");
-        let acc_front = cliques
-            .iter()
-            .map(|c| vec![0.0; c.vars.len() * c.vars.len()])
-            .collect();
-        let acc_rhs = cliques.iter().map(|c| vec![0.0; c.vars.len()]).collect();
         let order = post_order(&cliques);
         let n = cliques.len();
+
+        // precompute per-clique geometry + flat-arena offsets
+        let (mut m, mut nres, mut nsep) = (vec![0; n], vec![0; n], vec![0; n]);
+        let (mut foff, mut boff) = (vec![0; n], vec![0; n]);
+        let (mut loff, mut woff, mut yoff) = (vec![0; n], vec![0; n], vec![0; n]);
+        let (mut ft, mut bt, mut lt, mut wt, mut yt) = (0, 0, 0, 0, 0);
+        for (c, cl) in cliques.iter().enumerate() {
+            let (mc, rc) = (cl.vars.len(), cl.n_res);
+            let sc = mc - rc;
+            m[c] = mc;
+            nres[c] = rc;
+            nsep[c] = sc;
+            foff[c] = ft;
+            ft += mc * mc;
+            boff[c] = bt;
+            bt += mc;
+            loff[c] = lt;
+            lt += rc * rc;
+            woff[c] = wt;
+            wt += rc * sc;
+            yoff[c] = yt;
+            yt += rc;
+        }
+        // assembly map: parent-local index of each separator var (searched once)
+        let mut sploc_off = vec![0; n];
+        let mut sploc: Vec<usize> = Vec::new();
+        for (c, cl) in cliques.iter().enumerate() {
+            sploc_off[c] = sploc.len();
+            if let Some(p) = cl.parent {
+                for g in &cl.vars[cl.n_res..] {
+                    let pos = cliques[p]
+                        .vars
+                        .iter()
+                        .position(|v| v == g)
+                        .expect("separator var in parent");
+                    sploc.push(pos);
+                }
+            }
+        }
+
         JunctionTreeCholesky {
             cliques,
             ridge,
             d,
             order,
-            acc_front,
-            acc_rhs,
-            l_rr: vec![Vec::new(); n],
-            w_rs: vec![Vec::new(); n],
-            yr: vec![Vec::new(); n],
+            m,
+            nres,
+            nsep,
+            foff,
+            boff,
+            loff,
+            woff,
+            yoff,
+            sploc_off,
+            sploc,
+            acc_front: vec![0.0; ft],
+            acc_rhs: vec![0.0; bt],
+            l_rr: vec![0.0; lt],
+            w_rs: vec![0.0; wt],
+            yr: vec![0.0; yt],
         }
     }
 
@@ -114,18 +170,18 @@ impl JunctionTreeCholesky {
     /// # Panics
     /// If `phi_local.len()` differs from the clique's variable count.
     pub fn update(&mut self, clique: usize, phi_local: &[f32], y: f32) {
-        let m = self.cliques[clique].vars.len();
+        let m = self.m[clique];
         assert_eq!(phi_local.len(), m, "phi_local must match clique arity");
-        let f = &mut self.acc_front[clique];
-        let b = &mut self.acc_rhs[clique];
+        let (fo, bo) = (self.foff[clique], self.boff[clique]);
         for i in 0..m {
             let pi = phi_local[i];
             if pi == 0.0 {
                 continue;
             }
-            b[i] += pi * y;
-            for j in 0..m {
-                f[i * m + j] += pi * phi_local[j];
+            self.acc_rhs[bo + i] += pi * y;
+            let row = fo + i * m;
+            for (j, &pj) in phi_local.iter().enumerate() {
+                self.acc_front[row + j] += pi * pj;
             }
         }
     }
@@ -162,7 +218,11 @@ impl JunctionTreeCholesky {
     /// Cheap signature of clique `c`'s stored Cholesky factor (`Σ|L_RR|`), valid
     /// after a [`solve`](Self::solve). Detects which factors an update changed.
     pub fn factor_checksum(&self, c: usize) -> f64 {
-        self.l_rr[c].iter().map(|v| v.abs() as f64).sum()
+        let (lo, r) = (self.loff[c], self.nres[c]);
+        self.l_rr[lo..lo + r * r]
+            .iter()
+            .map(|v| v.abs() as f64)
+            .sum()
     }
 
     /// Factorize (multifrontal Cholesky) and back-substitute; returns the exact
@@ -179,16 +239,22 @@ impl JunctionTreeCholesky {
     /// [`solve`](Self::solve) keeps, so it measures what that coupling is worth.
     pub fn solve_block_diagonal(&self) -> Vec<f32> {
         let mut x = vec![0.0f32; self.d];
+        let mw = self.m.iter().copied().max().unwrap_or(0);
+        let (mut a, mut l, mut yb, mut xl) = (
+            vec![0.0f32; mw * mw],
+            vec![0.0f32; mw * mw],
+            vec![0.0f32; mw],
+            vec![0.0f32; mw],
+        );
         for (c, cl) in self.cliques.iter().enumerate() {
-            let m = cl.vars.len();
-            let mut a = self.acc_front[c].clone();
-            let b = self.acc_rhs[c].clone();
+            let (m, fo, bo) = (self.m[c], self.foff[c], self.boff[c]);
+            a[..m * m].copy_from_slice(&self.acc_front[fo..fo + m * m]);
             for i in 0..m {
                 a[i * m + i] += self.ridge; // prior on every local var (separators too, else singular)
             }
-            let l = cholesky_lower(&a, m);
-            let y = forward_solve(&l, &b, m);
-            let xl = back_solve(&l, &y, m);
+            cholesky_lower_into(&a[..m * m], m, &mut l[..m * m]);
+            forward_solve_into(&l[..m * m], &self.acc_rhs[bo..bo + m], m, &mut yb[..m]);
+            back_solve_into(&l[..m * m], &yb[..m], m, &mut xl[..m]);
             for r in 0..cl.n_res {
                 x[cl.vars[r]] = xl[r]; // each var read from its residual (eliminating) clique
             }
@@ -200,99 +266,94 @@ impl JunctionTreeCholesky {
     /// measurements + ridge, eliminates each clique's residual, and assembles the
     /// Schur-complement message into the parent.
     fn factorize(&mut self) {
-        let n = self.cliques.len();
         // working frontals = accumulated measurements + ridge on residual diagonal
-        let mut front: Vec<Vec<f32>> = self.acc_front.clone();
-        let mut rhs: Vec<Vec<f32>> = self.acc_rhs.clone();
-        for (c, cl) in self.cliques.iter().enumerate() {
-            let m = cl.vars.len();
-            for r in 0..cl.n_res {
-                front[c][r * m + r] += self.ridge;
+        let mut front = self.acc_front.clone();
+        let mut rhs = self.acc_rhs.clone();
+        for c in 0..self.cliques.len() {
+            let (m, fo) = (self.m[c], self.foff[c]);
+            for i in 0..self.nres[c] {
+                front[fo + i * m + i] += self.ridge;
             }
         }
-        self.l_rr = vec![Vec::new(); n];
-        self.w_rs = vec![Vec::new(); n];
-        self.yr = vec![Vec::new(); n];
+        // scratch reused across cliques — no per-clique allocation in the hot loop
+        let mw = self.m.iter().copied().max().unwrap_or(0);
+        let mut frr = vec![0.0f32; mw * mw];
+        let mut zb = vec![0.0f32; mw * mw]; // Z, indexed i*s + col
+        let mut colb = vec![0.0f32; mw];
+        let mut solb = vec![0.0f32; mw];
+        let mut yzb = vec![0.0f32; mw];
 
-        for idx in 0..self.order.len() {
-            let c = self.order[idx];
-            let cl = &self.cliques[c];
-            let m = cl.vars.len();
-            let r = cl.n_res;
-            let s = cl.n_sep();
-            let fc = &front[c];
-            let bc = &rhs[c];
-            // partitions F_RR (r*r), F_RS (r*s); Cholesky of F_RR
-            let mut frr = vec![0.0f32; r * r];
+        for oi in 0..self.order.len() {
+            let c = self.order[oi];
+            let (m, r, s) = (self.m[c], self.nres[c], self.nsep[c]);
+            let (fo, bo, lo, wo, yo) = (
+                self.foff[c],
+                self.boff[c],
+                self.loff[c],
+                self.woff[c],
+                self.yoff[c],
+            );
+            // F_RR = r*r top-left of the working frontal (row stride m) -> Cholesky
             for i in 0..r {
                 for j in 0..r {
-                    frr[i * r + j] = fc[i * m + j];
+                    frr[i * r + j] = front[fo + i * m + j];
                 }
             }
-            let l = cholesky_lower(&frr, r);
-            // Z = L^-1 F_RS  (r*s);   yz = L^-1 b_R  (r)
-            let mut z = vec![0.0f32; r * s];
+            cholesky_lower_into(&frr[..r * r], r, &mut self.l_rr[lo..lo + r * r]);
+            // Z[:,col] = L^-1 F_RS[:,col]
             for col in 0..s {
-                let rhs_col: Vec<f32> = (0..r).map(|i| fc[i * m + (r + col)]).collect();
-                let zc = forward_solve(&l, &rhs_col, r);
                 for i in 0..r {
-                    z[i * s + col] = zc[i];
+                    colb[i] = front[fo + i * m + (r + col)];
+                }
+                forward_solve_into(&self.l_rr[lo..lo + r * r], &colb[..r], r, &mut solb[..r]);
+                for (i, &v) in solb[..r].iter().enumerate() {
+                    zb[i * s + col] = v;
                 }
             }
-            let br: Vec<f32> = (0..r).map(|i| bc[i]).collect();
-            let yz = forward_solve(&l, &br, r);
-            // W_RS = L^-T Z  (r*s);   yr = L^-T yz  (r)   [for back-sub]
-            let mut wrs = vec![0.0f32; r * s];
+            // yz = L^-1 b_R
+            colb[..r].copy_from_slice(&rhs[bo..bo + r]);
+            forward_solve_into(&self.l_rr[lo..lo + r * r], &colb[..r], r, &mut yzb[..r]);
+            // W_RS[:,col] = L^-T Z[:,col]  (stored for back-substitution)
             for col in 0..s {
-                let zc: Vec<f32> = (0..r).map(|i| z[i * s + col]).collect();
-                let wc = back_solve(&l, &zc, r);
                 for i in 0..r {
-                    wrs[i * s + col] = wc[i];
+                    colb[i] = zb[i * s + col];
+                }
+                back_solve_into(&self.l_rr[lo..lo + r * r], &colb[..r], r, &mut solb[..r]);
+                for (i, &v) in solb[..r].iter().enumerate() {
+                    self.w_rs[wo + i * s + col] = v;
                 }
             }
-            let yr = back_solve(&l, &yz, r);
+            // yr = L^-T yz
+            back_solve_into(
+                &self.l_rr[lo..lo + r * r],
+                &yzb[..r],
+                r,
+                &mut self.yr[yo..yo + r],
+            );
 
-            // Schur message to parent: U = F_SS - Z^T Z (s*s); m_b = b_S - Z^T yz (s)
-            if let Some(p) = cl.parent {
-                let mut u = vec![0.0f32; s * s];
-                let mut mb = vec![0.0f32; s];
+            // Schur message to parent: U = F_SS - Z^T Z; m_b = b_S - Z^T yz
+            if let Some(p) = self.cliques[c].parent {
+                let (mp, fpo, bpo) = (self.m[p], self.foff[p], self.boff[p]);
+                let sp = self.sploc_off[c]; // precomputed parent-local separator indices
                 for a in 0..s {
-                    for b in 0..s {
-                        let mut zz = 0.0f32;
-                        for i in 0..r {
-                            zz += z[i * s + a] * z[i * s + b];
-                        }
-                        u[a * s + b] = fc[(r + a) * m + (r + b)] - zz;
-                    }
+                    let pa = self.sploc[sp + a];
                     let mut zy = 0.0f32;
                     for i in 0..r {
-                        zy += z[i * s + a] * yz[i];
+                        zy += zb[i * s + a] * yzb[i];
                     }
-                    mb[a] = bc[r + a] - zy;
-                }
-                // assemble into parent's frontal at the separator vars' positions
-                let sep_vars: Vec<usize> = cl.vars[r..].to_vec();
-                let mp = self.cliques[p].vars.len();
-                let ploc: Vec<usize> = sep_vars
-                    .iter()
-                    .map(|g| {
-                        self.cliques[p]
-                            .vars
-                            .iter()
-                            .position(|v| v == g)
-                            .expect("sep in parent")
-                    })
-                    .collect();
-                for a in 0..s {
-                    rhs[p][ploc[a]] += mb[a];
+                    let mb = rhs[bo + r + a] - zy;
+                    rhs[bpo + pa] += mb;
                     for b in 0..s {
-                        front[p][ploc[a] * mp + ploc[b]] += u[a * s + b];
+                        let pb = self.sploc[sp + b];
+                        let mut zz = 0.0f32;
+                        for i in 0..r {
+                            zz += zb[i * s + a] * zb[i * s + b];
+                        }
+                        let u = front[fo + (r + a) * m + (r + b)] - zz;
+                        front[fpo + pa * mp + pb] += u;
                     }
                 }
             }
-            self.l_rr[c] = l;
-            self.w_rs[c] = wrs;
-            self.yr[c] = yr;
         }
     }
 
@@ -300,17 +361,16 @@ impl JunctionTreeCholesky {
     fn back_substitute(&self) -> Vec<f32> {
         let mut x = vec![0.0f32; self.d];
         for &c in self.order.iter().rev() {
-            let cl = &self.cliques[c];
-            let r = cl.n_res;
-            let s = cl.n_sep();
-            // x_S already solved (separator vars live in an ancestor)
-            let xs: Vec<f32> = (0..s).map(|a| x[cl.vars[r + a]]).collect();
+            let (r, s) = (self.nres[c], self.nsep[c]);
+            let (wo, yo) = (self.woff[c], self.yoff[c]);
+            let vars = &self.cliques[c].vars;
             for i in 0..r {
-                let mut v = self.yr[c][i];
-                for (a, &xa) in xs.iter().enumerate() {
-                    v -= self.w_rs[c][i * s + a] * xa;
+                // x_R = yr − W_RS x_S  (x_S already solved in an ancestor)
+                let mut v = self.yr[yo + i];
+                for a in 0..s {
+                    v -= self.w_rs[wo + i * s + a] * x[vars[r + a]];
                 }
-                x[cl.vars[i]] = v;
+                x[vars[i]] = v;
             }
         }
         x
@@ -449,53 +509,49 @@ fn post_order(cliques: &[Clique]) -> Vec<usize> {
     order
 }
 
-/// Cholesky `A = L Lᵀ` for a small SPD `n×n` matrix (row-major), returns lower `L`.
+/// Cholesky `A = L Lᵀ` for a small SPD `n×n` matrix (row-major) into `out` (lower
+/// `L`). Only the lower triangle + diagonal of `out` is written (and only those are
+/// read by the solves), so `out` may be reused scratch with stale upper entries.
 ///
 /// # Panics
 /// If `A` is not positive definite (a non-positive pivot appears).
-fn cholesky_lower(a: &[f32], n: usize) -> Vec<f32> {
-    let mut l = vec![0.0f32; n * n];
+fn cholesky_lower_into(a: &[f32], n: usize, out: &mut [f32]) {
     for i in 0..n {
         for j in 0..=i {
             let mut sum = a[i * n + j];
             for k in 0..j {
-                sum -= l[i * n + k] * l[j * n + k];
+                sum -= out[i * n + k] * out[j * n + k];
             }
             if i == j {
                 assert!(sum > 0.0, "frontal not positive definite (pivot {sum})");
-                l[i * n + j] = sum.sqrt();
+                out[i * n + j] = sum.sqrt();
             } else {
-                l[i * n + j] = sum / l[j * n + j];
+                out[i * n + j] = sum / out[j * n + j];
             }
         }
     }
-    l
 }
 
-/// Solve `L z = b` (lower-triangular forward substitution).
-fn forward_solve(l: &[f32], b: &[f32], n: usize) -> Vec<f32> {
-    let mut z = vec![0.0f32; n];
+/// Solve `L z = b` (lower-triangular forward substitution) into `out`.
+fn forward_solve_into(l: &[f32], b: &[f32], n: usize, out: &mut [f32]) {
     for i in 0..n {
         let mut s = b[i];
         for k in 0..i {
-            s -= l[i * n + k] * z[k];
+            s -= l[i * n + k] * out[k];
         }
-        z[i] = s / l[i * n + i];
+        out[i] = s / l[i * n + i];
     }
-    z
 }
 
-/// Solve `Lᵀ x = z` (upper-triangular back substitution on `Lᵀ`).
-fn back_solve(l: &[f32], z: &[f32], n: usize) -> Vec<f32> {
-    let mut x = vec![0.0f32; n];
+/// Solve `Lᵀ x = z` (upper-triangular back substitution on `Lᵀ`) into `out`.
+fn back_solve_into(l: &[f32], z: &[f32], n: usize, out: &mut [f32]) {
     for i in (0..n).rev() {
         let mut s = z[i];
         for k in i + 1..n {
-            s -= l[k * n + i] * x[k];
+            s -= l[k * n + i] * out[k];
         }
-        x[i] = s / l[i * n + i];
+        out[i] = s / l[i * n + i];
     }
-    x
 }
 
 #[cfg(test)]
@@ -517,11 +573,11 @@ mod tests {
         let mut j = vec![0.0f32; d * d];
         let mut b = vec![0.0f32; d];
         for (c, cl) in jt.cliques.iter().enumerate() {
-            let m = cl.vars.len();
+            let (m, fo, bo) = (jt.m[c], jt.foff[c], jt.boff[c]);
             for i in 0..m {
-                b[cl.vars[i]] += jt.acc_rhs[c][i];
+                b[cl.vars[i]] += jt.acc_rhs[bo + i];
                 for k in 0..m {
-                    j[cl.vars[i] * d + cl.vars[k]] += jt.acc_front[c][i * m + k];
+                    j[cl.vars[i] * d + cl.vars[k]] += jt.acc_front[fo + i * m + k];
                 }
             }
             for r in 0..cl.n_res {

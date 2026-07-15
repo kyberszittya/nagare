@@ -1,0 +1,11 @@
+{
+  "experiment": "evolvent-e10-contiguous-storage",
+  "host": "Hajdus-MacBook-Pro (arm64, CPU) — criterion 0.5, §10",
+  "note": "Contiguous-storage rewrite of JunctionTreeCholesky (flat arenas + precomputed offsets + precomputed assembly map + reused scratch; no per-clique Vec alloc, no position() search in the hot path). SAME public API, SAME exact answer (4 exactness tests pass, example numbers byte-identical). Multifrontal solve 2.6-2.8x faster; measured speedup vs dense Gauss 5.9-255x -> 16.7-682x; flop/measured gap 5.0x -> 1.86x (large d). Closes E9's predicted ~5x headroom. Honest: dense baseline is Gaussian elim (~2x flops of pure Cholesky) so 682x partly reflects the slower baseline; a Cholesky baseline would show ~2x more residual.",
+  "rows": [
+    {"d": 105, "mf_before_us": 10.03, "mf_after_us": 3.86,  "dense_us": 64.43,   "speedup_before": 5.9,   "speedup_after": 16.7,  "analytic_flops": 18,   "flop_over_measured": 1.08, "mf_rewrite_speedup": 2.60},
+    {"d": 217, "mf_before_us": 21.00, "mf_after_us": 7.88,  "dense_us": 343.88,  "speedup_before": 16.4,  "speedup_after": 43.6,  "analytic_flops": 77,   "flop_over_measured": 1.77, "mf_rewrite_speedup": 2.66},
+    {"d": 441, "mf_before_us": 43.63, "mf_after_us": 15.76, "dense_us": 2753.1,  "speedup_before": 63.0,  "speedup_after": 174.7, "analytic_flops": 314,  "flop_over_measured": 1.80, "mf_rewrite_speedup": 2.77},
+    {"d": 889, "mf_before_us": 85.13, "mf_after_us": 31.69, "dense_us": 21630.0, "speedup_before": 255.5, "speedup_after": 682.5, "analytic_flops": 1270, "flop_over_measured": 1.86, "mf_rewrite_speedup": 2.69}
+  ]
+}
