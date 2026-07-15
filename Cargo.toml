@@ -36,3 +36,7 @@ harness = false
 [[bench]]
 name = "phase_pool_bench"
 harness = false
+
+[[bench]]
+name = "evolvent_solve_bench"
+harness = false

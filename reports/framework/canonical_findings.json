@@ -305,6 +305,21 @@
       "regression_tests": ["(reuses E5 junction_tree exactness tests; example is the integration evidence)"],
       "superseded_findings": [],
       "open_questions": ["higher-order interactions (degree>=3 -> width>=order+1)", "wire the SBSH width certificate as an explicit precondition check on JunctionTreeCholesky::new", "contiguous-storage rewrite + wall-clock (E5 follow-up)"]
+    },
+    {
+      "id": "F-EVO-11",
+      "claim": "WALL-CLOCK validation (criterion, §10) of the E5/F-EVO-7 analytic flop win: the multifrontal solve (JunctionTreeCholesky::solve) vs dense Gaussian (InfoEvolventHead::solve, identical answer) on the branching tree, d 105->889. MEASURED speedup 5.9x -> 16.4x -> 63x -> 255x -- grows exactly as the O(d*w^3) vs O(d^3) asymptotic predicts (same (d/w)^2 growth as the flop count), CONFIRMING the direction. BUT the analytic flop count (18x-1270x) OVERSTATED the deployable speedup by a stable ~5x (flop/measured -> 5.0x for large d): the dense baseline is a contiguous cache-friendly d*d array while the multifrontal chases many small per-clique Vecs (allocation + pointer-chase) and re-allocates frontals each solve. At d=889: 85us vs 21.8ms (255x, online-viable). The flop count is the CEILING a contiguous-storage rewrite would approach.",
+      "classification": "VALIDATION_WITH_CORRECTION (measurement; corrects the magnitude of F-EVO-7's flop claim)",
+      "source_experiment": "evolvent E9 (benches/evolvent_solve_bench.rs, criterion 0.5, Mac)",
+      "raw_evidence": ["reports/2026-07-16-evolvent-e9-wallclock.md", "reports/figures/evolvent-wallclock.png", "reports/figures/evolvent_e9_results.json"],
+      "confidence": "high (criterion 30 samples, tight CIs ~1-2%; ratios stable across the size sweep)",
+      "scope": "single machine (Mac arm64); dense baseline is Gaussian elimination (~2x flops of pure Cholesky) so the ratio is a mild over-estimate of the pure-algorithmic win; both solvers re-factorize from scratch each solve.",
+      "limitations": "absolute us are machine-specific (ratios transfer); a dense-CHOLESKY baseline would narrow the ratio by up to ~2x; the contiguous-storage rewrite that would close the ~5x flop-to-measured gap is NOT built.",
+      "framework_consequence": "CORRECTS F-EVO-7 and the JunctionTreeCholesky registry note: cite MEASURED 5.9x-255x as the deployable speedup, the 18x-1270x flop count as the CEILING. Direction and growth of F-EVO-7 stand; magnitude corrected downward ~5x. Gives the contiguous-storage rewrite a measured target (~5x on the table). Closes the 'analytic flops not wall-clock' caveat repeated across E5-E8.",
+      "code_changes": ["benches/evolvent_solve_bench.rs (new)", "Cargo.toml [[bench]] registration (criterion already a dev-dep)", "scripts/dev/plot_evolvent_wallclock.py", "canonical_components.json + F-EVO-7 note corrections"],
+      "regression_tests": ["(benchmark, not a correctness test; solver exactness already guarded by E5 junction_tree tests)"],
+      "superseded_findings": [],
+      "open_questions": ["contiguous-storage multifrontal (one arena) -> close the ~5x gap toward the flop ceiling", "dense-Cholesky baseline for the pure-algorithmic ratio", "wall-clock of the incremental refactorize_path once built"]
     }
   ]
 }

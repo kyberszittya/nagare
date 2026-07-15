@@ -1,0 +1,12 @@
+{
+  "experiment": "evolvent-e9-wallclock-benchmark",
+  "host": "Hajdus-MacBook-Pro (arm64, CPU) — criterion 0.5, §10",
+  "tool": "criterion (30 samples, 3s warmup)",
+  "note": "WALL-CLOCK validation of the E5 analytic flop win. Multifrontal (JunctionTreeCholesky::solve) vs dense Gaussian (InfoEvolventHead::solve), identical answer (E5). Measured speedup GROWS exactly as the O(d·w^3) vs O(d^3) asymptotic predicts (5.9x->255x over d 105->889), but is ~5x BELOW the analytic flop count -- the dense baseline is contiguous/cache-friendly, the multifrontal has per-clique small-Vec allocation overhead. Flop count is the CEILING the contiguous-storage rewrite would approach. At d=889: 85us vs 21.75ms (online-viable). Dense baseline is Gaussian elim (~2x flops of pure Cholesky) so ratio is a mild over-estimate of the pure win.",
+  "rows": [
+    {"d": 105, "mf_us": 10.03, "dense_us": 58.99,   "measured_speedup": 5.9,   "analytic_flops": 18,   "flop_over_measured": 3.1},
+    {"d": 217, "mf_us": 21.00, "dense_us": 344.2,   "measured_speedup": 16.4,  "analytic_flops": 77,   "flop_over_measured": 4.7},
+    {"d": 441, "mf_us": 43.63, "dense_us": 2747.0,  "measured_speedup": 63.0,  "analytic_flops": 314,  "flop_over_measured": 5.0},
+    {"d": 889, "mf_us": 85.13, "dense_us": 21753.0, "measured_speedup": 255.5, "analytic_flops": 1270, "flop_over_measured": 5.0}
+  ]
+}

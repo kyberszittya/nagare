@@ -1,0 +1,24 @@
+{
+  "experiment_id": "evolvent-e9",
+  "date": "2026-07-16",
+  "host": "Hajdus-MacBook-Pro (arm64, CPU) — criterion 0.5",
+  "result": "WALL-CLOCK validation of the E5 flop win. Multifrontal vs dense Gauss solve, d 105->889: MEASURED speedup 5.9x->255x, grows exactly as O(d*w^3) vs O(d^3) predicts (CONFIRMS direction) but ~5x BELOW the analytic flop count (18x-1270x) due to per-clique small-Vec allocation overhead. At d=889: 85us vs 21.8ms. Flop count is the CEILING a contiguous-storage rewrite approaches.",
+  "novelty_classification": {"VALIDATION_WITH_CORRECTION": ["F-EVO-11"], "note": "Corrects the MAGNITUDE of F-EVO-7's flop claim (direction/growth stand). Closes the 'analytic flops not wall-clock' caveat repeated across E5-E8. criterion = §10-pinned tool, already a dev-dep -> no new dependency, no §1 issue."},
+  "framework_impact": {
+    "interfaces_changed": [],
+    "defaults_changed": [],
+    "components_added_or_updated": ["JunctionTreeCholesky note: MEASURED 5.9x-255x is deployable, 18x-1270x flops is the ceiling", "F-EVO-7 note corrected"],
+    "guards_added": [],
+    "superseded": [],
+    "caveat_closed": "E5-E8 repeated caveat 'flop win is analytic not wall-clock' -> MEASURED (criterion)."
+  },
+  "source_changes": ["benches/evolvent_solve_bench.rs (new)", "Cargo.toml [[bench]] registration", "scripts/dev/plot_evolvent_wallclock.py", "reports/figures/evolvent_e9_results.json", "canonical_components.json + canonical_findings.json corrections"],
+  "regression_tests_added": ["(benchmark, not a correctness test)"],
+  "gates": {"suite": "179/0", "fmt": "clean", "clippy": "clean (incl bench target)"},
+  "corrections": {"F-EVO-7": "flop speedup 18x-1270x is the CEILING; MEASURED wall-clock (criterion) is 5.9x-255x, ~5x below, due to per-clique small-Vec allocation overhead. Direction+growth stand; magnitude corrected."},
+  "honest_scope": ["single machine (Mac arm64); absolute us machine-specific, ratios transfer", "dense baseline is Gaussian elim (~2x flops of pure Cholesky) -> ratio is a mild over-estimate of the pure win", "both solvers re-factorize from scratch each solve", "contiguous-storage rewrite (would close the ~5x gap) NOT built"],
+  "dependency_note": "criterion 0.5 already a dev-dependency (pinned in tools.yaml as the §10 benchmark tool) -> adding a [[bench]] is NOT a new dependency / no §1 core change.",
+  "environment_note": "Run on the Mac; kato15 NOT synced this session -- origin main ahead, kato15 fast-forwards on next pull.",
+  "next_experiment_authorized": false,
+  "next_experiment_proposal": {"name": "contiguous-storage multifrontal (one arena, no per-clique Vec) -> close the ~5x flop-to-measured gap; dense-Cholesky baseline; higher-order (degree>=3) representability", "reuses": ["JunctionTreeCholesky", "evolvent_solve_bench"], "constrained_by": ["F-EVO-11"]}
+}
