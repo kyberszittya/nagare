@@ -16,6 +16,11 @@ figures also have LaTeX/TikZ.
 | 6 | Signed-link balance & leakage audit | §6 | `svg/fig6-signed-link.svg` | — |
 | 7 | SBSH detector | §7 | (renders from source) | — |
 | 8 | Assimilation lifecycle | §8 | `svg/fig8-assimilation.svg` | — |
+| 9 | HSiKAN structural-leverage (signed KAN, causal double-dissociation) | §9 | `svg/fig9-hsikan.svg` | — |
+| 10 | CV rotation-invariant texture descriptor (phase_pool / dihedral) | §10 | `svg/fig10-cv-rotinvariant.svg` | — |
+| 11 | Rotor & holonomy geometry primitives | §11 | `svg/fig11-rotor-holonomy.svg` | — |
+| 12 | KAN / HSiKAN learnable spline op (Chebyshev-CR) | §12 | `svg/fig12-kan-spline.svg` | — |
+| 13 | Scatter-locality (systems / performance) | §13 | `svg/fig13-scatter-locality.svg` | — |
 
 ## How to use
 

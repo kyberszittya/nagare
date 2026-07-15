@@ -194,3 +194,77 @@ flowchart LR
   ST --> AUTH{"next experiment<br/>authorized?"}
   AUTH -->|yes| E
 ```
+
+---
+
+## Fig. 9 — HSiKAN structural-leverage (signed KAN + causal double-dissociation)
+
+```mermaid
+flowchart TB
+  IN["structured input<br/>(signed hypergraph / support chain)"] --> HSK["HSiKAN<br/>signed KAN over the structure<br/>(per-edge Chebyshev-CR basis)"]
+  HSK --> OUT["prediction"]
+  IN --> T1["arm: TRUE structure"]
+  IN --> T2["arm: SCRAMBLED structure (ablate topology)"]
+  IN --> T3["arm: DeepSets (ablate relations)"]
+  T1 --> DD["double-dissociation<br/>true &gt; scramble AND true &gt; DeepSets<br/>=&gt; structure is CAUSAL (H2)"]
+  T2 --> DD
+  T3 --> DD
+  DD --> SC["structural benefit grows 3.7x -&gt; 61x with chain length (H1 scaling)"]
+```
+
+---
+
+## Fig. 10 — CV rotation-invariant texture descriptor (phase_pool / dihedral)
+
+```mermaid
+flowchart TB
+  IMG["image"] --> FLD["learned orientation field (gx, gy)<br/>(quat-conv / dihedral-steer)"]
+  FLD --> HIST["soft orientation histogram h<br/>(magnitude-weighted, circular)"]
+  HIST --> DFT["|DFT(h)| magnitudes, low bins<br/>rotation shifts h -&gt; |DFT| invariant"]
+  DFT --> FEAT["rotation-INVARIANT descriptor (phase_pool)"]
+  FLD --> GC["D_n group-conv arm<br/>steer to |G| frames -&gt; group-max"]
+  GC --> FEAT
+  FEAT --> CLS["classify (KTH-TIPS2-b materials, rotated shapes)"]
+```
+
+---
+
+## Fig. 11 — Rotor & holonomy geometry primitives
+
+```mermaid
+flowchart TB
+  CYC["signed cycle: v0 -&gt; v1 -&gt; ... -&gt; v0"] --> RP["rotor product along the cycle<br/>(cayley_rotor per edge)"]
+  RP --> HOL["rotor_holonomy<br/>ORDER-SENSITIVE loop invariant"]
+  HOL --> USE["holonomy channel -&gt; CPML core (signed-link)"]
+  ANG["orientation theta"] --> RS["rotor_spike<br/>von-Mises narrow tuning<br/>+ divisive normalization (V1-like)"]
+  RS --> BANK["oriented tuning bank -&gt; detector / C-cell"]
+```
+
+---
+
+## Fig. 12 — KAN / HSiKAN learnable spline op (Chebyshev-CR)
+
+```mermaid
+flowchart LR
+  X["input value x"] --> KNOT["Chebyshev knots + control points"]
+  KNOT --> CR["Catmull-Rom / Chebyshev-CR spline eval"]
+  CR --> Y["y = learnable per-edge nonlinearity"]
+  GY["grad_y"] --> BW["closed-form backward<br/>(coefs + input) · FD-verified"]
+  BW --> GX["grad_x, grad_coefs"]
+  NOTE["real [-1,1] edge weights beat the +/-1 indicator (OTC 0.9076 vs 0.9041)"]:::note
+  classDef note fill:#fff3cd,stroke:#d0a800,color:#5a4a00;
+```
+
+---
+
+## Fig. 13 — Scatter-locality (systems / performance)
+
+```mermaid
+flowchart LR
+  G["sparse graph gather/scatter"] --> SM["sparse-mm (locality-preserving)"]
+  G --> IA["index_add (scatter)"]
+  SM --> CMP["compare, per-thread"]
+  IA --> CMP
+  CMP --> R1["2.9x @ 1-thread once accumulator &gt; L3"]
+  CMP --> R2["end-to-end 1.3-1.4x only above cache AND static graph<br/>GPU atomics (82%) = where Nagare pays"]
+```
