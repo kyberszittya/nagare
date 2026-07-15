@@ -1,0 +1,14 @@
+{
+  "experiment": "evolvent-e8-width-representability",
+  "host": "Hajdus-MacBook-Pro (arm64, CPU) — run locally, away from kato15",
+  "seeds": [0,1,2,3,4],
+  "k_triples": 12, "d": 37, "narrow_d": 25, "clique_width": 4, "per": 40,
+  "note": "Non-additive (product) cross-clique term prod_k = rk0*rk1, weight beta. MF-WIDE (multifrontal on width-4 clique tree hosting the product) == DENSE-WIDE EXACTLY at every (beta,seed), holds ~0.998 flat. NARROW (linear-only, product omitted) COLLAPSES as beta grows: 0.999 -> 0.926 -> 0.748 -> 0.376 -> 0.060. REPRESENTABILITY limit (beta omitted regardless of data), distinct from the E6/E7 estimation gap. Required treewidth = target interaction order; SBSH width certificate is the check. MF storage 14% of dense (width 4). Medians of 5 seeds.",
+  "rows": [
+    {"beta": 0.0, "mf_wide_r2": 0.9985, "dense_wide_r2": 0.9985, "narrow_r2": 0.9986, "narrow_q1": 0.9985, "narrow_q3": 0.9988},
+    {"beta": 0.5, "mf_wide_r2": 0.9985, "dense_wide_r2": 0.9985, "narrow_r2": 0.9261, "narrow_q1": 0.896, "narrow_q3": 0.930},
+    {"beta": 1.0, "mf_wide_r2": 0.9985, "dense_wide_r2": 0.9985, "narrow_r2": 0.7475, "narrow_q1": 0.668, "narrow_q3": 0.774},
+    {"beta": 2.0, "mf_wide_r2": 0.9985, "dense_wide_r2": 0.9985, "narrow_r2": 0.3759, "narrow_q1": 0.303, "narrow_q3": 0.455},
+    {"beta": 4.0, "mf_wide_r2": 0.9986, "dense_wide_r2": 0.9986, "narrow_r2": 0.0600, "narrow_q1": 0.032, "narrow_q3": 0.138}
+  ]
+}

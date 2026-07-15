@@ -290,6 +290,21 @@
       "regression_tests": ["junction_tree::star_tree_equals_dense_with_shared_separator"],
       "superseded_findings": [],
       "open_questions": ["a genuinely non-additive cross-clique feature (explicit product spanning a separator)", "joint scarcity x sharing sweep at larger d (shed small-d noise)", "contiguous-storage rewrite + wall-clock (E5 follow-up)"]
+    },
+    {
+      "id": "F-EVO-10",
+      "claim": "A genuinely NON-ADDITIVE cross-clique term is a REPRESENTABILITY limit, not an estimation gap. Target y = Sum_k[w0*rk0 + w1*rk1 + beta*(rk0*rk1)] + w_h*h; the product prod_k=rk0*rk1 is fittable ONLY by a clique wide enough to contain both operands. Measured (Mac, 5 seeds x 5 beta, K=12 triples, width-4 star clique tree): MF-WIDE (multifrontal hosting the product) R2 == DENSE-WIDE R2 EXACTLY at every (beta,seed), flat ~0.998 regardless of beta, at 14% of dense storage. NARROW (linear-only, product omitted) COLLAPSES as beta grows: 0.999 -> 0.926 -> 0.748 -> 0.376 -> 0.060 -- and this is the DATA-RICH regime (per=40), so more data does NOT close it: the term is simply absent from the narrow hypothesis space. The required treewidth = the target's interaction order (a degree-2 interaction needs width >= 3); the SBSH bounded-width certificate is exactly the check that the tree's width covers the data's interaction order -- the validity precondition for the whole E4-E7 line.",
+      "classification": "NEW_CANONICAL_CAPABILITY (measurement; closes the non-additive question, distinct axis from F-EVO-8/9)",
+      "source_experiment": "evolvent E8 (examples/evolvent_width.rs, Mac 5 seeds x 5 beta)",
+      "raw_evidence": ["reports/2026-07-15-evolvent-e8-width.md", "reports/figures/evolvent-width.png", "reports/figures/evolvent_e8_results.json"],
+      "confidence": "high (5 seeds; MF-WIDE==DENSE-WIDE is an algebraic identity, NARROW collapse is monotone and large across all seeds)",
+      "scope": "explicit product feature (linear-in-features model; the clique tree makes the interaction affordable+exactly-solvable at bounded width, does NOT discover it); degree-2 interaction, single arity. Rich regime (per=40) -- deliberately NOT scarcity.",
+      "limitations": "the non-additive term must be an explicit feature; NARROW's collapse is because the feature is absent from its basis (honest content of 'too narrow'); higher-order interactions (degree>=3 -> width>=order+1) untested; beta is a controlled dial, not fit from real data.",
+      "framework_consequence": "No new component (reuses JunctionTreeCholesky + InfoEvolventHead). CLOSES the non-additive-cross-clique open question of F-EVO-5/6/7/9: it does NOT touch the E6/E7 estimation plateau -- it is a DISTINCT axis (representability = treewidth vs interaction order). Establishes the width certificate as the VALIDITY precondition for the exactness line: the multifrontal solver handles non-additive terms exactly at O(d*w^3) iff width >= interaction order. Separates the two mechanisms cleanly: estimation gap (E6, closes with data) vs representability gap (E8, closes with width).",
+      "code_changes": ["examples/evolvent_width.rs (new)", "scripts/dev/plot_evolvent_width.py"],
+      "regression_tests": ["(reuses E5 junction_tree exactness tests; example is the integration evidence)"],
+      "superseded_findings": [],
+      "open_questions": ["higher-order interactions (degree>=3 -> width>=order+1)", "wire the SBSH width certificate as an explicit precondition check on JunctionTreeCholesky::new", "contiguous-storage rewrite + wall-clock (E5 follow-up)"]
     }
   ]
 }

@@ -1,0 +1,28 @@
+{
+  "experiment_id": "evolvent-e8",
+  "date": "2026-07-15",
+  "host": "Hajdus-MacBook-Pro (arm64, CPU) -- run locally, away from kato15",
+  "result": "A non-additive (product) cross-clique term is a REPRESENTABILITY limit, not an estimation gap. MF-WIDE (width-4 multifrontal hosting prod_k=rk0*rk1) == DENSE-WIDE exactly at every (beta,seed), flat ~0.998 at 14% storage; NARROW (linear-only) collapses 0.999->0.060 as beta grows -- in the DATA-RICH regime, so more data does NOT help. Required treewidth = interaction order; SBSH width certificate is the validity check for the whole E4-E7 exactness line.",
+  "novelty_classification": {"NEW_CANONICAL_CAPABILITY": ["F-EVO-10"], "note": "Closes the non-additive-cross-clique open question of F-EVO-5/6/7/9. It is a DISTINCT axis from the E6/E7 estimation plateau: representability (treewidth vs interaction order), which closes with WIDTH not DATA."},
+  "framework_impact": {
+    "interfaces_changed": [],
+    "defaults_changed": [],
+    "components_added_or_updated": [],
+    "guards_added": [],
+    "superseded": [],
+    "open_question_resolved": "F-EVO-5/6/7/9 'a genuinely non-additive cross-clique feature -- does it break the plateau?' -> ANSWERED: it does NOT touch the estimation plateau; it is a REPRESENTABILITY limit (width < interaction order) that the multifrontal solver handles EXACTLY at the right width."
+  },
+  "source_changes": ["examples/evolvent_width.rs (new)", "scripts/dev/plot_evolvent_width.py", "reports/figures/evolvent_e8_results.json"],
+  "regression_tests_added": ["(none in src/ -- reuses JunctionTreeCholesky + InfoEvolventHead; E5 tests already guard solver exactness; example is integration evidence)"],
+  "gates": {"suite": "179/0", "fmt": "clean", "clippy": "clean"},
+  "corrections": {},
+  "two_mechanisms_separated": {
+    "estimation_gap": "E6 (F-EVO-8): dropping the separator coupling -- closes with more DATA (scarcity-dependent)",
+    "sharing_threshold": "E7 (F-EVO-9): separator-sharing -- threshold, saturates",
+    "representability_gap": "E8 (F-EVO-10): non-additive term -- closes with WIDTH (treewidth >= interaction order), NOT data"
+  },
+  "honest_scope": ["product is an explicit feature (linear-in-features model; clique tree affords+solves it, does not discover it)", "degree-2 interaction, single arity", "rich regime per=40 (deliberately not scarcity)", "beta is a controlled dial"],
+  "environment_note": "Run entirely on the Mac (arm64, CPU); kato15 NOT synced this session (working away from it) -- origin main is ahead, kato15 fast-forwards on next pull.",
+  "next_experiment_authorized": false,
+  "next_experiment_proposal": {"name": "higher-order interactions (degree>=3 -> width>=order+1); wire SBSH width certificate as a JunctionTreeCholesky::new precondition; contiguous-storage rewrite + criterion wall-clock", "reuses": ["JunctionTreeCholesky", "InfoEvolventHead"], "constrained_by": ["F-EVO-10"]}
+}
