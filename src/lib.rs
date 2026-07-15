@@ -10,6 +10,7 @@ pub mod detector;
 pub mod features;
 pub mod junction_tree;
 pub mod learner;
+pub mod mesh_tensor;
 pub mod metrics;
 pub mod online;
 pub mod ops;
@@ -42,6 +43,7 @@ pub use learner::{
     evaluate_local, forward_timing, run_stress_ablation, Config, EntropyPoolLocalLearner, GateMode,
     StressKind, StressRow, Timing,
 };
+pub use mesh_tensor::{MeshTensor, MeshTopology};
 pub use metrics::{auroc, clifford_probability_error, cross_entropy, entropy2, softmax2, Metrics};
 pub use online::{BlockEvolventHead, EvolventHead, InfoEvolventHead};
 pub use ops::adam::{adam_step, AdamState};

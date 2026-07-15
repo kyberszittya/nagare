@@ -5,6 +5,26 @@
   "note": "Query this registry before creating a new component (anti-bloat rule). All backwards are hand-derived and FD-verified; there is no autograd in this crate.",
   "components": [
     {
+      "name": "MeshTensor / MeshTopology",
+      "purpose": "The hypergraph latent space AS a mesh tensor (contraction, NOT inversion). The signed-hypergraph incidence (cycles/signs/scale) is the MESH (MeshTopology = the operator side); the latent is a TENSOR FIELD on it -- a d-vector per node and per hyperedge (MeshTensor = the state side). Computation is CONTRACTION along the mesh (node<->edge), delegating to hg_message. The on-mission hypergraph<->tensor conjugation and the substrate a holonomy embedding (HSiKAN / Gomb-Soma) + holonomy feedback act on. Replaces the flat-vector/precision-matrix mis-framing of the (frozen) evolvent line.",
+      "owning_module": "src/mesh_tensor.rs",
+      "symbols": ["MeshTopology", "MeshTopology::new", "MeshTopology::node_to_edge", "MeshTopology::edge_to_node", "MeshTopology::conv_round", "MeshTopology::conv_round_backward", "MeshTensor", "MeshTensor::on_nodes", "MeshTensor::lift_to_edges", "MeshTensor::project_to_nodes", "MeshTensor::conv_round"],
+      "version": "0.1",
+      "status": "CANONICAL",
+      "source_experiment": "hypergraph-latent-as-mesh-tensor (2026-07-16, user directive: 'use hypergraph latent space as a mesh tensor instead')",
+      "evidence_paths": [],
+      "supported_tasks": ["hypergraph latent as a mesh tensor field (contraction substrate)", "signed-HGNN conv round node->edge->node with FD-verified backward", "the field HSiKAN / Gomb-Soma / holonomy feedback operate on"],
+      "observation_schema": "MeshTopology(cycles (n_edges,k), signs, scale (n_nodes), n_nodes, k); MeshTensor node field (n_nodes,d)",
+      "output_schema": "node/edge tensor fields (contracted); conv_round -> (n_nodes,d); conv_round_backward -> grad on input nodes (composed hg_message backwards, FD-verified)",
+      "dependencies": ["hg_message"],
+      "known_limitations": ["thin typed wrapper over hg_message contraction -- the contraction is linear (signed mean / signed sum); nonlinear per-edge maps (HSiKAN/Gomb-Soma) + the holonomy-feedback learning rule are the NEXT layers, not yet wired", "topology is fixed structural geometry (no gradient through it)"],
+      "canonical_tests": ["mesh_tensor::conv_round_equals_manual_hg_composition", "mesh_tensor::conv_round_backward_matches_fd", "mesh_tensor::isolated_node_stays_zero_after_projection", "mesh_tensor::topology_rejects_out_of_range_corner"],
+      "supersedes": "the flat-vector-into-RLS / precision-matrix latent framing (evolvent line, frozen)",
+      "superseded_by": null,
+      "default": true,
+      "note": "ON-MISSION re-anchor after the evolvent/Cholesky devolution (see feedback-nagare-closed-form-thesis-not-gaps): latent = mesh tensor contracted, no normal equations. Next: nonlinear per-edge map (HSiKAN/Gomb-Soma) on the edge field + entropy/holonomy feedback as the learning rule."
+    },
+    {
       "name": "conv2d",
       "purpose": "Learned 2-D convolution — the Neocognitron S-cell (spatial feature detector).",
       "owning_module": "src/ops/conv2d.rs",
