@@ -16,7 +16,10 @@ figures also have LaTeX/TikZ.
 | 6 | Signed-link balance & leakage audit | §6 | `svg/fig6-signed-link.svg` | — |
 | 7 | SBSH detector | §7 | (renders from source) | — |
 | 8 | Assimilation lifecycle | §8 | `svg/fig8-assimilation.svg` | — |
-| 9 | HSiKAN structural-leverage (signed KAN, causal double-dissociation) | §9 | `svg/fig9-hsikan.svg` | — |
+| 9 | HSiKAN structural-leverage (summary) | §9 | `svg/fig9-hsikan.svg` | — |
+| 9a | HSiKAN experimental design (falsification protocol) | §9a | `svg/fig9a-hsikan-design.svg` | — |
+| 9b | HSiKAN double-dissociation (per-node arch vs structure) | §9b | `svg/fig9b-hsikan-dissociation.svg` | — |
+| 9c | HSiKAN H1 scaling — **measured plot** (5 seeds, data `data/hsikan_ladder.json`) | §9c | `svg/fig9c-hsikan-scaling.png` | — |
 | 10 | CV rotation-invariant texture descriptor (phase_pool / dihedral) | §10 | `svg/fig10-cv-rotinvariant.svg` | — |
 | 11 | Rotor & holonomy geometry primitives | §11 | `svg/fig11-rotor-holonomy.svg` | — |
 | 12 | KAN / HSiKAN learnable spline op (Chebyshev-CR) | §12 | `svg/fig12-kan-spline.svg` | — |

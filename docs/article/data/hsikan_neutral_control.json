@@ -1,0 +1,160 @@
+{
+  "config": {
+    "seeds": 5,
+    "hsikan_hidden": 32,
+    "n_layers": 2,
+    "n_train": 256,
+    "n_test": 1024,
+    "epochs": 300,
+    "scramble_seed": 0,
+    "swaps_per_edge": 20,
+    "lengths": [
+      4,
+      6,
+      8,
+      12,
+      16
+    ]
+  },
+  "params": {
+    "hsikan": 3713,
+    "mlp_hidden": 56,
+    "ds_hidden": 59
+  },
+  "scramble_stats": {
+    "n_vertices": 7,
+    "n_pos_edges": 5,
+    "n_neg_edges": 3,
+    "signed_degree_preserved": true,
+    "n_edges_changed": 3,
+    "frac_incidence_changed": 0.375,
+    "accepted_swaps": 3
+  },
+  "cells": {
+    "structural/hsikan_true": {
+      "median": 0.23859,
+      "iqr": 0.1493,
+      "mean": 0.28303,
+      "per_seed": [
+        0.14155,
+        0.23708,
+        0.23859,
+        0.38639,
+        0.41155
+      ],
+      "n_params": 3713
+    },
+    "structural/hsikan_scrambled": {
+      "median": 0.90806,
+      "iqr": 0.09157,
+      "mean": 0.88867,
+      "per_seed": [
+        0.7755,
+        0.83757,
+        0.90806,
+        0.92913,
+        0.99309
+      ],
+      "n_params": 3713
+    },
+    "structural/deepsets": {
+      "median": 0.74164,
+      "iqr": 0.04035,
+      "mean": 0.7508,
+      "per_seed": [
+        0.72598,
+        0.73233,
+        0.74164,
+        0.77269,
+        0.78138
+      ],
+      "n_params": 3718
+    },
+    "structural/mlp": {
+      "median": 0.34959,
+      "iqr": 0.0608,
+      "mean": 0.37241,
+      "per_seed": [
+        0.29218,
+        0.32565,
+        0.34959,
+        0.38645,
+        0.50817
+      ],
+      "n_params": 3697
+    },
+    "bag/hsikan_true": {
+      "median": 0.00443,
+      "iqr": 0.00114,
+      "mean": 0.0042,
+      "per_seed": [
+        0.00258,
+        0.00349,
+        0.00443,
+        0.00463,
+        0.00587
+      ],
+      "n_params": 3713
+    },
+    "bag/hsikan_scrambled": {
+      "median": 0.00471,
+      "iqr": 0.00235,
+      "mean": 0.005,
+      "per_seed": [
+        0.00255,
+        0.00379,
+        0.00471,
+        0.00614,
+        0.00781
+      ],
+      "n_params": 3713
+    },
+    "bag/deepsets": {
+      "median": 0.0,
+      "iqr": 1e-05,
+      "mean": 1e-05,
+      "per_seed": [
+        0.0,
+        0.0,
+        0.0,
+        1e-05,
+        3e-05
+      ],
+      "n_params": 3718
+    },
+    "bag/mlp": {
+      "median": 0.07646,
+      "iqr": 0.00883,
+      "mean": 0.07706,
+      "per_seed": [
+        0.07045,
+        0.07328,
+        0.07646,
+        0.08211,
+        0.08299
+      ],
+      "n_params": 3697
+    }
+  },
+  "summary": {
+    "bag_deepsets_over_hsikan": 0.0,
+    "bag_mlp_over_deepsets": 76460000.0,
+    "bag_mlp_over_hsikan": 17.26,
+    "structural_deepsets_over_hsikan": 3.108,
+    "structural_mlp_over_hsikan": 1.465
+  },
+  "verdict": {
+    "label": "SUPPORTED",
+    "strict_checks": {
+      "deepsets_ties_hsikan_on_bag": false,
+      "deepsets_beats_mlp_on_bag": true,
+      "hsikan_beats_deepsets_on_structural": true
+    },
+    "corrected_checks": {
+      "deepsets_captures_bag_advantage": true,
+      "deepsets_beats_mlp_on_bag": true,
+      "hsikan_beats_deepsets_on_structural": true
+    },
+    "note": "strict 'tie' band fails only when DeepSets is BETTER than HSiKAN on bag (bag is exactly separable \u2192 the per-node control captures it) \u2014 that strengthens, not weakens, the conclusion; corrected check is one-sided."
+  }
+}

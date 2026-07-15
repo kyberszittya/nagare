@@ -1,0 +1,370 @@
+{
+  "config": {
+    "seeds": 5,
+    "hsikan_hidden": 32,
+    "n_layers": 2,
+    "n_train": 256,
+    "n_test": 1024,
+    "epochs": 300,
+    "scramble_seed": 0,
+    "swaps_per_edge": 20,
+    "lengths": [
+      4,
+      6,
+      8,
+      12,
+      16
+    ]
+  },
+  "rows": [
+    {
+      "n_nodes": 4,
+      "hsikan_true": {
+        "median": 0.00082,
+        "iqr": 0.00018,
+        "mean": 0.00077,
+        "per_seed": [
+          0.0005,
+          0.00067,
+          0.00082,
+          0.00085,
+          0.00102
+        ],
+        "n_params": 3713
+      },
+      "hsikan_scrambled": {
+        "median": 0.00303,
+        "iqr": 0.00048,
+        "mean": 0.00341,
+        "per_seed": [
+          0.00164,
+          0.00299,
+          0.00303,
+          0.00347,
+          0.00591
+        ],
+        "n_params": 3713
+      },
+      "deepsets": {
+        "median": 0.0977,
+        "iqr": 0.00784,
+        "mean": 0.09821,
+        "per_seed": [
+          0.0869,
+          0.0951,
+          0.0977,
+          0.10293,
+          0.10844
+        ],
+        "n_params": 3718
+      },
+      "mlp": {
+        "median": 0.00333,
+        "iqr": 0.00033,
+        "mean": 0.00312,
+        "per_seed": [
+          0.00234,
+          0.00303,
+          0.00333,
+          0.00336,
+          0.00354
+        ],
+        "n_params": 3771
+      },
+      "structure_benefit": 3.695,
+      "msgpass_benefit": 119.146,
+      "mlp_over_hsikan": 4.061,
+      "scramble_changed": 2,
+      "params": {
+        "hsikan": 3713,
+        "mlp_hidden": 58,
+        "ds_hidden": 59
+      }
+    },
+    {
+      "n_nodes": 6,
+      "hsikan_true": {
+        "median": 0.00443,
+        "iqr": 0.00035,
+        "mean": 0.00445,
+        "per_seed": [
+          0.00382,
+          0.0042,
+          0.00443,
+          0.00456,
+          0.00522
+        ],
+        "n_params": 3713
+      },
+      "hsikan_scrambled": {
+        "median": 0.0487,
+        "iqr": 0.00408,
+        "mean": 0.0489,
+        "per_seed": [
+          0.0441,
+          0.04663,
+          0.0487,
+          0.05071,
+          0.05437
+        ],
+        "n_params": 3713
+      },
+      "deepsets": {
+        "median": 0.18923,
+        "iqr": 0.01247,
+        "mean": 0.19198,
+        "per_seed": [
+          0.17855,
+          0.18379,
+          0.18923,
+          0.19626,
+          0.21204
+        ],
+        "n_params": 3718
+      },
+      "mlp": {
+        "median": 0.01781,
+        "iqr": 0.00325,
+        "mean": 0.01726,
+        "per_seed": [
+          0.01346,
+          0.01611,
+          0.01781,
+          0.01936,
+          0.01954
+        ],
+        "n_params": 3763
+      },
+      "structure_benefit": 10.993,
+      "msgpass_benefit": 42.716,
+      "mlp_over_hsikan": 4.02,
+      "scramble_changed": 2,
+      "params": {
+        "hsikan": 3713,
+        "mlp_hidden": 57,
+        "ds_hidden": 59
+      }
+    },
+    {
+      "n_nodes": 8,
+      "hsikan_true": {
+        "median": 0.00545,
+        "iqr": 0.00073,
+        "mean": 0.00497,
+        "per_seed": [
+          0.00237,
+          0.00473,
+          0.00545,
+          0.00545,
+          0.00684
+        ],
+        "n_params": 3713
+      },
+      "hsikan_scrambled": {
+        "median": 0.08376,
+        "iqr": 0.01341,
+        "mean": 0.088,
+        "per_seed": [
+          0.07155,
+          0.07668,
+          0.08376,
+          0.09009,
+          0.11791
+        ],
+        "n_params": 3713
+      },
+      "deepsets": {
+        "median": 0.14074,
+        "iqr": 0.00803,
+        "mean": 0.14612,
+        "per_seed": [
+          0.1242,
+          0.13883,
+          0.14074,
+          0.14686,
+          0.17996
+        ],
+        "n_params": 3718
+      },
+      "mlp": {
+        "median": 0.04151,
+        "iqr": 0.00751,
+        "mean": 0.04447,
+        "per_seed": [
+          0.03937,
+          0.0415,
+          0.04151,
+          0.04901,
+          0.05098
+        ],
+        "n_params": 3753
+      },
+      "structure_benefit": 15.369,
+      "msgpass_benefit": 25.824,
+      "mlp_over_hsikan": 7.617,
+      "scramble_changed": 4,
+      "params": {
+        "hsikan": 3713,
+        "mlp_hidden": 56,
+        "ds_hidden": 59
+      }
+    },
+    {
+      "n_nodes": 12,
+      "hsikan_true": {
+        "median": 0.00439,
+        "iqr": 0.0009,
+        "mean": 0.00428,
+        "per_seed": [
+          0.00284,
+          0.00371,
+          0.00439,
+          0.00461,
+          0.00586
+        ],
+        "n_params": 3713
+      },
+      "hsikan_scrambled": {
+        "median": 0.27071,
+        "iqr": 0.04589,
+        "mean": 0.25068,
+        "per_seed": [
+          0.20681,
+          0.22514,
+          0.27071,
+          0.27103,
+          0.27972
+        ],
+        "n_params": 3713
+      },
+      "deepsets": {
+        "median": 0.17024,
+        "iqr": 0.01401,
+        "mean": 0.17863,
+        "per_seed": [
+          0.16495,
+          0.16763,
+          0.17024,
+          0.18164,
+          0.2087
+        ],
+        "n_params": 3718
+      },
+      "mlp": {
+        "median": 0.09753,
+        "iqr": 0.01507,
+        "mean": 0.09652,
+        "per_seed": [
+          0.08473,
+          0.08521,
+          0.09753,
+          0.10027,
+          0.11487
+        ],
+        "n_params": 3727
+      },
+      "structure_benefit": 61.665,
+      "msgpass_benefit": 38.779,
+      "mlp_over_hsikan": 22.216,
+      "scramble_changed": 8,
+      "params": {
+        "hsikan": 3713,
+        "mlp_hidden": 54,
+        "ds_hidden": 59
+      }
+    },
+    {
+      "n_nodes": 16,
+      "hsikan_true": {
+        "median": 0.0035,
+        "iqr": 0.00151,
+        "mean": 0.00379,
+        "per_seed": [
+          0.00249,
+          0.00283,
+          0.0035,
+          0.00434,
+          0.00578
+        ],
+        "n_params": 3713
+      },
+      "hsikan_scrambled": {
+        "median": 0.21328,
+        "iqr": 0.00804,
+        "mean": 0.21597,
+        "per_seed": [
+          0.19608,
+          0.21133,
+          0.21328,
+          0.21937,
+          0.23978
+        ],
+        "n_params": 3713
+      },
+      "deepsets": {
+        "median": 0.1401,
+        "iqr": 0.01494,
+        "mean": 0.13889,
+        "per_seed": [
+          0.11764,
+          0.12623,
+          0.1401,
+          0.14117,
+          0.16932
+        ],
+        "n_params": 3718
+      },
+      "mlp": {
+        "median": 0.11065,
+        "iqr": 0.00653,
+        "mean": 0.11699,
+        "per_seed": [
+          0.10782,
+          0.10819,
+          0.11065,
+          0.11472,
+          0.14354
+        ],
+        "n_params": 3693
+      },
+      "structure_benefit": 60.937,
+      "msgpass_benefit": 40.029,
+      "mlp_over_hsikan": 31.614,
+      "scramble_changed": 13,
+      "params": {
+        "hsikan": 3713,
+        "mlp_hidden": 52,
+        "ds_hidden": 59
+      }
+    }
+  ],
+  "verdict": {
+    "label": "SUPPORTED",
+    "strict_checks": {
+      "structure_benefit_positive_all_rungs": true,
+      "msgpass_benefit_positive_all_rungs": true,
+      "structure_benefit_non_vanishing": true,
+      "msgpass_benefit_non_vanishing": false
+    },
+    "corrected_checks": {
+      "structure_benefit_positive_all_rungs": true,
+      "structure_benefit_grows_with_richness": true,
+      "msgpass_benefit_positive_all_rungs": true
+    },
+    "note": "H1 = structure benefit grows with richness (it does, 3.7\u219261\u00d7). msgpass benefit is huge at every rung but largest at the shortest chain, so the strict monotonicity bound mis-fires.",
+    "structure_benefit_by_length": [
+      3.695,
+      10.993,
+      15.369,
+      61.665,
+      60.937
+    ],
+    "msgpass_benefit_by_length": [
+      119.146,
+      42.716,
+      25.824,
+      38.779,
+      40.029
+    ]
+  }
+}
