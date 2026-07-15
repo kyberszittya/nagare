@@ -86,7 +86,7 @@ fn main() {
     let rff = Rff::new(&mut rng, 1.5);
 
     // A: evolvent forgetting-RLS head over the RFF basis
-    let mut head = EvolventHead::new(M, 1.0, LAMBDA).with_trace_cap(TRACE_CAP);
+    let mut head = EvolventHead::new(M, 1, 1.0, LAMBDA).with_trace_cap(TRACE_CAP);
     // B: RFF + linear head by Adam
     let mut lin_b = LinearLayer::new(M, 1, 21 + seed_base);
     let (mut b_w, mut b_b) = (AdamState::new(lin_b.w.len()), AdamState::new(lin_b.b.len()));
@@ -127,8 +127,8 @@ fn main() {
 
         // A: predict-then-update (evolvent)
         let t0 = Instant::now();
-        let pa = head.predict(&phi);
-        head.update(&phi, y);
+        let pa = head.predict(&phi)[0];
+        head.update(&phi, &[y]);
         ta += t0.elapsed().as_nanos();
 
         // B: predict-then-update (RFF + linear, Adam)

@@ -1,30 +1,32 @@
 //! Evolvent (incremental / online) learning — the closed-form per-sample update
 //! that does NOT require a backward sweep, the counterpoint to slow batch
 //! backprop. `EvolventHead` is an exact **forgetting recursive-least-squares**
-//! (RLS) readout over a fixed feature basis: it consumes one `(phi, y)` at a
-//! time, updates in closed form via Sherman–Morrison in `O(d^2)`, and — unlike
-//! SGD — reaches the (regularised) least-squares optimum in one pass and TRACKS
-//! a drifting target through the forgetting factor `lambda`.
+//! (RLS) readout with `C` outputs: `C=1` for regression, `C=n_classes` one-hot
+//! (`argmax`) for classification. It consumes one `(phi, y)` at a time, updates
+//! in closed form via Sherman–Morrison, and — unlike SGD — reaches the
+//! (regularised) least-squares optimum in one pass and TRACKS a drifting target
+//! through the forgetting factor `lambda`.
+//!
+//! **Multi-output is cheap:** the precision matrix `P` (`d×d`) is SHARED across
+//! all `C` outputs (they share the feature covariance), so a step costs
+//! `O(d^2 + d·C)`, not `C·O(d^2)`.
 //!
 //! Verified (the closed-form analogue of FD-verification): on stationary data the
 //! recursion converges to the batch ridge normal-equations solution
 //! `w = (Phi^T Phi + ridge·I)^{-1} Phi^T y` (see `online::tests`).
-//!
-//! Contract:
-//! - Preconditions: `phi.len() == d`; `ridge > 0`; `lambda in (0, 1]`.
-//! - Postconditions: after `update`, `w` is the forgetting-RLS estimate; `predict`
-//!   returns `phi·w`.
 
-/// Exact forgetting-RLS readout: `w in R^d`, precision `P = (Phi^T Phi + ridge I)^{-1}`
-/// maintained incrementally. `lambda == 1` is standard RLS (stationary);
-/// `lambda < 1` forgets old data to track drift.
+/// Exact forgetting-RLS readout with `C` outputs. `w` is `(C, d)` row-major (row
+/// `k` = output `k`'s weights); precision `P = (Phi^T Phi + ridge I)^{-1}` is
+/// maintained incrementally and shared across outputs. `lambda == 1` is standard
+/// RLS (stationary); `lambda < 1` forgets old data to track drift.
 #[derive(Clone, Debug)]
 pub struct EvolventHead {
-    /// Weight vector `(d,)`.
+    /// Weights `(C, d)` row-major.
     pub w: Vec<f32>,
     /// Inverse-covariance / precision matrix `(d*d,)` row-major.
     p: Vec<f32>,
     d: usize,
+    c: usize,
     lambda: f32,
     /// Windup guard: max allowed `trace(P)`. With `lambda < 1`, `P` inflates by
     /// `1/lambda` each step in un-excited directions (covariance windup) and can
@@ -34,15 +36,16 @@ pub struct EvolventHead {
 }
 
 impl EvolventHead {
-    /// New head over `d` features. `ridge > 0` sets the prior precision
+    /// New head: `d` features, `c` outputs (`c=1` regression, `c=n_classes`
+    /// one-hot classification). `ridge > 0` sets the prior precision
     /// (`P0 = (1/ridge) I`); `lambda in (0,1]` is the forgetting factor. The
-    /// covariance-windup guard is set to a generous finite default
-    /// (`1e4 · trace(P0)`), so forgetting is safe out of the box; tune with
-    /// [`EvolventHead::with_trace_cap`].
+    /// covariance-windup guard defaults to a generous finite `1e4 · trace(P0)`;
+    /// tune with [`EvolventHead::with_trace_cap`].
     ///
     /// # Panics
-    /// If `ridge <= 0` or `lambda` is outside `(0, 1]`.
-    pub fn new(d: usize, ridge: f32, lambda: f32) -> Self {
+    /// If `c == 0`, `ridge <= 0`, or `lambda` is outside `(0, 1]`.
+    pub fn new(d: usize, c: usize, ridge: f32, lambda: f32) -> Self {
+        assert!(c >= 1, "need at least one output");
         assert!(ridge > 0.0, "ridge must be > 0");
         assert!(lambda > 0.0 && lambda <= 1.0, "lambda must be in (0,1]");
         let mut p = vec![0.0f32; d * d];
@@ -50,9 +53,10 @@ impl EvolventHead {
             p[i * d + i] = 1.0 / ridge;
         }
         EvolventHead {
-            w: vec![0.0; d],
+            w: vec![0.0; c * d],
             p,
             d,
+            c,
             lambda,
             p_trace_max: 1e4 * d as f32 / ridge,
         }
@@ -66,33 +70,50 @@ impl EvolventHead {
         self
     }
 
-    /// Prediction `phi · w`.
+    /// Number of outputs.
+    pub fn n_outputs(&self) -> usize {
+        self.c
+    }
+
+    /// Per-output predictions `phi · w_k`, length `C`.
     ///
     /// # Panics
     /// If `phi.len() != d`.
-    pub fn predict(&self, phi: &[f32]) -> f32 {
+    pub fn predict(&self, phi: &[f32]) -> Vec<f32> {
         assert_eq!(phi.len(), self.d);
-        phi.iter().zip(&self.w).map(|(&a, &b)| a * b).sum()
+        (0..self.c)
+            .map(|k| {
+                let wk = &self.w[k * self.d..k * self.d + self.d];
+                phi.iter().zip(wk).map(|(&a, &b)| a * b).sum()
+            })
+            .collect()
+    }
+
+    /// `argmax_k predict(phi)` — the classification decision.
+    pub fn predict_class(&self, phi: &[f32]) -> usize {
+        let pred = self.predict(phi);
+        (0..self.c)
+            .max_by(|&a, &b| pred[a].partial_cmp(&pred[b]).unwrap())
+            .unwrap_or(0)
     }
 
     /// One evolvent (forgetting-RLS) update from a single sample — closed-form,
-    /// `O(d^2)`, no backward sweep. Returns the pre-update prediction error
-    /// `y - phi·w` (the prequential residual).
+    /// `O(d^2 + d·C)`, no backward sweep. Returns the per-output pre-update
+    /// residuals `y - phi·w` (the prequential errors).
     ///
-    /// Recursion (with forgetting `lambda`):
+    /// Recursion (with forgetting `lambda`), `P` shared across outputs:
     /// ```text
-    ///   Pphi = P phi
-    ///   g    = Pphi / (lambda + phi^T Pphi)      (Kalman gain)
-    ///   err  = y - phi^T w
-    ///   w   += g * err
-    ///   P    = (P - g (Pphi)^T) / lambda
+    ///   Pphi = P phi;   g = Pphi / (lambda + phi^T Pphi)
+    ///   for each output k:  w_k += g * (y_k - phi^T w_k)
+    ///   P = (P - g (Pphi)^T) / lambda
     /// ```
     ///
     /// # Panics
-    /// If `phi.len() != d`.
-    pub fn update(&mut self, phi: &[f32], y: f32) -> f32 {
-        let d = self.d;
+    /// If `phi.len() != d` or `y.len() != C`.
+    pub fn update(&mut self, phi: &[f32], y: &[f32]) -> Vec<f32> {
+        let (d, c) = (self.d, self.c);
         assert_eq!(phi.len(), d);
+        assert_eq!(y.len(), c);
         // Pphi = P phi
         let mut pphi = vec![0.0f32; d];
         for (i, pphi_i) in pphi.iter_mut().enumerate() {
@@ -101,12 +122,17 @@ impl EvolventHead {
         }
         let denom = self.lambda + phi.iter().zip(&pphi).map(|(&a, &b)| a * b).sum::<f32>();
         let inv_denom = 1.0 / denom;
-        let err = y - self.predict(phi);
-        // w += g * err, with g = Pphi / denom
-        for (wi, &pp) in self.w.iter_mut().zip(&pphi) {
-            *wi += pp * inv_denom * err;
+        // per-output residual + weight update (shared gain g = Pphi/denom)
+        let pred = self.predict(phi);
+        let residuals: Vec<f32> = (0..c).map(|k| y[k] - pred[k]).collect();
+        for (k, &res) in residuals.iter().enumerate() {
+            let ge = inv_denom * res;
+            let wk = &mut self.w[k * d..k * d + d];
+            for (wi, &pp) in wk.iter_mut().zip(&pphi) {
+                *wi += pp * ge;
+            }
         }
-        // P = (P - g Pphi^T) / lambda = (P - (Pphi Pphi^T)/denom) / lambda
+        // P = (P - g Pphi^T) / lambda   (shared)
         let inv_lambda = 1.0 / self.lambda;
         let mut trace = 0.0f32;
         for i in 0..d {
@@ -117,15 +143,14 @@ impl EvolventHead {
             }
             trace += self.p[i * d + i];
         }
-        // covariance-windup guard: scale P down if its trace exceeds the cap
-        // (bounds every eigenvalue, hence the gain). Only bites when lambda < 1.
+        // covariance-windup guard (F-EVO-1): cap trace(P) → bound the gain.
         if trace > self.p_trace_max {
             let s = self.p_trace_max / trace;
             for v in self.p.iter_mut() {
                 *v *= s;
             }
         }
-        err
+        residuals
     }
 }
 
@@ -133,17 +158,20 @@ impl EvolventHead {
 mod tests {
     use super::*;
 
-    /// Closed-form verification: on STATIONARY data, forgetting-RLS with
-    /// lambda=1 converges to the batch ridge normal-equations solution.
+    fn lcg(seed: u64) -> impl FnMut() -> f32 {
+        let mut xs = seed;
+        move || {
+            xs = xs.wrapping_mul(6364136223846793005).wrapping_add(1);
+            ((xs >> 33) as f32) / (u32::MAX as f32) - 0.5
+        }
+    }
+
+    /// Closed-form verification: on STATIONARY data, single-output forgetting-RLS
+    /// with lambda=1 converges to the batch ridge normal-equations solution.
     #[test]
     fn converges_to_batch_ridge() {
         let (d, n, ridge) = (5usize, 400usize, 1.0f32);
-        // deterministic stream
-        let mut xs: u64 = 7;
-        let mut nx = || {
-            xs = xs.wrapping_mul(6364136223846793005).wrapping_add(1);
-            ((xs >> 33) as f32) / (u32::MAX as f32) - 0.5
-        };
+        let mut nx = lcg(7);
         let w_true: Vec<f32> = (0..d).map(|_| nx()).collect();
         let phis: Vec<Vec<f32>> = (0..n).map(|_| (0..d).map(|_| nx()).collect()).collect();
         let ys: Vec<f32> = phis
@@ -151,13 +179,11 @@ mod tests {
             .map(|p| p.iter().zip(&w_true).map(|(&a, &b)| a * b).sum::<f32>() + 0.05 * nx())
             .collect();
 
-        // online RLS (lambda = 1)
-        let mut head = EvolventHead::new(d, ridge, 1.0);
+        let mut head = EvolventHead::new(d, 1, ridge, 1.0);
         for (p, &y) in phis.iter().zip(&ys) {
-            head.update(p, y);
+            head.update(p, &[y]);
         }
 
-        // batch ridge: (A + ridge I) w = b, solved by Gaussian elimination
         let mut a = vec![0.0f32; d * d];
         let mut b = vec![0.0f32; d];
         for (p, &y) in phis.iter().zip(&ys) {
@@ -177,66 +203,77 @@ mod tests {
         }
     }
 
-    /// The evolvent head TRACKS an abrupt drift: after the target flips, error
-    /// recovers within a bounded number of samples (lambda<1), which a frozen
-    /// estimate would not.
+    /// Multi-output one-hot RLS separates two Gaussian blobs (classification).
+    #[test]
+    fn one_hot_classifies_blobs() {
+        let d = 2usize;
+        let mut nx = lcg(3);
+        let mut head = EvolventHead::new(d, 2, 1.0, 1.0);
+        let sample = |cls: usize, nx: &mut dyn FnMut() -> f32| -> [f32; 2] {
+            let mu = if cls == 0 { -1.0 } else { 1.0 };
+            [mu + 0.3 * nx(), mu + 0.3 * nx()]
+        };
+        for _ in 0..300 {
+            for cls in 0..2 {
+                let x = sample(cls, &mut nx);
+                let y = if cls == 0 { [1.0, 0.0] } else { [0.0, 1.0] };
+                head.update(&x, &y);
+            }
+        }
+        let mut correct = 0;
+        for _ in 0..100 {
+            for cls in 0..2 {
+                if head.predict_class(&sample(cls, &mut nx)) == cls {
+                    correct += 1;
+                }
+            }
+        }
+        assert!(correct >= 190, "blob accuracy too low: {correct}/200");
+    }
+
+    /// Forgetting tracks an abrupt drift (single output).
     #[test]
     fn tracks_a_drift() {
         let d = 4usize;
-        let mut xs: u64 = 3;
-        let mut nx = || {
-            xs = xs.wrapping_mul(6364136223846793005).wrapping_add(1);
-            ((xs >> 33) as f32) / (u32::MAX as f32) - 0.5
-        };
-        let mut head = EvolventHead::new(d, 1.0, 0.95);
+        let mut nx = lcg(3);
+        let mut head = EvolventHead::new(d, 1, 1.0, 0.95);
         let w1: Vec<f32> = (0..d).map(|_| nx()).collect();
-        let w2: Vec<f32> = w1.iter().map(|&v| -v).collect(); // flipped target
+        let w2: Vec<f32> = w1.iter().map(|&v| -v).collect();
         let teach = |p: &[f32], w: &[f32]| p.iter().zip(w).map(|(&a, &b)| a * b).sum::<f32>();
         for _ in 0..300 {
             let p: Vec<f32> = (0..d).map(|_| nx()).collect();
-            head.update(&p, teach(&p, &w1));
+            head.update(&p, &[teach(&p, &w1)]);
         }
         for _ in 0..300 {
             let p: Vec<f32> = (0..d).map(|_| nx()).collect();
-            head.update(&p, teach(&p, &w2));
+            head.update(&p, &[teach(&p, &w2)]);
         }
-        // after retraining on w2, error on fresh w2 samples is small
         let mut e = 0.0f32;
         for _ in 0..50 {
             let p: Vec<f32> = (0..d).map(|_| nx()).collect();
-            e += (head.predict(&p) - teach(&p, &w2)).powi(2);
+            e += (head.predict(&p)[0] - teach(&p, &w2)).powi(2);
         }
         assert!(e / 50.0 < 1e-2, "did not track the drift: mse {}", e / 50.0);
     }
 
-    /// Regression (bug F-EVO-1, 2026-07-15): forgetting-RLS with many features
-    /// must NOT diverge from covariance windup. With lambda<1 and d>>1 and
-    /// poorly-excited directions, the un-guarded recursion blew up (RMSE ~1e4);
-    /// the trace-cap guard must keep w and predictions finite and bounded.
+    /// Regression (F-EVO-1 guard): many-feature forgetting-RLS stays bounded.
     #[test]
     fn windup_guard_keeps_it_bounded() {
         let d = 200usize;
-        let mut xs: u64 = 11;
-        let mut nx = || {
-            xs = xs.wrapping_mul(6364136223846793005).wrapping_add(1);
-            ((xs >> 33) as f32) / (u32::MAX as f32) - 0.5
-        };
-        let mut head = EvolventHead::new(d, 1.0, 0.99);
-        // sparse, poorly-exciting stream (only a few features active per sample)
+        let mut nx = lcg(11);
+        let mut head = EvolventHead::new(d, 1, 1.0, 0.99);
         for _ in 0..5000 {
             let mut phi = vec![0.0f32; d];
             for _ in 0..5 {
                 phi[((nx() + 0.5) * d as f32) as usize % d] = nx();
             }
-            let y = nx();
-            head.update(&phi, y);
+            head.update(&phi, &[nx()]);
         }
         assert!(head.w.iter().all(|v| v.is_finite()), "weights diverged");
         let wnorm: f32 = head.w.iter().map(|v| v * v).sum::<f32>().sqrt();
         assert!(wnorm < 1e3, "weights blew up: |w| = {wnorm}");
     }
 
-    /// Tiny Gaussian-elimination solver for the test's batch reference.
     fn solve(a: &mut [f32], b: &mut [f32], d: usize) -> Vec<f32> {
         for col in 0..d {
             let mut piv = col;
