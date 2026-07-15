@@ -1,0 +1,13 @@
+{
+  "experiment": "evolvent-e5-multifrontal-cholesky",
+  "host": "kato15 (32-core, RTX6000; CPU-only)",
+  "seeds": [0,1,2,3,4],
+  "sep": 2, "res": 3, "per_clique": 60,
+  "note": "MF R2 == DENSE R2 at every (depth,seed) (multifrontal Cholesky is exact). BLOCK (separator-dropping) trails ~0.0002. storage MF/dense halves per depth; flop speedup grows as (d/w)^2 to 1270x. locality: online update touches path=log2(nc) cliques not nc.",
+  "rows": [
+    {"depth": 4, "d": 105, "cliques": 15,  "mf_r2": 0.9994, "dense_r2": 0.9994, "block_r2": 0.9992, "store_pct": 10.7, "flops_speedup": 18,   "mean_path": 4},
+    {"depth": 5, "d": 217, "cliques": 31,  "mf_r2": 0.9994, "dense_r2": 0.9994, "block_r2": 0.9993, "store_pct": 5.3,  "flops_speedup": 77,   "mean_path": 5},
+    {"depth": 6, "d": 441, "cliques": 63,  "mf_r2": 0.9994, "dense_r2": 0.9994, "block_r2": 0.9992, "store_pct": 2.6,  "flops_speedup": 314,  "mean_path": 6},
+    {"depth": 7, "d": 889, "cliques": 127, "mf_r2": 0.9994, "dense_r2": 0.9994, "block_r2": 0.9992, "store_pct": 1.3,  "flops_speedup": 1270, "mean_path": 7}
+  ]
+}

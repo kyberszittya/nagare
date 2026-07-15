@@ -245,6 +245,21 @@
       "regression_tests": ["online::info_form_equals_dense_and_is_sparse"],
       "superseded_findings": [],
       "open_questions": ["sparse block-tridiagonal Cholesky O(d*w^2) -- turn the storage win into a solve-time win", "a NON-additive cross-hyperedge target where BLOCK loses materially and INFO/dense hold (the discriminating block-vs-info test)", "update J THROUGH hg_message on the signed-hypergraph substrate", "SBSH bounded-width certificate as the solve tractability guarantee"]
+    },
+    {
+      "id": "F-EVO-7",
+      "claim": "The MULTIFRONTAL (clique-tree) Cholesky driven by the hypergraph -- eliminate each clique's residual leaves->root, send the Schur complement over its separator up to the parent (the message = a tensor contraction over the eliminated interior onto the separator boundary), back-substitute root->leaves -- is EXACT (= dense Cholesky of the assembled J) at storage O(sum|C|^2)=O(d*w^2) and factorization O(sum|C|^3)=O(d*w^3). Measured (kato15, 5 seeds x 4 depths, branching binary clique tree): MF R2 == DENSE R2 at every (depth,seed); factorization flop speedup 18x->77x->314x->1270x as d 105->889 (grows (d/w)^2); storage 10.7%->1.3% of dense. An online update touches EXACTLY its clique's path to the root (proven by regression test: changed factors == ancestors_inclusive(leaf)) -> mean path = depth = log2(N) cliques, so incremental re-fire is O(log N * w^3) not O(N * w^3). This is the SOLVE-TIME realization of the E4 information form -- the corner of the precision family that is exact AND cheap-to-solve AND cheap-to-update-online.",
+      "classification": "NEW_CANONICAL_CAPABILITY (classical method, novel-to-framework wiring)",
+      "source_experiment": "evolvent E5 (examples/evolvent_multifrontal.rs, kato15 5 seeds x 4 depths)",
+      "raw_evidence": ["reports/2026-07-15-evolvent-e5-multifrontal.md", "reports/figures/evolvent-multifrontal.png", "reports/figures/evolvent_e5_results.json"],
+      "confidence": "high (5 seeds x 4 depths; MF==DENSE and update-locality are algebraic identities the runs + tests confirm)",
+      "scope": "bounded-width (junction-tree) SPD precision; a valid clique tree (RIP, separator subset of parent) is required; single-output linear-in-features. The BLOCK gap is small here (~0.0002) BECAUSE the target is additive-over-cliques and data-rich per clique (regime property, not a method limit) -- the data-scarce / non-additive discriminating target is still open.",
+      "limitations": "the flop win is an ANALYTIC count (Sum|C|^3 vs d^3/6) not a wall-clock benchmark (needs contiguous-storage rewrite + criterion at large d); the incremental re-fire is PROVEN-local but the optimized refactorize_path is NOT built (measure-before-optimize); multifrontal is a CLASSICAL method (Duff-Reid 1983 / junction-tree elimination) -- no algorithmic-novelty claim, framework value = the hypergraph clique tree AS the assembly tree and separators AS messages.",
+      "framework_consequence": "New component JunctionTreeCholesky (DEPLOYABLE) registered. Completes the evolvent precision family: dense O(d^2)/O(d^3) exact -> block-diagonal O(d*w) approx -> information O(d*w) exact-but-dense-solve -> MULTIFRONTAL O(d*w^2)/O(d*w^3) exact-and-sparse-solve. Delivers the F-EVO-6 open item (block-tridiagonal Cholesky + width certificate).",
+      "code_changes": ["src/junction_tree.rs new module (JunctionTreeCholesky + Clique + balanced_binary_tree) + 3 tests", "src/lib.rs module + re-exports", "examples/evolvent_multifrontal.rs", "scripts/dev/plot_evolvent_multifrontal.py"],
+      "regression_tests": ["junction_tree::single_clique_equals_dense", "junction_tree::branching_tree_equals_dense_at_bounded_width", "junction_tree::online_update_only_perturbs_path_to_root"],
+      "superseded_findings": [],
+      "open_questions": ["contiguous-storage rewrite + wall-clock criterion benchmark (analytic flops -> measured time)", "optimized refactorize_path (recompute only the leaf->root path) = the incremental online solver", "non-additive / data-scarce cross-clique target (block loses materially, MF/dense hold)", "route the separator message literally through hg_message on a signed hypergraph"]
     }
   ]
 }

@@ -1,0 +1,27 @@
+{
+  "experiment_id": "evolvent-e5",
+  "date": "2026-07-15",
+  "result": "Multifrontal (clique-tree) Cholesky over the hypergraph is EXACT (= dense) at O(d*w^2) storage / O(d*w^3) factorization. kato15 5 seeds x 4 depths: MF R2 == DENSE R2 at every cell; flop speedup 18x->1270x as d 105->889 (grows (d/w)^2); online update touches EXACTLY its path-to-root (log2(N) cliques). Delivers the F-EVO-6 open item (solve-time win).",
+  "novelty_classification": {"NEW_CANONICAL_CAPABILITY": ["F-EVO-7"], "note": "Multifrontal method is CLASSICAL (Duff-Reid 1983 / junction-tree elimination); NO algorithmic-novelty claim. Framework value = the hypergraph clique tree AS the assembly tree, separator Schur complements AS the messages -- the exact sparse solver the E4 evolvent needed."},
+  "framework_impact": {
+    "interfaces_changed": ["JunctionTreeCholesky (multifrontal Cholesky solver)", "Clique", "balanced_binary_tree"],
+    "defaults_changed": [],
+    "components_added_or_updated": ["JunctionTreeCholesky (DEPLOYABLE)", "InfoEvolventHead note (E5 delivers its solve-time path)"],
+    "guards_added": ["junction_tree::single_clique_equals_dense", "junction_tree::branching_tree_equals_dense_at_bounded_width", "junction_tree::online_update_only_perturbs_path_to_root"],
+    "superseded": [],
+    "new_module": "src/junction_tree.rs (distinct concern: sparse linear-algebra solver, not an online RLS head; online.rs was already 609 LOC -- discovery pass confirmed no existing chol/junction/frontal code)"
+  },
+  "source_changes": ["src/junction_tree.rs new module + 3 tests", "src/lib.rs module + re-exports", "examples/evolvent_multifrontal.rs", "scripts/dev/plot_evolvent_multifrontal.py", "reports/figures/evolvent_e5_results.json"],
+  "regression_tests_added": ["junction_tree::single_clique_equals_dense", "junction_tree::branching_tree_equals_dense_at_bounded_width", "junction_tree::online_update_only_perturbs_path_to_root"],
+  "gates": {"suite": "178/0", "fmt": "clean", "clippy": "clean"},
+  "corrections": {},
+  "precision_family_now_complete": {
+    "dense_P": "O(d^2) store / O(d^3) solve, exact (E0/E1)",
+    "block_diagonal": "O(d*w) store / O(d*w^2) solve, approximate -- drops separators (E3)",
+    "information_J": "O(d*w) store / O(d^3) DENSE solve, exact (E4)",
+    "multifrontal_LLt": "O(d*w^2) store / O(d*w^3) solve, EXACT + online-local (E5)"
+  },
+  "honest_scope": ["flop win is an ANALYTIC count (not a wall-clock benchmark)", "incremental re-fire is proven-local but optimized refactorize_path not built (measure-before-optimize)", "requires a valid clique tree (RIP + bounded width); SBSH certificate is the guarantee", "BLOCK gap small (~0.0002) is a REGIME property (additive + data-rich per clique), not a method limit -- non-additive/data-scarce discriminating target still open", "single-output, linear-in-features"],
+  "next_experiment_authorized": false,
+  "next_experiment_proposal": {"name": "contiguous-storage rewrite + criterion wall-clock at large d (analytic flops -> measured time); optimized refactorize_path; non-additive/data-scarce cross-clique discriminating target", "reuses": ["JunctionTreeCholesky", "InfoEvolventHead", "hg_message", "SBSH width certificate"], "constrained_by": ["F-EVO-7"]}
+}

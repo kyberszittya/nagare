@@ -217,7 +217,27 @@
       "supersedes": null,
       "superseded_by": null,
       "default": false,
-      "note": "F-EVO-6: INFO R2 == DENSE R2 exactly at every (n,seed); info-matrix storage 21.6%->2.8% of dense as n 48->384 (O(d*w) vs O(d^2), halves per doubling). Classical primitive (information filter / Lauritzen-Spiegelhalter junction tree) -- framework value is the exact+sparse evolvent head + hypergraph conjugation, NOT algorithmic novelty. Path to a solve-time win: block-tridiagonal Cholesky + SBSH width certificate."
+      "note": "F-EVO-6: INFO R2 == DENSE R2 exactly at every (n,seed); info-matrix storage 21.6%->2.8% of dense as n 48->384 (O(d*w) vs O(d^2), halves per doubling). Classical primitive (information filter / Lauritzen-Spiegelhalter junction tree) -- framework value is the exact+sparse evolvent head + hypergraph conjugation, NOT algorithmic novelty. Path to a solve-time win: block-tridiagonal Cholesky + SBSH width certificate. DELIVERED in E5 (JunctionTreeCholesky)."
+    },
+    {
+      "name": "JunctionTreeCholesky",
+      "purpose": "Multifrontal (clique-tree) Cholesky over a bounded-width SPD information matrix -- the SPARSE SOLVE for the E4 information form. The hypergraph clique tree drives the factorization: each clique is a hyperedge (tensor block), leaves->root elimination sends the Schur complement over each separator up to the parent (the message U = F_SS - F_SR F_RR^-1 F_RS = a contraction over eliminated interior onto the separator boundary, structurally the hg_message edge->node incidence contraction); root->leaves back-substitution. EXACT (= dense Cholesky of the assembled J) at storage O(sum|C|^2)=O(d*w^2) and factorization O(sum|C|^3)=O(d*w^3), vs dense O(d^2)/O(d^3). An online update touches ONLY its clique's path to the root (proven) -> incremental re-fire O(log N * w^3).",
+      "owning_module": "src/junction_tree.rs",
+      "symbols": ["JunctionTreeCholesky", "JunctionTreeCholesky::new (cliques,ridge,d)", "update", "solve", "solve_block_diagonal", "factor_storage", "factor_flops", "ancestors_inclusive", "factor_checksum", "Clique", "balanced_binary_tree"],
+      "version": "1.0",
+      "status": "DEPLOYABLE",
+      "source_experiment": "evolvent E5 (examples/evolvent_multifrontal.rs, kato15 5 seeds x 4 depths)",
+      "evidence_paths": ["reports/2026-07-15-evolvent-e5-multifrontal.md", "reports/figures/evolvent-multifrontal.png", "reports/figures/evolvent_e5_results.json"],
+      "supported_tasks": ["exact sparse solve of a bounded-width (junction-tree) SPD precision", "incremental/online least-squares over a clique tree with log-depth locality", "the solve-time realization of InfoEvolventHead", "measuring what cross-clique (separator) coupling is worth (solve_block_diagonal baseline)"],
+      "observation_schema": "cliques: Vec<Clique{vars residual-first, n_res, parent}> (valid clique tree, RIP, separator subset of parent, SPD J); update(clique, phi_local, y)",
+      "output_schema": "solve -> Vec<f32> x (== dense Cholesky of assembled J exactly); solve_block_diagonal -> separator-dropping baseline; factor_storage/factor_flops -> O(d*w^2)/O(d*w^3) accounting; ancestors_inclusive -> online-update locality",
+      "dependencies": [],
+      "known_limitations": ["flop win is an ANALYTIC count (Sum|C|^3 vs d^3/6), NOT a wall-clock benchmark -- needs a contiguous-storage rewrite + criterion at large d", "incremental re-fire is PROVEN-local but the optimized refactorize_path (recompute only the path) is NOT built (E5 measures the locality that justifies it)", "requires a valid clique tree (RIP + bounded width); a measurement coupling non-adjacent cliques breaks the tree -- SBSH width certificate is the guarantee", "single-output, linear-in-features", "dense per-clique frontals (fine at bounded width)"],
+      "canonical_tests": ["junction_tree::single_clique_equals_dense", "junction_tree::branching_tree_equals_dense_at_bounded_width", "junction_tree::online_update_only_perturbs_path_to_root"],
+      "supersedes": null,
+      "superseded_by": null,
+      "default": false,
+      "note": "F-EVO-7: MF R2 == DENSE R2 at every (depth,seed); factorization flop speedup 18x->1270x as d 105->889 (grows (d/w)^2); online update perturbs EXACTLY the path-to-root (log2(N) cliques). Completes the precision family: dense O(d^2)/O(d^3) -> block O(d*w)/approx -> info O(d*w)/exact-dense-solve -> multifrontal O(d*w^2)/O(d*w^3)/exact. Classical method (Duff-Reid multifrontal); framework value = hypergraph clique tree AS the assembly tree, separators AS messages."
     }
   ]
 }
