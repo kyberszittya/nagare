@@ -1,0 +1,196 @@
+# Nagare — algorithms, flowcharts, and system architecture (article figures)
+
+Source diagrams for the Nagare framework (`holonomy_learn`). Each is provided as Mermaid (renders in most
+venues); the two architecture figures also have TikZ under `docs/article/tikz/`. Nagare is closed-form and
+FD-verified with **no autograd**; that discipline is the substrate every figure sits on.
+
+---
+
+## Fig. 0 — The whole Nagare pipeline (end-to-end)
+
+The unified flow: any input domain enters the closed-form op library, ops compose into a model, the model is
+learned by one of **two regimes** (backprop *or* evolvent), evaluation feeds outputs, and the assimilation loop
+integrates each result back into the framework.
+
+```mermaid
+flowchart TB
+  subgraph IN["Inputs (domain-general substrate)"]
+    direction LR
+    D1["images"]
+    D2["signed graphs"]
+    D3["data streams"]
+    D4["point sets / scenes"]
+  end
+  IN --> OPS["Closed-form op library<br/>forward + FD-verified backward · NO autograd<br/>KAN/HSiKAN · rotors · hg_message · conv2d · entropy pool · ..."]
+  OPS --> MODEL["Model = composed ops<br/>Neocognitron stack · CPML core · SBSH detector · RFF + head"]
+  MODEL --> L{"learning regime"}
+  L -->|backprop| BP["forward -> closed-form backward SWEEP -> Adam<br/>iterative · O(d)/step · sample-slow"]
+  L -->|evolvent| EV["forward -> one-shot RLS update (NO backward sweep)<br/>O(d^2)/step · sample-fast (F-EVO-2)"]
+  BP --> EVAL["evaluation<br/>prequential / held-out · multi-seed median"]
+  EV --> EVAL
+  EVAL --> APP["outputs: recognition · pose · detection · link prediction · online tracking"]
+  EVAL --> ASSIM["assimilation lifecycle<br/>findings ledger + component registry"]
+  ASSIM -. "integrate + guard + register" .-> OPS
+  ASSIM -. "next experiment" .-> MODEL
+```
+
+---
+
+## Fig. 1 — System architecture (layered)
+
+```mermaid
+flowchart TB
+  subgraph APP["Applications"]
+    direction LR
+    NC["Neocognitron<br/>recognition + pose"]
+    DET["SBSH detector<br/>oriented-box, dynamic quadtree grid"]
+    SL["Signed-link<br/>balance + leakage audit (relational)"]
+    EV["Evolvent<br/>online incremental learning"]
+  end
+  subgraph LRN["Learners"]
+    direction LR
+    BP["Backprop<br/>closed-form gradient + Adam<br/>O(d)/step, iterative (sample-slow)"]
+    RLS["EvolventHead<br/>forgetting-RLS<br/>O(d^2)/step, one-pass (sample-fast)"]
+  end
+  subgraph OPS["Closed-form op library — 31 FD-verified backwards"]
+    direction LR
+    CORE["Core<br/>linear · mse · loss · adam"]
+    FA["Function approx<br/>kan · hsikan · chebyshev-CR · kochanek-bartels"]
+    GEO["Geometry / rotors<br/>dihedral · cayley_rotor · rotor_holonomy · rotor_spike · clifford_fir"]
+    GR["Graph / hypergraph<br/>hg_message · signed_scatter · gomb_shell · cpml_tier"]
+    ENT["Entropy / pooling<br/>global_entropy_pool · spectral_entropy · phase_pool"]
+    CV["CV<br/>conv2d · group_pool · sc_block · soft_argmax · gaussian_kld · quadtree"]
+  end
+  DISC["Discipline: closed-form · hand-derived backward · FD-verified · NO autograd<br/>+ Assimilation lifecycle (component registry + findings ledger)"]
+  APP --> LRN
+  LRN --> OPS
+  OPS --> DISC
+```
+
+---
+
+## Fig. 2 — The closed-form op contract (per-op, no autograd)
+
+```mermaid
+flowchart LR
+  X["input x"] --> F["forward(x) = y"]
+  F --> Y["output y"]
+  GY["grad_y = dL/dy"] --> B["backward(grad_y)<br/>hand-derived adjoint"]
+  B --> GX["grad_x, grad_params"]
+  F -. "verify" .-> FD{"FD check<br/>|analytic - central-diff| &lt; tol ?"}
+  B -. "verify" .-> FD
+  FD -->|pass| OK["op is CANONICAL<br/>(registered + tested)"]
+  FD -->|fail| FIX["fix the adjoint"]
+```
+
+---
+
+## Fig. 3 — Neocognitron pipeline (S/C hierarchy + entropy top)
+
+```mermaid
+flowchart TB
+  IMG["image"] --> S["S-cell: conv2d<br/>learned oriented filters"]
+  S --> V["oriented units (gx, gy)"]
+  V --> C["C-cell: group_pool<br/>dihedral orbit attention<br/>(LOCAL orientation-invariance)"]
+  C --> R["response map (K, H, W)"]
+  R --> STACK["stack: ScBlock x N<br/>(compositional hierarchy)"]
+  STACK --> EP["global_entropy_pool<br/>(GLOBAL rotation-invariance)"]
+  EP --> INV["invariant Hs, trace"]
+  EP --> EQV["equivariant principal angle"]
+  INV --> REC["linear head -> recognition"]
+  EQV --> POSE["pose (orientation)"]
+  STACK --> SA["soft_argmax + skeleton hg_conv"]
+  SA --> KP["keypoints (pose P2/P3/P4)"]
+  PRIN["F-ARC-1: an explicit prior pays iff the base lacks the signal AND the op can express it"]:::note
+  classDef note fill:#fff3cd,stroke:#d0a800,color:#5a4a00;
+```
+
+---
+
+## Fig. 4 — Entropy global pool (one covariance → invariant recognition + equivariant pose)
+
+```mermaid
+flowchart TB
+  R["response channel (H, W)"] --> W["weights w_i = resp_i^2"]
+  W --> COV["response-weighted spatial covariance<br/>[[a, b], [b, d]]"]
+  COV --> T["trace T = a + d"]
+  COV --> DET["det Dt = a*d - b^2"]
+  T --> Q["q = Dt / T^2"]
+  DET --> Q
+  Q --> HS["eigenvalue entropy Hs = -sum e*ln e<br/>ROTATION-INVARIANT"]
+  COV --> ANG["principal angle = 0.5*atan2(2b, a-d)<br/>ROTATION-EQUIVARIANT"]
+  HS --> RECOG["recognition (arrangement, invariant)"]
+  ANG --> POSE["pose (orientation, equivariant)"]
+  NB["O(H*W) + one 2x2 eigen · no |G| steering · closed-form backward FD-verified"]:::note
+  classDef note fill:#fff3cd,stroke:#d0a800,color:#5a4a00;
+```
+
+---
+
+## Fig. 5 — Evolvent update (forgetting-RLS online learning loop)
+
+```mermaid
+flowchart TB
+  START(["stream sample (phi, y)"]) --> PRED["predict yhat = phi . w"]
+  PRED --> ERR["residual e = y - yhat<br/>(prequential error)"]
+  ERR --> PPHI["Pphi = P . phi"]
+  PPHI --> GAIN["Kalman gain g = Pphi / (lambda + phi^T Pphi)"]
+  GAIN --> WUP["w += g * e"]
+  WUP --> PUP["P = (P - g (Pphi)^T) / lambda"]
+  PUP --> GUARD{"trace(P) &gt; cap ?<br/>(windup guard, F-EVO-1)"}
+  GUARD -->|yes| SCALE["scale P down"]
+  GUARD -->|no| NEXT
+  SCALE --> NEXT(["next sample"])
+  NOTE["closed-form, O(d^2), NO backward sweep · verified vs batch ridge<br/>one-pass sample-efficient; per-update slower than backprop O(d)"]:::note
+  classDef note fill:#fff3cd,stroke:#d0a800,color:#5a4a00;
+```
+
+---
+
+## Fig. 6 — Signed-link balance & leakage audit (relational)
+
+```mermaid
+flowchart TB
+  G["signed graph<br/>(OTC, Alpha, Slashdot, Epinions, Reddit)"] --> WEDGE["wedge (triangle-uniform) sampling<br/>unbiased balance estimator"]
+  WEDGE --> BAL["balance = Z2 cycle holonomy<br/>(strong Cartwright-Harary)"]
+  G --> CORE["CPML core<br/>+ rotor-holonomy channel<br/>+ Chebyshev-CR edge encoder [-1,1]"]
+  CORE --> AUDIT["2x2 leakage audit"]
+  AUDIT --> A1["strict x real"]
+  AUDIT --> A2["strict x shuffle"]
+  AUDIT --> A3["transductive x real"]
+  AUDIT --> A4["transductive x shuffle"]
+  A3 --> LK["leakage fraction =<br/>(transd_shuffle - 0.5) / (transd_real - 0.5)"]
+  A4 --> LK
+```
+
+---
+
+## Fig. 7 — SBSH detector (closed-form YOLO alternative)
+
+```mermaid
+flowchart LR
+  IMG["image"] --> QT["dynamic quadtree<br/>(adaptive grid, replaces fixed SxS)"]
+  QT --> NF["node features<br/>(+ mean-intensity DC)"]
+  NF --> HEAD["oriented-bbox head<br/>Gaussian-KLD loss + anchor prior"]
+  HEAD --> CS["center-sampling"]
+  CS --> NMS["NMS"]
+  NMS --> OUT["oriented boxes<br/>P 0.656 · R 0.966 · F1 0.781"]
+  RS["rotor_spike: V1-like narrow orientation tuning"]:::note
+  classDef note fill:#fff3cd,stroke:#d0a800,color:#5a4a00;
+```
+
+---
+
+## Fig. 8 — Assimilation lifecycle (framework governance)
+
+```mermaid
+flowchart LR
+  E["experiment"] --> EV["evidence review"]
+  EV --> NC["novelty classification"]
+  NC --> CD["canonical decision"]
+  CD --> FI["framework integration<br/>(extract + import)"]
+  FI --> RP["regression protection<br/>(guard + test)"]
+  RP --> ST["source-of-truth update<br/>(component registry + findings ledger + assimilation report)"]
+  ST --> AUTH{"next experiment<br/>authorized?"}
+  AUTH -->|yes| E
+```
