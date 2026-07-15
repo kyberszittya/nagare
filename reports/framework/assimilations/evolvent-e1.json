@@ -1,0 +1,26 @@
+{
+  "experiment_id": "evolvent-e1",
+  "date": "2026-07-15",
+  "result": "50-seed 6-dataset static benchmark (kato15): one-pass evolvent matches/beats 200-epoch MLP on 5/6 (decisive on hard high-d/multi-class), beats one-pass SGD on 6/6, tightest IQR, ~1/10 cost.",
+  "novelty_classification": {"NEW_CANONICAL_CAPABILITY": ["F-EVO-4"]},
+  "framework_impact": {
+    "interfaces_changed": ["EvolventHead multi-output: new(d,c,ridge,lambda), predict->Vec, update(phi,&[y]), predict_class"],
+    "defaults_changed": [],
+    "components_added_or_updated": ["EvolventHead v2.0 DEPLOYABLE (multi-output)"],
+    "guards_added": [],
+    "superseded": []
+  },
+  "source_changes": ["src/online.rs (multi-output + one_hot test)", "examples/evolvent_bench.rs (6-dataset 3-arm + JSON)", "scripts/dev/plot_evolvent_bench.py", "examples/evolvent_stream.rs (new API)"],
+  "regression_tests_added": ["online::one_hot_classifies_blobs"],
+  "gates": {"suite": "172/0", "fmt": "clean", "clippy": "clean"},
+  "results_median_iqr": {
+    "gen_reg_R2": {"evolvent": 0.914, "sgd": 0.886, "mlp": 0.904},
+    "gen_reg_highd_R2": {"evolvent": 0.681, "sgd": 0.640, "mlp": 0.449},
+    "california_R2": {"evolvent": 0.652, "sgd": 0.608, "mlp": 0.649},
+    "gen_cls_ACC": {"evolvent": 0.659, "sgd": 0.616, "mlp": 0.617},
+    "gen_cls_multi_ACC": {"evolvent": 0.671, "sgd": 0.581, "mlp": 0.519},
+    "iris_ACC": {"evolvent": 0.974, "sgd": 0.934, "mlp": 1.000}
+  },
+  "next_experiment_authorized": true,
+  "next_experiment_proposal": {"name": "evolvent on a Nagare op basis (HSiKAN/rotor) OR directional-forgetting streaming", "reuses": ["EvolventHead", "hsikan", "rotor ops"], "constrained_by": ["F-EVO-4", "F-EVO-3"]}
+}

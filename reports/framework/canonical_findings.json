@@ -199,6 +199,21 @@
       "regression_tests": [],
       "superseded_findings": [],
       "open_questions": ["directional/selective forgetting for windup-free aggressive tracking", "rapid-drift task where sample-efficiency is decisive", "deeper evolvent (local closed-form beyond the readout)"]
+    },
+    {
+      "id": "F-EVO-4",
+      "claim": "On STATIC supervised datasets (generated + real, classification + regression), the one-pass evolvent (RLS on a fixed RFF basis) MATCHES OR BEATS a 200-epoch backprop MLP on 5/6 datasets (decisively on high-d regression 0.681 vs 0.449 R2 and 6-class 0.671 vs 0.519 ACC), beats one-pass SGD on all 6, with the tightest seed-variance -- at ~1/10 the training cost and no lr/epoch/architecture tuning. Confirmed across 50 seeds on kato15.",
+      "classification": "NEW_CANONICAL_CAPABILITY",
+      "source_experiment": "evolvent E1 (examples/evolvent_bench.rs, 50 seeds, kato15 32-core)",
+      "raw_evidence": ["reports/2026-07-15-evolvent-e1-static-benchmark.md", "reports/figures/evolvent-bench.png", "reports/figures/evolvent_bench_seeds/*.json"],
+      "confidence": "high (50 seeds, median[IQR])",
+      "scope": "static supervised learning with a fixed expressive (RFF) basis; multi-output via one-hot RLS",
+      "limitations": "MLP still edges evolvent where learned features matter (iris 1.000 vs 0.974; california ~tie); long-drift streaming remains F-EVO-3 (needs directional forgetting)",
+      "framework_consequence": "EvolventHead promoted EXPERIMENTAL -> DEPLOYABLE for static supervised readouts; multi-output (classification) is canonical. Resolves the E0 tension: static = evolvent win, long-drift = still open.",
+      "code_changes": ["src/online.rs multi-output EvolventHead (shared P, predict_class, one_hot test)", "registry: EvolventHead status DEPLOYABLE"],
+      "regression_tests": ["online::one_hot_classifies_blobs", "online::converges_to_batch_ridge"],
+      "superseded_findings": [],
+      "open_questions": ["Nagare op basis (HSiKAN/rotor) instead of RFF -- lift on california?", "directional-forgetting streaming variant (F-EVO-3)"]
     }
   ]
 }
