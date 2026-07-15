@@ -10,6 +10,7 @@ pub mod detector;
 pub mod features;
 pub mod learner;
 pub mod metrics;
+pub mod online;
 pub mod ops;
 pub mod optimizer;
 pub mod pooling;
@@ -40,6 +41,7 @@ pub use learner::{
     StressKind, StressRow, Timing,
 };
 pub use metrics::{auroc, clifford_probability_error, cross_entropy, entropy2, softmax2, Metrics};
+pub use online::EvolventHead;
 pub use ops::adam::{adam_step, AdamState};
 pub use ops::catmull_rom::{
     catmull_rom_backward, catmull_rom_forward, chebyshev_control_points, chebyshev_cr_backward,

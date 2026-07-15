@@ -158,6 +158,26 @@
       "superseded_by": null,
       "default": false,
       "extraction_blocked_reason": "Not yet canonical: P4 measured that the shared-elin form is wrong for closed loops. The path to CANONICAL is the PER-EDGE TRANSFORM op (each hyperedge owns its map). Extract to a `SkeletonRefine` framework component ONCE the per-edge transform lands, so the canonical version is the correct one, not the limited one."
+    },
+    {
+      "name": "EvolventHead",
+      "purpose": "Incremental/online (evolvent) readout — exact forgetting recursive-least-squares over a fixed feature basis; per-sample closed-form update in O(d^2), NO backward sweep; tracks drift via forgetting factor lambda; covariance-windup guard on by default.",
+      "owning_module": "src/online.rs",
+      "symbols": ["EvolventHead", "EvolventHead::new", "EvolventHead::with_trace_cap", "EvolventHead::predict", "EvolventHead::update"],
+      "version": "1.0",
+      "status": "EXPERIMENTAL",
+      "source_experiment": "evolvent E0 (examples/evolvent_stream.rs)",
+      "evidence_paths": ["reports/2026-07-15-evolvent-e0-stream.md", "reports/figures/evolvent-stream.png"],
+      "supported_tasks": ["online linear-in-features regression", "non-stationary tracking (drift)", "sample-efficient cold-start readout"],
+      "observation_schema": "phi: &[f32] (d features), y: f32",
+      "output_schema": "predict -> f32; update -> prequential residual; verified vs batch ridge normal equations",
+      "dependencies": [],
+      "known_limitations": ["O(d^2) per update (SLOWER than backprop O(d) per-update; win is SAMPLE efficiency not FLOPs)", "plain forgetting-RLS is windup-limited long-run: low lambda tracks but diverges, high lambda+tight cap is stable but under-tracks (F-EVO-3); needs directional forgetting to be robustly competitive", "linear-in-features (readout only)"],
+      "canonical_tests": ["online::converges_to_batch_ridge", "online::tracks_a_drift", "online::windup_guard_keeps_it_bounded"],
+      "supersedes": null,
+      "superseded_by": null,
+      "default": false,
+      "note": "EXPERIMENTAL: cold-start sample-efficiency confirmed (beats online-SGD 5/5); strong 'beats backprop' claim NOT yet supported. Path to CANONICAL = directional-forgetting variant (E1)."
     }
   ]
 }

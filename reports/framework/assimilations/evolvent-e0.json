@@ -1,0 +1,37 @@
+{
+  "experiment_id": "evolvent-e0",
+  "date": "2026-07-15",
+  "result": "Drifting-stream regression, evolvent (forgetting-RLS) vs online-SGD vs backprop-MLP. MIXED: A wins cold-start sample-efficiency 5/5, plain RLS windup-limited long-run; strong hypothesis unsupported by plain RLS.",
+  "novelty_classification": {
+    "BUG_FIX_WITH_ARCHITECTURAL_IMPACT": ["F-EVO-1"],
+    "NEW_MECHANISM": ["F-EVO-2"],
+    "NEGATIVE_RESULT_REQUIRING_A_GUARD": ["F-EVO-3"]
+  },
+  "framework_impact": {
+    "schemas_changed": [],
+    "interfaces_changed": ["src/online.rs new", "EvolventHead re-export"],
+    "defaults_changed": [],
+    "components_added_or_updated": ["EvolventHead (EXPERIMENTAL)"],
+    "guards_added": ["F-EVO-1 covariance-trace windup guard (default on)"],
+    "superseded": []
+  },
+  "source_changes": [
+    "src/online.rs (new: EvolventHead forgetting-RLS + windup guard + 3 tests)",
+    "src/lib.rs (re-export EvolventHead)",
+    "examples/evolvent_stream.rs (new 3-arm drifting-stream benchmark)",
+    "scripts/dev/plot_evolvent.py",
+    "reports/framework/canonical_components.json + canonical_findings.json (EvolventHead + F-EVO-1/2/3)"
+  ],
+  "regression_tests_added": ["online::converges_to_batch_ridge", "online::tracks_a_drift", "online::windup_guard_keeps_it_bounded"],
+  "gates": {"suite": "171/0", "fmt": "clean", "clippy": "clean"},
+  "open_questions": ["directional forgetting (windup-free)", "rapid-drift task", "deeper local evolvent beyond the readout"],
+  "next_experiment_authorized": true,
+  "next_experiment_proposal": {
+    "name": "E1 directional-forgetting EvolventHead",
+    "reuses": ["EvolventHead", "linear", "mse"],
+    "constrained_by": ["F-EVO-2", "F-EVO-3"],
+    "new_capability": "windup-free aggressive tracking; re-test on rapid-drift stream where sample-efficiency is decisive",
+    "lives_in": "src/online.rs",
+    "negative_outcome_assimilation": "if still not competitive, close plain-RLS-style evolvent and pivot toward a genuinely local deep evolvent"
+  }
+}
