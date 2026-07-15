@@ -19,7 +19,7 @@ use std::f32::consts::TAU;
 use std::io::Write;
 use std::time::Instant;
 
-const M: usize = 256; // RFF features
+const M: usize = 512; // RFF features
 const H: usize = 64; // MLP hidden
 const EPOCHS: usize = 200; // backprop epochs (the "slow" arm)
 
@@ -282,7 +282,7 @@ fn main() {
 
     // generated regression: nonlinear function of 5 inputs
     {
-        let (n, d) = (2000usize, 5usize);
+        let (n, d) = (8000usize, 5usize);
         let mut rng = Rng(100 + seed);
         let mut x = vec![0.0f32; n * d];
         let mut y = vec![0.0f32; n];
@@ -294,6 +294,27 @@ fn main() {
             y[i] = (2.0 * r[0]).sin() + r[1] * r[2] + 0.5 * r[3] * r[3] - r[4] + 0.1 * rng.gauss();
         }
         rows.push(("gen_reg", "R2", bench_reg("generated", &x, &y, n, d, seed)));
+    }
+    // generated regression, HIGHER-D + noisier (30 inputs, ~7 active)
+    {
+        let (n, d) = (8000usize, 30usize);
+        let mut rng = Rng(150 + seed);
+        let (mut x, mut y) = (vec![0.0f32; n * d], vec![0.0f32; n]);
+        for i in 0..n {
+            for k in 0..d {
+                x[i * d + k] = rng.u();
+            }
+            let r = &x[i * d..i * d + d];
+            y[i] = (3.0 * r[0] * r[1]).sin() + r[2] * r[3] - r[4] * r[4]
+                + 0.6 * r[5]
+                + (2.0 * r[6]).cos()
+                + 0.3 * rng.gauss();
+        }
+        rows.push((
+            "gen_reg_highd",
+            "R2",
+            bench_reg("gen_reg_highd", &x, &y, n, d, seed),
+        ));
     }
     // real regression: California housing
     if let Ok(txt) = std::fs::read_to_string(concat!(
@@ -311,7 +332,7 @@ fn main() {
     println!("CLASSIFICATION:");
     // generated classification: 3 gaussian blobs in 4-D
     {
-        let (n, d, k) = (1500usize, 4usize, 3usize);
+        let (n, d, k) = (4000usize, 4usize, 3usize);
         let mut rng = Rng(200 + seed);
         let centers: Vec<Vec<f32>> = (0..k)
             .map(|_| (0..d).map(|_| rng.u() * 2.0).collect())
@@ -329,6 +350,27 @@ fn main() {
             "gen_cls",
             "ACC",
             bench_cls("generated", &x, &y, n, d, k, seed),
+        ));
+    }
+    // generated classification, MORE classes + higher-D (6-class, 12-D, overlapping)
+    {
+        let (n, d, k) = (6000usize, 12usize, 6usize);
+        let mut rng = Rng(250 + seed);
+        let centers: Vec<Vec<f32>> = (0..k)
+            .map(|_| (0..d).map(|_| rng.u() * 2.5).collect())
+            .collect();
+        let (mut x, mut y) = (vec![0.0f32; n * d], vec![0usize; n]);
+        for i in 0..n {
+            let c = i % k;
+            y[i] = c;
+            for j in 0..d {
+                x[i * d + j] = centers[c][j] + 1.0 * rng.gauss();
+            }
+        }
+        rows.push((
+            "gen_cls_multi",
+            "ACC",
+            bench_cls("gen_cls_multi", &x, &y, n, d, k, seed),
         ));
     }
     // real classification: Iris
