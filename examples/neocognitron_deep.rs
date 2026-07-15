@@ -15,8 +15,8 @@
 //! Run: `cargo run --release --example neocognitron_deep -- [--onelayer] [--c1] [out.json]`
 
 use holonomy_learn::{
-    adam_step, linear_backward, linear_forward, sc_block_backward, sc_block_forward, AdamState,
-    ConvShape, DihedralGroup, LinearLayer, ScBlock,
+    adam_step, auroc, linear_backward, linear_forward, sc_block_backward, sc_block_forward,
+    AdamState, ConvShape, DihedralGroup, LinearLayer, ScBlock,
 };
 use std::f32::consts::PI;
 use std::io::Write;
@@ -88,27 +88,6 @@ fn render(theta: f32, corner: bool, rng: &mut u64) -> Vec<f32> {
         }
     }
     img
-}
-
-fn auroc(scores: &[f32], labels: &[u8]) -> f64 {
-    let mut idx: Vec<usize> = (0..scores.len()).collect();
-    idx.sort_by(|&a, &b| {
-        scores[a]
-            .partial_cmp(&scores[b])
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    let (mut rs, mut np) = (0.0f64, 0u64);
-    for (r, &i) in idx.iter().enumerate() {
-        if labels[i] == 1 {
-            rs += (r + 1) as f64;
-            np += 1;
-        }
-    }
-    let nn = scores.len() as u64 - np;
-    if np == 0 || nn == 0 {
-        return 0.5;
-    }
-    (rs - (np * (np + 1) / 2) as f64) / (np * nn) as f64
 }
 
 fn main() {

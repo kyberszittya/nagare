@@ -1,0 +1,49 @@
+{
+  "experiment_id": "neocognitron-arc",
+  "date": "2026-07-15",
+  "result": "Closed-form no-autograd Neocognitron built and characterized: conv2d S-cell, group_pool C-cell, ScBlock deep stack, global_entropy_pool invariant top (hypothesis confirmed), spatial-backbone pose net, skeleton hg_conv (P3 win / P4 limit).",
+  "novelty_classification": {
+    "NEW_CANONICAL_CAPABILITY": ["F-ENT-1"],
+    "NEW_MECHANISM": ["F-N3-1", "F-N3-2", "F-P3-1"],
+    "NEW_EVALUATION_REQUIREMENT": ["F-ARC-1", "F-P4-2"],
+    "NEGATIVE_RESULT_REQUIRING_A_GUARD": ["F-ENT-2", "F-P4-1"],
+    "NEGATIVE_RESULT_CLOSING_A_DIRECTION": ["F-N2b-1", "F-P2-1"]
+  },
+  "framework_impact": {
+    "schemas_changed": [],
+    "interfaces_changed": ["ScBlock::new_oriented", "metrics::auroc", "lib re-exports"],
+    "defaults_changed": ["global_entropy_pool = recommended rotation-invariant top (over channel-mean)"],
+    "components_added_or_updated": ["oriented_sobel_bank", "ScBlock::new_oriented", "auroc", "sc_block", "global_entropy_pool", "conv2d", "group_pool", "soft_argmax", "skeleton_hg_refine(MECHANISM_DEMO)"],
+    "guards_added": ["F-ENT-2 oriented warm-start", "F-P4-1 do-not-canonicalize shared-elin loop refine", "F-P4-2 occlusion-box-leak eval rule"],
+    "superseded": ["channel-mean invariant top", "oriented_conv_init x4", "fn auroc x3"]
+  },
+  "source_changes": [
+    "src/ops/sc_block.rs (+oriented_sobel_bank, +new_oriented, +2 tests)",
+    "src/metrics.rs (+auroc, +test)",
+    "src/lib.rs (re-exports)",
+    "examples/neocognitron_entropy.rs, neocognitron_deep.rs, neocognitron_aniso.rs (import auroc)",
+    "examples/neocognitron_entropy.rs, pose_backbone.rs, pose_symmetry.rs, pose_loop.rs (import oriented_sobel_bank, drop PI)",
+    "reports/framework/canonical_components.json, canonical_findings.json (created)"
+  ],
+  "regression_tests_added": [
+    "sc_block::oriented_bank_is_structured_not_isotropic",
+    "sc_block::new_oriented_installs_the_bank",
+    "metrics::auroc_tests::perfect_and_chance_and_degenerate"
+  ],
+  "gates": {"suite": "168/0", "fmt": "clean", "clippy": "clean"},
+  "open_questions": [
+    "per-edge transform op -> re-run P4 (hurts->wins) + reflection symmetry",
+    "multi-object per-region entropy pools",
+    "general nonlinear 4-bar closure",
+    "consolidate remaining auroc copies; extract keypoint-backbone on a 2nd consumer"
+  ],
+  "next_experiment_authorized": true,
+  "next_experiment_proposal": {
+    "name": "per-edge transform op for signed hg_conv",
+    "reuses": ["hg_message", "sc_block", "global_entropy_pool", "soft_argmax"],
+    "constrained_by": ["F-P4-1", "F-P3-1", "F-ARC-1"],
+    "new_capability": "each hyperedge owns its learned map -> asymmetric loop closure + reflection symmetry expressible",
+    "lives_in": "src/ops/hg_message.rs or new hg_edge_transform module",
+    "negative_outcome_assimilation": "if the loop still hurts, assimilate as a stronger closure on signed-hg_conv expressivity"
+  }
+}

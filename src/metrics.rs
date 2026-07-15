@@ -62,3 +62,46 @@ pub fn softmax2(a: f32, b: f32) -> (f32, f32) {
     let eb = (b - m).exp();
     (ea / (ea + eb), eb / (ea + eb))
 }
+
+/// Area under the ROC curve (Mann–Whitney U form) for binary `labels` ranked by
+/// `scores`. Returns `0.5` for a degenerate (single-class) set. Canonical eval
+/// utility — consolidated from ~7 duplicated example copies (2026-07-15).
+///
+/// # Preconditions
+/// `scores.len() == labels.len()`; `labels` in `{0,1}`.
+pub fn auroc(scores: &[f32], labels: &[u8]) -> f64 {
+    debug_assert_eq!(scores.len(), labels.len());
+    let mut idx: Vec<usize> = (0..scores.len()).collect();
+    idx.sort_by(|&a, &b| {
+        scores[a]
+            .partial_cmp(&scores[b])
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let (mut rank_sum, mut n_pos) = (0.0f64, 0u64);
+    for (r, &i) in idx.iter().enumerate() {
+        if labels[i] == 1 {
+            rank_sum += (r + 1) as f64;
+            n_pos += 1;
+        }
+    }
+    let n_neg = scores.len() as u64 - n_pos;
+    if n_pos == 0 || n_neg == 0 {
+        return 0.5;
+    }
+    (rank_sum - (n_pos * (n_pos + 1) / 2) as f64) / (n_pos * n_neg) as f64
+}
+
+#[cfg(test)]
+mod auroc_tests {
+    use super::auroc;
+
+    #[test]
+    fn perfect_and_chance_and_degenerate() {
+        // perfectly separable → 1.0
+        assert!((auroc(&[0.1, 0.2, 0.8, 0.9], &[0, 0, 1, 1]) - 1.0).abs() < 1e-9);
+        // inverted → 0.0
+        assert!((auroc(&[0.9, 0.8, 0.2, 0.1], &[0, 0, 1, 1]) - 0.0).abs() < 1e-9);
+        // single-class → 0.5 guard
+        assert!((auroc(&[0.1, 0.4, 0.7], &[1, 1, 1]) - 0.5).abs() < 1e-9);
+    }
+}

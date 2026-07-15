@@ -20,10 +20,9 @@
 use holonomy_learn::{
     adam_step, conv2d_backward, conv2d_forward, hg_edge_to_node_backward, hg_edge_to_node_forward,
     hg_node_to_edge_backward, hg_node_to_edge_forward, linear_backward, linear_forward,
-    sc_block_backward, sc_block_forward, soft_argmax_backward, soft_argmax_forward, AdamState,
-    ConvLayer, ConvShape, DihedralGroup, LinearLayer, ScBlock,
+    oriented_sobel_bank, sc_block_backward, sc_block_forward, soft_argmax_backward,
+    soft_argmax_forward, AdamState, ConvLayer, ConvShape, DihedralGroup, LinearLayer, ScBlock,
 };
-use std::f32::consts::PI;
 use std::io::Write;
 
 const G: usize = 32;
@@ -115,21 +114,6 @@ fn render(joints: &[[f32; 2]; J], occ_arm: u8) -> Vec<f32> {
     img
 }
 
-fn oriented_conv_init(k: usize) -> Vec<f32> {
-    let gx = [-1.0f32, 0.0, 1.0, -2.0, 0.0, 2.0, -1.0, 0.0, 1.0];
-    let gy = [-1.0f32, -2.0, -1.0, 0.0, 0.0, 0.0, 1.0, 2.0, 1.0];
-    let mut w = vec![0.0f32; 2 * k * 9];
-    for u in 0..k {
-        let phi = u as f32 * PI / k as f32;
-        let (cp, sp) = (phi.cos(), phi.sin());
-        for t in 0..9 {
-            w[(2 * u) * 9 + t] = cp * gx[t] + sp * gy[t];
-            w[(2 * u + 1) * 9 + t] = -sp * gx[t] + cp * gy[t];
-        }
-    }
-    w
-}
-
 fn dist(a: [f32; 2], b: [f32; 2]) -> f32 {
     ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2)).sqrt()
 }
@@ -162,7 +146,7 @@ fn main() {
     };
 
     let mut b1 = ScBlock::new(1, K, 3, 3, group, tau, 11 + seed_base);
-    b1.conv.w = oriented_conv_init(K);
+    b1.conv.w = oriented_sobel_bank(K);
     let mut head = ConvLayer::new(K, J, 5, 5, 21 + seed_base);
     // skeleton: 4 bones + 2 SYMMETRY edges (Lel-Rel, Lha-Rha) — the redundancy.
     let edges = [[0usize, 1], [1, 2], [3, 4], [4, 5], [1, 4], [2, 5]];

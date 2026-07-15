@@ -29,6 +29,38 @@
 use crate::ops::conv2d::{conv2d_backward, conv2d_forward, ConvLayer, ConvShape};
 use crate::ops::dihedral::DihedralGroup;
 use crate::ops::group_pool::{group_pool_backward, group_pool_forward, GroupPoolOut};
+use std::f32::consts::PI;
+
+/// Oriented Sobel gradient bank for a `c_in=1`, `3×3`, `2k`-channel S-cell: unit
+/// `u` gets a rotated Sobel gradient pair at angle `u·π/k` (channel `2u` along φ,
+/// `2u+1` along φ+90°). Flat `(2k, 1, 3, 3)` in `ConvLayer` layout.
+///
+/// **Why it exists (assimilated from the entropy-top finding, 2026-07-14).**
+/// Warm-starting the S-cell oriented makes the response map structured from step
+/// 0, so a downstream [`crate::global_entropy_pool_forward`]'s covariance is
+/// anisotropic and its `Hs` gradient is informative. A *random* conv gives a
+/// near-isotropic covariance → uninformative `Hs` → the conv never receives an
+/// edge-forming gradient and training stalls (measured: 2/5 seeds stuck at
+/// chance without this; 5/5 reach the target with it). This is the S-cell
+/// cold-start guard — see `reports/framework/canonical_findings.json` `F-ENT-2`.
+///
+/// # Preconditions
+/// `k >= 1`. # Postconditions: `out.len() == 2*k*9`.
+pub fn oriented_sobel_bank(k: usize) -> Vec<f32> {
+    debug_assert!(k >= 1);
+    let gx = [-1.0f32, 0.0, 1.0, -2.0, 0.0, 2.0, -1.0, 0.0, 1.0];
+    let gy = [-1.0f32, -2.0, -1.0, 0.0, 0.0, 0.0, 1.0, 2.0, 1.0];
+    let mut w = vec![0.0f32; 2 * k * 9];
+    for u in 0..k {
+        let phi = u as f32 * PI / k as f32;
+        let (cp, sp) = (phi.cos(), phi.sin());
+        for t in 0..9 {
+            w[(2 * u) * 9 + t] = cp * gx[t] + sp * gy[t];
+            w[(2 * u + 1) * 9 + t] = -sp * gx[t] + cp * gy[t];
+        }
+    }
+    w
+}
 
 /// One S/C block: a conv S-cell (`C_in → 2K`) feeding `K` oriented-unit C-cell
 /// pools over a shared dihedral group.
@@ -77,6 +109,34 @@ impl ScBlock {
             group,
             tau,
         }
+    }
+
+    /// Like [`ScBlock::new`] but with the S-cell warm-started to an oriented
+    /// Sobel bank ([`oriented_sobel_bank`]) — the canonical cold-start fix for
+    /// blocks feeding an entropy pool. Requires `c_in == 1`, `kh == kw == 3`; the
+    /// pool filters and everything else are unchanged and the conv stays fully
+    /// learnable.
+    ///
+    /// # Panics
+    /// If `c_in != 1` or `kh != 3` or `kw != 3`.
+    pub fn new_oriented(
+        c_in: usize,
+        k: usize,
+        kh: usize,
+        kw: usize,
+        group: DihedralGroup,
+        tau: f32,
+        seed: u64,
+    ) -> Self {
+        assert_eq!(c_in, 1, "oriented warm-start requires c_in==1");
+        assert_eq!(
+            (kh, kw),
+            (3, 3),
+            "oriented warm-start requires a 3×3 S-cell"
+        );
+        let mut b = Self::new(c_in, k, kh, kw, group, tau, seed);
+        b.conv.w = oriented_sobel_bank(k);
+        b
     }
 
     /// Zero-shaped gradient buffer for this block.
@@ -361,6 +421,33 @@ mod tests {
                 g1.conv.w[i]
             );
         }
+    }
+
+    #[test]
+    fn oriented_bank_is_structured_not_isotropic() {
+        // Guard (F-ENT-2): the oriented warm-start must produce a genuinely
+        // oriented S-cell so a downstream entropy pool sees an anisotropic
+        // response. Unit 0 is exactly Sobel gx/gy; every unit's two filters are a
+        // rotated gradient pair, so each has non-trivial gradient energy.
+        let w = oriented_sobel_bank(4);
+        assert_eq!(w.len(), 2 * 4 * 9);
+        // unit 0 channel 0 == Sobel gx
+        assert_eq!(&w[0..9], &[-1.0, 0.0, 1.0, -2.0, 0.0, 2.0, -1.0, 0.0, 1.0]);
+        for u in 0..4 {
+            let energy: f32 = w[(2 * u) * 9..(2 * u + 1) * 9].iter().map(|v| v * v).sum();
+            assert!(
+                energy > 1.0,
+                "unit {u} filter is degenerate (energy {energy})"
+            );
+        }
+    }
+
+    #[test]
+    fn new_oriented_installs_the_bank() {
+        let g = DihedralGroup::new(8, false);
+        let b = ScBlock::new_oriented(1, 3, 3, 3, g, 0.3, 5);
+        assert_eq!(b.conv.w, oriented_sobel_bank(3));
+        assert_eq!(b.conv.c_out, 6);
     }
 
     #[test]

@@ -22,7 +22,7 @@
 //! Run: `cargo run --release --example neocognitron_aniso -- [--c1] [out.json]`
 
 use holonomy_learn::{
-    adam_step, conv2d_backward, conv2d_forward, group_pool_backward, group_pool_forward,
+    adam_step, auroc, conv2d_backward, conv2d_forward, group_pool_backward, group_pool_forward,
     linear_backward, linear_forward, AdamState, ConvLayer, ConvShape, DihedralGroup, LinearLayer,
 };
 use std::f32::consts::PI;
@@ -82,27 +82,6 @@ fn to_vectors(y: &[f32]) -> Vec<f32> {
         v[p * 3 + 1] = y[GG + p];
     }
     v
-}
-
-fn auroc(scores: &[f32], labels: &[u8]) -> f64 {
-    let mut idx: Vec<usize> = (0..scores.len()).collect();
-    idx.sort_by(|&a, &b| {
-        scores[a]
-            .partial_cmp(&scores[b])
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    let (mut rs, mut np) = (0.0f64, 0u64);
-    for (r, &i) in idx.iter().enumerate() {
-        if labels[i] == 1 {
-            rs += (r + 1) as f64;
-            np += 1;
-        }
-    }
-    let nn = scores.len() as u64 - np;
-    if np == 0 || nn == 0 {
-        return 0.5;
-    }
-    (rs - (np * (np + 1) / 2) as f64) / (np * nn) as f64
 }
 
 fn main() {

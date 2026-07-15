@@ -14,9 +14,9 @@
 //! Run: `cargo run --release --example neocognitron_entropy -- [--mean-top] [--seed=N]`
 
 use holonomy_learn::{
-    adam_step, global_entropy_pool_backward, global_entropy_pool_forward, linear_backward,
-    linear_forward, sc_block_backward, sc_block_forward, AdamState, ConvShape, DihedralGroup,
-    LinearLayer, ScBlock, FEATS_PER_CHANNEL,
+    adam_step, auroc, global_entropy_pool_backward, global_entropy_pool_forward, linear_backward,
+    linear_forward, oriented_sobel_bank, sc_block_backward, sc_block_forward, AdamState, ConvShape,
+    DihedralGroup, LinearLayer, ScBlock, FEATS_PER_CHANNEL,
 };
 use std::f32::consts::PI;
 use std::io::Write;
@@ -82,42 +82,6 @@ fn render(theta: f32, corner: bool, rng: &mut u64) -> Vec<f32> {
 /// Sobel gradient pair at angle `u·π/K`, so the resp map is structured from step
 /// 0 and the entropy-pool gradient engages (cold-start fix; cf. the CR
 /// warm-start). The conv stays fully learnable — this only seeds it oriented.
-fn oriented_conv_init(k: usize) -> Vec<f32> {
-    let gx = [-1.0f32, 0.0, 1.0, -2.0, 0.0, 2.0, -1.0, 0.0, 1.0];
-    let gy = [-1.0f32, -2.0, -1.0, 0.0, 0.0, 0.0, 1.0, 2.0, 1.0];
-    let mut w = vec![0.0f32; 2 * k * 9];
-    for u in 0..k {
-        let phi = u as f32 * PI / k as f32;
-        let (cp, sp) = (phi.cos(), phi.sin());
-        for t in 0..9 {
-            w[(2 * u) * 9 + t] = cp * gx[t] + sp * gy[t]; // gradient along φ
-            w[(2 * u + 1) * 9 + t] = -sp * gx[t] + cp * gy[t]; // gradient along φ+90°
-        }
-    }
-    w
-}
-
-fn auroc(scores: &[f32], labels: &[u8]) -> f64 {
-    let mut idx: Vec<usize> = (0..scores.len()).collect();
-    idx.sort_by(|&a, &b| {
-        scores[a]
-            .partial_cmp(&scores[b])
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    let (mut rs, mut np) = (0.0f64, 0u64);
-    for (r, &i) in idx.iter().enumerate() {
-        if labels[i] == 1 {
-            rs += (r + 1) as f64;
-            np += 1;
-        }
-    }
-    let nn = scores.len() as u64 - np;
-    if np == 0 || nn == 0 {
-        return 0.5;
-    }
-    (rs - (np * (np + 1) / 2) as f64) / (np * nn) as f64
-}
-
 fn main() {
     let mean_top = flag("--mean-top");
     let out_path = std::env::args()
@@ -136,7 +100,7 @@ fn main() {
     let feat_dim = if mean_top { k } else { k * FEATS_PER_CHANNEL };
 
     let mut b1 = ScBlock::new(1, k, 3, 3, group, tau, 11 + seed_base);
-    b1.conv.w = oriented_conv_init(k); // oriented warm-start (cold-start fix)
+    b1.conv.w = oriented_sobel_bank(k); // oriented warm-start (cold-start fix)
     let mut head = LinearLayer::new(feat_dim, 1, 13 + seed_base);
     let s1 = ConvShape {
         c_in: 1,
