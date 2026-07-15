@@ -30,7 +30,7 @@ impl Rng {
             .0
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
-        ((self.0 >> 33) as f32) / (u32::MAX as f32)
+        ((self.0 >> 32) as u32 as f32) / 4294967296.0 // uniform [0,1)
     }
     fn u(&mut self) -> f32 {
         2.0 * self.f() - 1.0

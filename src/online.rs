@@ -154,6 +154,126 @@ impl EvolventHead {
     }
 }
 
+/// Block-structured (hyperedge-clique) precision evolvent — the alternative to
+/// the dense O(d^2) pairwise precision. Features are grouped into contiguous
+/// blocks (one per hyperedge); the precision is kept **block-diagonal** (a small
+/// `b_e x b_e` matrix per block) with a SHARED residual and denominator, so a
+/// step costs `O(sum b_e^2)` = `O(d * w)` for width `w`, not `O(d^2)`.
+///
+/// This is exact RLS when the true precision is block-diagonal (feature-disjoint
+/// hyperedges over independent, mean-zero inputs); it is an approximation that
+/// drops cross-block (separator) coupling when hyperedges overlap. With a single
+/// block it reduces to the dense [`EvolventHead`] exactly (see tests).
+#[derive(Clone, Debug)]
+pub struct BlockEvolventHead {
+    /// Full weight vector `(d,)`.
+    pub w: Vec<f32>,
+    /// `(offset, size)` per block (contiguous over the feature vector).
+    blocks: Vec<(usize, usize)>,
+    /// Per-block precision `b_e x b_e` (row-major).
+    p: Vec<Vec<f32>>,
+    lambda: f32,
+    caps: Vec<f32>,
+}
+
+impl BlockEvolventHead {
+    /// New head over contiguous blocks of the given sizes. `ridge > 0`, `lambda in (0,1]`.
+    ///
+    /// # Panics
+    /// If any size is 0, `ridge <= 0`, or `lambda` outside `(0,1]`.
+    pub fn new(block_sizes: &[usize], ridge: f32, lambda: f32) -> Self {
+        assert!(ridge > 0.0 && lambda > 0.0 && lambda <= 1.0);
+        let mut blocks = Vec::with_capacity(block_sizes.len());
+        let mut p = Vec::with_capacity(block_sizes.len());
+        let mut caps = Vec::with_capacity(block_sizes.len());
+        let mut off = 0;
+        for &b in block_sizes {
+            assert!(b >= 1, "block size must be >= 1");
+            blocks.push((off, b));
+            let mut pb = vec![0.0f32; b * b];
+            for i in 0..b {
+                pb[i * b + i] = 1.0 / ridge;
+            }
+            p.push(pb);
+            caps.push(1e4 * b as f32 / ridge);
+            off += b;
+        }
+        BlockEvolventHead {
+            w: vec![0.0; off],
+            blocks,
+            p,
+            lambda,
+            caps,
+        }
+    }
+
+    /// Total feature dimension.
+    pub fn dim(&self) -> usize {
+        self.w.len()
+    }
+
+    /// Nonzeros the precision stores — `sum b_e^2` (vs `d^2` dense).
+    pub fn precision_nnz(&self) -> usize {
+        self.blocks.iter().map(|&(_, b)| b * b).sum()
+    }
+
+    /// Prediction `sum_e phi_e . w_e`.
+    pub fn predict(&self, phi: &[f32]) -> f32 {
+        assert_eq!(phi.len(), self.w.len());
+        phi.iter().zip(&self.w).map(|(&a, &b)| a * b).sum()
+    }
+
+    /// One block-diagonal RLS update — shared residual/denominator across blocks,
+    /// per-block precision. Returns the prequential residual.
+    ///
+    /// # Panics
+    /// If `phi.len() != d`.
+    pub fn update(&mut self, phi: &[f32], y: f32) -> f32 {
+        assert_eq!(phi.len(), self.w.len());
+        // per-block Pphi and shared denom = lambda + sum_e phi_e^T P_e phi_e
+        let mut pphi: Vec<Vec<f32>> = Vec::with_capacity(self.blocks.len());
+        let mut denom = self.lambda;
+        for (bi, &(off, b)) in self.blocks.iter().enumerate() {
+            let pe = &self.p[bi];
+            let phe = &phi[off..off + b];
+            let mut v = vec![0.0f32; b];
+            for (i, vi) in v.iter_mut().enumerate() {
+                let row = &pe[i * b..i * b + b];
+                *vi = row.iter().zip(phe).map(|(&pij, &pj)| pij * pj).sum();
+            }
+            denom += phe.iter().zip(&v).map(|(&p, &vi)| p * vi).sum::<f32>();
+            pphi.push(v);
+        }
+        let inv = 1.0 / denom;
+        let resid = y - self.predict(phi);
+        // per-block weight + precision update
+        for (bi, &(off, b)) in self.blocks.iter().enumerate() {
+            let v = &pphi[bi];
+            for (wi, &vi) in self.w[off..off + b].iter_mut().zip(v) {
+                *wi += vi * inv * resid;
+            }
+            let il = 1.0 / self.lambda;
+            let pe = &mut self.p[bi];
+            let mut trace = 0.0f32;
+            for (i, &vi) in v.iter().enumerate() {
+                let gi = vi * inv;
+                let row = &mut pe[i * b..i * b + b];
+                for (pij, &vj) in row.iter_mut().zip(v) {
+                    *pij = (*pij - gi * vj) * il;
+                }
+                trace += row[i];
+            }
+            if trace > self.caps[bi] {
+                let s = self.caps[bi] / trace;
+                for x in pe.iter_mut() {
+                    *x *= s;
+                }
+            }
+        }
+        resid
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -272,6 +392,63 @@ mod tests {
         assert!(head.w.iter().all(|v| v.is_finite()), "weights diverged");
         let wnorm: f32 = head.w.iter().map(|v| v * v).sum::<f32>().sqrt();
         assert!(wnorm < 1e3, "weights blew up: |w| = {wnorm}");
+    }
+
+    /// Block precision with a SINGLE block reduces to the dense EvolventHead exactly.
+    #[test]
+    fn single_block_equals_dense() {
+        let (d, n) = (6usize, 300usize);
+        let mut nx = lcg(21);
+        let mut dense = EvolventHead::new(d, 1, 1.0, 1.0);
+        let mut block = BlockEvolventHead::new(&[d], 1.0, 1.0);
+        for _ in 0..n {
+            let phi: Vec<f32> = (0..d).map(|_| nx()).collect();
+            let y = nx();
+            dense.update(&phi, &[y]);
+            block.update(&phi, y);
+        }
+        for (i, (&a, &b)) in dense.w.iter().zip(&block.w).enumerate() {
+            assert!((a - b).abs() < 1e-4, "w[{i}] dense {a} vs block {b}");
+        }
+        assert_eq!(block.precision_nnz(), d * d);
+    }
+
+    /// Block-diagonal RLS on feature-disjoint-support data matches dense RLS
+    /// (the exact regime) at a fraction of the precision storage.
+    #[test]
+    fn block_matches_dense_when_separable() {
+        // 2 blocks of 3; block A active on even samples, block B on odd -> Phi^T Phi
+        // is EXACTLY block-diagonal, so dense and block RLS agree.
+        let (b, nb) = (3usize, 2usize);
+        let d = b * nb;
+        let mut nx = lcg(5);
+        let mut dense = EvolventHead::new(d, 1, 1.0, 1.0);
+        let mut block = BlockEvolventHead::new(&[b, b], 1.0, 1.0);
+        for t in 0..600 {
+            let mut phi = vec![0.0f32; d];
+            let blk = t % nb;
+            for i in 0..b {
+                phi[blk * b + i] = nx();
+            }
+            let y = nx();
+            dense.update(&phi, &[y]);
+            block.update(&phi, y);
+        }
+        // predictions agree on fresh block-structured inputs
+        let mut maxdiff = 0.0f32;
+        for t in 0..50 {
+            let mut phi = vec![0.0f32; d];
+            let blk = t % nb;
+            for i in 0..b {
+                phi[blk * b + i] = nx();
+            }
+            maxdiff = maxdiff.max((dense.predict(&phi)[0] - block.predict(&phi)).abs());
+        }
+        assert!(maxdiff < 1e-3, "dense vs block prediction diff {maxdiff}");
+        assert!(
+            block.precision_nnz() < d * d,
+            "block must store fewer than d^2"
+        );
     }
 
     fn solve(a: &mut [f32], b: &mut [f32], d: usize) -> Vec<f32> {
