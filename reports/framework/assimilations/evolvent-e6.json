@@ -1,0 +1,22 @@
+{
+  "experiment_id": "evolvent-e6",
+  "date": "2026-07-15",
+  "result": "The separator coupling's value is a FUNCTION OF DATA DENSITY: R2 gap MF-minus-BLOCK peaks ~0.16 at per=6 (data-scarce, below clique arity ~8), falls to 0.006 at per=40 (rich). MF R2 == DENSE at every (per,seed). Closes the block-vs-info question open since E3: E5's ~0.0002 gap was a data-rich REGIME property, not a method limit.",
+  "novelty_classification": {"MEASUREMENT": ["F-EVO-8"], "note": "No new component -- discriminating measurement over existing JunctionTreeCholesky::solve vs solve_block_diagonal. Resolves the F-EVO-5/6/7 open 'non-additive/data-scarce cross-clique target' question via data-scarcity."},
+  "framework_impact": {
+    "interfaces_changed": [],
+    "defaults_changed": [],
+    "components_added_or_updated": [],
+    "guards_added": ["junction_tree::single_clique_equals_dense extended to cover solve_block_diagonal (§3 coverage gap for E5-added method closed)"],
+    "superseded": [],
+    "open_question_resolved": "F-EVO-5/6/7 'a non-additive/data-scarce cross-clique target where BLOCK loses materially and MF/dense hold' -> ANSWERED: data-scarcity, block loses up to 0.16 R2"
+  },
+  "source_changes": ["examples/evolvent_multifrontal.rs --per axis + weight-recovery RMSE", "src/junction_tree.rs test extended", "scripts/dev/plot_evolvent_scarcity.py", "reports/figures/evolvent_e6_results.json"],
+  "regression_tests_added": ["junction_tree::single_clique_equals_dense (now asserts solve_block_diagonal == exact on single clique)"],
+  "gates": {"suite": "178/0", "fmt": "clean", "clippy": "clean"},
+  "corrections": {},
+  "decision_rule_delivered": "When to pay for the cross-clique coupling: KEEP it (MF / info form) when data is scarce per clique (< arity) -- worth up to ~0.16 R2; block-diagonal suffices (and is cheaper) when data-rich.",
+  "honest_scope": ["additive-in-features linear target; genuine data-scarcity not a manufactured non-additive coupling", "single depth (6)", "the gap is a (structure, data-density) property not MF-alone", "separator-sharing axis and non-additive feature untested"],
+  "next_experiment_authorized": false,
+  "next_experiment_proposal": {"name": "separator-sharing axis (sep, depth) sweep + a genuinely non-additive cross-clique feature; contiguous-storage rewrite + criterion wall-clock", "reuses": ["JunctionTreeCholesky", "InfoEvolventHead"], "constrained_by": ["F-EVO-8"]}
+}

@@ -535,6 +535,17 @@ mod tests {
                 got[i]
             );
         }
+        // with a single clique there are no separators to drop, so the
+        // block-diagonal baseline must coincide with the exact solve
+        let blk = jt.solve_block_diagonal();
+        for i in 0..d {
+            assert!(
+                (got[i] - blk[i]).abs() < 1e-4,
+                "block[{i}] {} vs solve {}",
+                blk[i],
+                got[i]
+            );
+        }
     }
 
     #[test]

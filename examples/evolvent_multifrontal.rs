@@ -42,6 +42,10 @@ fn main() {
     };
     let seed = arg("--seed=", 0);
     let depth = arg("--depth=", 5) as usize;
+    // measurements homed at each clique. Low `per` (<= clique arity) is the
+    // DATA-SCARCE regime where no clique determines its own vars, so the separator
+    // coupling MF keeps (and BLOCK drops) becomes load-bearing.
+    let per = arg("--per=", 60) as usize;
     let (sep, res) = (2usize, 3usize);
     let mut rng = Rng(11 + seed);
 
@@ -52,7 +56,6 @@ fn main() {
 
     let mut jt = JunctionTreeCholesky::new(cliques.clone(), 1.0, d);
     let mut dense = InfoEvolventHead::new(d, 1.0);
-    let per = 60usize; // measurements per clique
 
     let gen = |rng: &mut Rng, c: usize| -> (Vec<f32>, Vec<f32>, f32) {
         // local phi over clique c's vars; y = phi . w_true(restricted); global phi too
@@ -80,6 +83,18 @@ fn main() {
     let w_mf = jt.solve();
     let w_dense = dense.solve();
     let w_blk = jt.solve_block_diagonal();
+
+    // weight-recovery RMSE vs the true weights (the estimation gap: BLOCK's
+    // separator vars are estimated from one clique, MF pools across the tree)
+    let wrmse = |w: &[f32]| -> f32 {
+        (w.iter()
+            .zip(&w_true)
+            .map(|(&a, &b)| (a - b) * (a - b))
+            .sum::<f32>()
+            / d as f32)
+            .sqrt()
+    };
+    let (wr_mf, wr_blk) = (wrmse(&w_mf), wrmse(&w_blk));
 
     // held-out test set
     let (mut pm, mut pd, mut pb, mut yt) = (vec![], vec![], vec![], vec![]);
@@ -112,10 +127,12 @@ fn main() {
     let dense_store = d * d;
     let dense_flops = (d as u64).pow(3) / 6;
     println!(
-        "depth {depth} seed {seed}  d {d} cliques {nc}  |  R2 MF {:.4} DENSE {:.4} BLOCK {:.4}  |  storage MF {} dense {} ({:.1}%)  flops MF {} dense~{} ({:.0}x)  |  locality: mean path {:.1} / {} cliques",
+        "depth {depth} seed {seed} per {per}  d {d} cliques {nc}  |  R2 MF {:.4} DENSE {:.4} BLOCK {:.4}  |  wRMSE MF {:.4} BLOCK {:.4}  |  storage MF {} dense {} ({:.1}%)  flops MF {} dense~{} ({:.0}x)  |  locality: mean path {:.1} / {} cliques",
         r2_score(&pm, &yt),
         r2_score(&pd, &yt),
         r2_score(&pb, &yt),
+        wr_mf,
+        wr_blk,
         jt.factor_storage(),
         dense_store,
         100.0 * jt.factor_storage() as f64 / dense_store as f64,

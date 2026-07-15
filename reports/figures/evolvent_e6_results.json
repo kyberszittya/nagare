@@ -1,0 +1,16 @@
+{
+  "experiment": "evolvent-e6-scarcity-discriminating",
+  "host": "kato15 (32-core, RTX6000; CPU-only)",
+  "seeds": [0,1,2,3,4],
+  "depth": 6, "d": 441, "cliques": 63, "sep": 2, "res": 3, "clique_arity": 8,
+  "note": "MF R2 == DENSE R2 at every (per,seed). BLOCK (separator-dropping) starves in the DATA-SCARCE regime (per <= clique arity): gap MF-BLOCK peaks ~0.16 R2 at per=6, vanishes (~0.006) at per=40. The separator coupling MF keeps is worth up to ~0.16 R2 when data is scarce; ~0 when rich (E5 regime). Medians of 5 seeds. Closes the block-vs-info question open since E3.",
+  "rows": [
+    {"per": 2,  "mf_r2": 0.3210, "dense_r2": 0.3210, "block_r2": 0.2320, "gap": 0.089, "wrmse_mf": 0.8337, "wrmse_block": 0.8604},
+    {"per": 3,  "mf_r2": 0.4222, "dense_r2": 0.4222, "block_r2": 0.3254, "gap": 0.097, "wrmse_mf": 0.7635, "wrmse_block": 0.7975},
+    {"per": 4,  "mf_r2": 0.5711, "dense_r2": 0.5711, "block_r2": 0.4173, "gap": 0.154, "wrmse_mf": 0.6818, "wrmse_block": 0.7522},
+    {"per": 6,  "mf_r2": 0.7870, "dense_r2": 0.7870, "block_r2": 0.6284, "gap": 0.159, "wrmse_mf": 0.4915, "wrmse_block": 0.6152},
+    {"per": 10, "mf_r2": 0.9374, "dense_r2": 0.9374, "block_r2": 0.8717, "gap": 0.066, "wrmse_mf": 0.2718, "wrmse_block": 0.3588},
+    {"per": 20, "mf_r2": 0.9938, "dense_r2": 0.9938, "block_r2": 0.9880, "gap": 0.058, "wrmse_mf": 0.0826, "wrmse_block": 0.1084},
+    {"per": 40, "mf_r2": 0.9989, "dense_r2": 0.9989, "block_r2": 0.9983, "gap": 0.006, "wrmse_mf": 0.0300, "wrmse_block": 0.0371}
+  ]
+}

@@ -260,6 +260,21 @@
       "regression_tests": ["junction_tree::single_clique_equals_dense", "junction_tree::branching_tree_equals_dense_at_bounded_width", "junction_tree::online_update_only_perturbs_path_to_root"],
       "superseded_findings": [],
       "open_questions": ["contiguous-storage rewrite + wall-clock criterion benchmark (analytic flops -> measured time)", "optimized refactorize_path (recompute only the leaf->root path) = the incremental online solver", "non-additive / data-scarce cross-clique target (block loses materially, MF/dense hold)", "route the separator message literally through hg_message on a signed hypergraph"]
+    },
+    {
+      "id": "F-EVO-8",
+      "claim": "The value of the cross-clique (separator) coupling is a FUNCTION OF DATA DENSITY, and it is large exactly when data is scarce. Discriminating test (kato15, 5 seeds, branching clique tree depth 6, d=441, 63 cliques, clique arity ~8): sweeping measurements-per-clique `per`, the R2 gap MF-minus-BLOCK (separator-dropping) rises from 0.089 (per=2) to a PEAK 0.159 at per=6 (below arity, data-scarce), then falls to 0.006 at per=40 (data-rich, the E5 regime). MULTIFRONTAL R2 == DENSE R2 at every (per,seed). Weight-recovery RMSE confirms: BLOCK mis-estimates the separator variables (per=6: 0.615 vs MF 0.492) because it sees only their residual clique's data while MF pools every clique that shares them. This closes the block-vs-info question open since E3: E5's tiny ~0.0002 gap was a data-rich REGIME property, not a method limit; the coupling is worth up to ~0.16 R2 when data is scarce.",
+      "classification": "MEASUREMENT (resolves an open question; no new component)",
+      "source_experiment": "evolvent E6 (examples/evolvent_multifrontal.rs --per sweep, kato15 5 seeds x 7 densities)",
+      "raw_evidence": ["reports/2026-07-15-evolvent-e6-scarcity.md", "reports/figures/evolvent-scarcity.png", "reports/figures/evolvent_e6_results.json"],
+      "confidence": "high (5 seeds x 7 densities; monotone-then-peak trend consistent across seeds)",
+      "scope": "additive-in-features linear target; the scarcity is genuine data-scarcity (per < clique arity), NOT a manufactured non-additive coupling; single depth (6). The gap peaks just below clique arity and vanishes when data-rich.",
+      "limitations": "the gap is a property of the (structure, data-density) pair, not of MF alone -- MF exactness is regime-independent, block-diagonal is nearly as good AND cheaper in the rich regime; separator-sharing axis (sep, depth) and a genuinely non-additive cross-clique feature untested.",
+      "framework_consequence": "No new component -- uses JunctionTreeCholesky::solve vs solve_block_diagonal. Resolves F-EVO-5/6/7 open question 'a non-additive/data-scarce cross-clique target where BLOCK loses materially': ANSWERED via data-scarcity (block loses up to 0.16 R2). Quantifies WHEN to pay for the coupling (keep it when data-scarce; block-diagonal suffices when rich). Added regression coverage for solve_block_diagonal (single_clique_equals_dense).",
+      "code_changes": ["examples/evolvent_multifrontal.rs --per axis + weight-recovery RMSE", "src/junction_tree.rs single_clique_equals_dense extended to cover solve_block_diagonal"],
+      "regression_tests": ["junction_tree::single_clique_equals_dense (now covers solve_block_diagonal)"],
+      "superseded_findings": [],
+      "open_questions": ["separator-sharing axis (sep, depth) -- gap should grow with more cliques per separator", "a genuinely non-additive cross-clique feature (explicit product spanning a separator) -- does the gap widen beyond data-scarcity?", "contiguous-storage rewrite + wall-clock benchmark (E5 follow-up)"]
     }
   ]
 }
