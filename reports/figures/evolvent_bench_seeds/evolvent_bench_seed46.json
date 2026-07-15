@@ -1,11 +1,11 @@
 {
  "seed": 46, "m_rff": 512, "mlp_epochs": 200,
  "results": [
-  {"dataset": "gen_reg", "metric": "R2", "evolvent": 0.9110, "sgd": 0.8510, "mlp": 0.9110},
-  {"dataset": "gen_reg_highd", "metric": "R2", "evolvent": 0.6730, "sgd": 0.6441, "mlp": -0.3029},
-  {"dataset": "california_reg", "metric": "R2", "evolvent": 0.6727, "sgd": 0.6072, "mlp": 0.6582},
-  {"dataset": "gen_cls", "metric": "ACC", "evolvent": 0.7150, "sgd": 0.6420, "mlp": 0.6890},
-  {"dataset": "gen_cls_multi", "metric": "ACC", "evolvent": 0.6800, "sgd": 0.5713, "mlp": 0.5513},
-  {"dataset": "iris_cls", "metric": "ACC", "evolvent": 1.0000, "sgd": 0.9737, "mlp": 1.0000}
+  {"dataset": "gen_reg", "metric": "R2", "evolvent": 0.9737, "sgd": 0.9608, "mlp": 0.9677},
+  {"dataset": "gen_reg_highd", "metric": "R2", "evolvent": 0.3284, "sgd": -0.0759, "mlp": 0.1715},
+  {"dataset": "california_reg", "metric": "R2", "evolvent": 0.6501, "sgd": 0.6355, "mlp": 0.6892},
+  {"dataset": "gen_cls", "metric": "ACC", "evolvent": 0.9860, "sgd": 0.9840, "mlp": 0.9840},
+  {"dataset": "gen_cls_multi", "metric": "ACC", "evolvent": 0.9967, "sgd": 0.9920, "mlp": 0.9800},
+  {"dataset": "iris_cls", "metric": "ACC", "evolvent": 0.9474, "sgd": 0.9211, "mlp": 1.0000}
  ]
 }

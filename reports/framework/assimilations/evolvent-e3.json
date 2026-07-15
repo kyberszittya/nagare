@@ -1,0 +1,19 @@
+{
+  "experiment_id": "evolvent-e3",
+  "date": "2026-07-15",
+  "result": "Pairwise precision cannot represent a 3-way interaction (R2 ~0.15, L2-orthogonal); hyperedge-clique block precision recovers it (0.997 == dense) at 20x less storage O(d*w).",
+  "novelty_classification": {"NEW_CANONICAL_CAPABILITY": ["F-EVO-5"], "BUG_FIX_WITH_ARCHITECTURAL_IMPACT": ["RNG >>33/u32MAX -> biased inputs; corrected F-EVO-4"]},
+  "framework_impact": {
+    "interfaces_changed": ["BlockEvolventHead (block-diagonal precision RLS)"],
+    "defaults_changed": [],
+    "components_added_or_updated": ["BlockEvolventHead (EXPERIMENTAL)", "EvolventHead note (F-EVO-4 corrected)"],
+    "guards_added": ["RNG fix in evolvent_stream/bench/hypergraph"],
+    "superseded": ["F-EVO-4 pre-correction (biased-data) numbers"]
+  },
+  "source_changes": ["src/online.rs BlockEvolventHead + 2 tests", "examples/evolvent_hypergraph.rs", "examples/evolvent_{stream,bench}.rs RNG fix", "scripts/dev/plot_evolvent_hypergraph.py"],
+  "regression_tests_added": ["online::single_block_equals_dense", "online::block_matches_dense_when_separable"],
+  "gates": {"suite": "174/0", "fmt": "clean", "clippy": "clean"},
+  "corrections": {"F-EVO-4": "re-run with fixed RNG -> evolvent COMPETITIVE (wins 2 loses 2 ties 2 vs MLP, beats SGD 6/6); 'decisive on hard regimes' retracted (MLP wins hard high-d)"},
+  "next_experiment_authorized": true,
+  "next_experiment_proposal": {"name": "junction-tree (block-tridiagonal) precision via hg_message + SBSH width certificate", "reuses": ["BlockEvolventHead", "hg_message", "SBSH width"], "constrained_by": ["F-EVO-5"]}
+}

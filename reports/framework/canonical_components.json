@@ -177,7 +177,27 @@
       "supersedes": null,
       "superseded_by": null,
       "default": false,
-      "note": "DEPLOYABLE for STATIC supervised readouts (F-EVO-4, 50 seeds: matches/beats 200-epoch MLP on 5/6, beats SGD on 6/6, tightest IQR, 1-pass no-tuning). Streaming/drift regime still EXPERIMENTAL (F-EVO-3)."
+      "note": "DEPLOYABLE for STATIC supervised readouts (F-EVO-4, 50 seeds fixed-RNG: COMPETITIVE with 200-epoch MLP -- wins 2 loses 2 ties 2 -- beats SGD 6/6, 1-pass no-tuning). Streaming/drift still EXPERIMENTAL (F-EVO-3)."
+    },
+    {
+      "name": "BlockEvolventHead",
+      "purpose": "Block-structured (hyperedge-clique) precision evolvent -- the alternative to the dense O(d^2) PAIRWISE precision. Contiguous feature blocks (one per hyperedge), block-diagonal precision (small b_e x b_e per block) with a SHARED residual/denominator; step is O(sum b_e^2) = O(d*w). Keeps higher-order interactions (the block features can be k-way) at a fraction of the cost.",
+      "owning_module": "src/online.rs",
+      "symbols": ["BlockEvolventHead", "BlockEvolventHead::new (block_sizes,ridge,lambda)", "predict", "update", "dim", "precision_nnz"],
+      "version": "1.0",
+      "status": "EXPERIMENTAL",
+      "source_experiment": "evolvent E3 (examples/evolvent_hypergraph.rs)",
+      "evidence_paths": ["reports/2026-07-15-evolvent-e3-hypergraph-precision.md", "reports/figures/evolvent-hypergraph.png"],
+      "supported_tasks": ["additive-over-hyperedges regression/classification with bounded-width structure", "higher-order (k-way) feature interactions at O(d*w)"],
+      "observation_schema": "phi: &[f32] grouped into contiguous blocks (block_sizes), y: f32",
+      "output_schema": "predict -> f32; update -> prequential residual; single block == dense EvolventHead exactly",
+      "dependencies": [],
+      "known_limitations": ["drops cross-block (separator) coupling -> approximate for non-additive cross-hyperedge structure", "contiguous blocks only (assumes features grouped by hyperedge)", "the higher-order term must be an explicit feature"],
+      "canonical_tests": ["online::single_block_equals_dense", "online::block_matches_dense_when_separable"],
+      "supersedes": null,
+      "superseded_by": null,
+      "default": false,
+      "note": "F-EVO-5: matches dense-hyperedge R2 0.997 at 20x less precision storage; pairwise precision provably cannot represent the 3-way term. Path to CANONICAL: junction-tree (block-tridiagonal) form + update through hg_message + SBSH width certificate."
     }
   ]
 }
