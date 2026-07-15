@@ -1,0 +1,73 @@
+{
+  "schema_version": "1.0",
+  "collected": "2026-07-15",
+  "framework": "nagare / holonomy_learn",
+  "identity": "closed-form, no-autograd; every op has a hand-derived FD-verified backward",
+  "scale": {"fd_verified_ops": 31, "tests_passing": 168, "reports": 81, "autograd": false, "commit": "dc111b7"},
+  "op_library": {
+    "function_approximation": ["kan", "hsikan", "catmull_rom/chebyshev_cr", "kochanek_bartels"],
+    "geometry_rotors": ["dihedral", "cayley_rotor", "rotor_holonomy", "rotor_spike", "clifford_fir"],
+    "graph_hypergraph": ["hg_message", "signed_scatter", "scatter", "gomb_shell", "cpml_tier", "project_alpha_mix"],
+    "entropy_pooling": ["spectral_entropy", "fused_entropy_update", "global_entropy_pool", "phase_pool", "softmax_k"],
+    "core": ["linear", "mse", "loss", "adam"],
+    "cv_specific": ["conv2d", "group_pool", "sc_block", "soft_argmax", "oriented_head", "oriented_descriptor", "gaussian_kld", "quadtree", "patch_projection", "fsr_mixer"]
+  },
+  "result_lines": [
+    {
+      "id": "signed-link-leakage",
+      "domain": "relational / signed graphs (NON-CV)",
+      "headline": "signed-balance metric (Z2 holonomy, unbiased wedge sampling); strict-vs-transductive shuffle audit (Table 2, 5 graphs) shows structure not leakage; rotor-holonomy channel positive-but-marginal (gain tracks headroom); Chebyshev-CR real weights beat +/-1 (OTC 0.9076 vs 0.9041)",
+      "status": "CANONICAL",
+      "transfers_beyond_cv": true,
+      "evidence": ["reports/2026-07-13-signed-balance-metric.md", "reports/2026-07-13-signed-link-shuffle-audit.md", "reports/2026-07-13-signed-link-leakage-audit-full.md", "reports/2026-07-13-cr-edge-encoder.md"]
+    },
+    {
+      "id": "neocognitron-arc",
+      "domain": "CV (recognition + pose)",
+      "headline": "entropy-top held-out AUROC 1.000 + pose 0.9deg + ~3300 updates/s (hypothesis confirmed); skeleton envelope P2 neutral / P3 win 2.6 vs 6.9px / P4 hurts; F-ARC-1 principle",
+      "status": "CANONICAL",
+      "transfers_beyond_cv": "partial (entropy-pool covariance idea generalizes; conv/group_pool do not)",
+      "evidence": ["reports/framework/assimilations/neocognitron-arc.md"]
+    },
+    {
+      "id": "sbsh-detector",
+      "domain": "CV (detection)",
+      "headline": "Gomb-Soma YOLO alternative: dynamic quadtree grid + oriented Gaussian-KLD boxes + rotor-spike; held-out P=0.656 R=0.966 F1=0.781",
+      "status": "MECHANISM_DEMO",
+      "transfers_beyond_cv": false,
+      "evidence": ["reports/2026-07-*-sbsh-*.md"]
+    },
+    {
+      "id": "cv-texture-rotation",
+      "domain": "CV (texture/rotation)",
+      "headline": "KTH-TIPS2-b materials; D_n group-conv vs canonicalization; phase_pool |DFT| invariant; learned vs fixed orientation field",
+      "status": "RESEARCH_ONLY",
+      "transfers_beyond_cv": false,
+      "evidence": ["reports/*phase-pool*.md", "reports/*dihedral*.md"]
+    },
+    {
+      "id": "hsikan-structural-leverage",
+      "domain": "representation (domain-general)",
+      "headline": "H1 scaling + H2 causal SUPPORTED (scramble + DeepSets double-dissociation); structural benefit 3.7->61x with chain length",
+      "status": "CANONICAL",
+      "transfers_beyond_cv": true,
+      "evidence": ["project-hsikan-structural-leverage-arc"]
+    },
+    {
+      "id": "scatter-locality",
+      "domain": "systems / performance",
+      "headline": "sparse-mm vs index_add 2.9x @1-thread once acc>L3 (tail win); GPU atomics are where Nagare pays",
+      "status": "CANONICAL",
+      "transfers_beyond_cv": true,
+      "evidence": ["project-nagare-cpu-scatter-locality"]
+    }
+  ],
+  "transfer_substrate_for_non_cv": [
+    "signed hypergraph message passing (hg_message, signed_scatter) + signed-balance holonomy",
+    "HSiKAN / KAN learnable function basis",
+    "rotors / Clifford / holonomy for rotational/cyclic signals",
+    "entropy pooling (global_entropy_pool covariance readout, spectral_entropy) for any point-set/distribution",
+    "the closed-form + FD-verified discipline and the assimilation lifecycle"
+  ],
+  "not_transferable_cv_specific": ["conv2d", "group_pool", "sc_block", "sbsh-detector", "pose nets", "oriented_*", "gaussian_kld", "quadtree", "patch_projection"]
+}
