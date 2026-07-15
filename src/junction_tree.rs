@@ -372,6 +372,56 @@ pub fn balanced_binary_tree(depth: usize, sep: usize, res: usize) -> (Vec<Clique
     (cliques, next)
 }
 
+/// Build a **star** clique tree: one root and `fanout` children that ALL share the
+/// SAME `sep`-variable separator (the root's first `sep` vars). The shared
+/// separator therefore appears in `fanout + 1` cliques — the separator-sharing
+/// axis the binary tree cannot express (there each separator serves one child).
+/// Root introduces `sep + res_root` residual vars; each child introduces
+/// `res_child` residual vars plus the shared separator. Child arity `res_child +
+/// sep` is independent of `fanout`, so data-scarcity is held fixed as sharing
+/// grows. Returns the cliques and total variable count `d`.
+///
+/// # Preconditions
+/// `fanout >= 1`, `sep >= 1`, `res_root >= 0`, `res_child >= 1`.
+pub fn star_clique_tree(
+    fanout: usize,
+    sep: usize,
+    res_root: usize,
+    res_child: usize,
+) -> (Vec<Clique>, usize) {
+    assert!(fanout >= 1 && sep >= 1 && res_child >= 1);
+    let mut next = 0usize;
+    let take = |n: usize, next: &mut usize| -> Vec<usize> {
+        (0..n)
+            .map(|_| {
+                let v = *next;
+                *next += 1;
+                v
+            })
+            .collect()
+    };
+    let sep_vars = take(sep, &mut next); // shared separator (residual at root)
+    let mut root_vars = sep_vars.clone();
+    root_vars.extend(take(res_root, &mut next));
+    let n_res_root = root_vars.len();
+    let mut cliques = vec![Clique {
+        vars: root_vars,
+        n_res: n_res_root,
+        parent: None,
+    }];
+    for _ in 0..fanout {
+        let mut vars = take(res_child, &mut next);
+        let n_res = vars.len();
+        vars.extend_from_slice(&sep_vars); // separator = the shared vars
+        cliques.push(Clique {
+            vars,
+            n_res,
+            parent: Some(0),
+        });
+    }
+    (cliques, next)
+}
+
 /// Post-order (children before parents) over the clique forest rooted at the
 /// unique root. Iterative to avoid recursion depth limits.
 fn post_order(cliques: &[Clique]) -> Vec<usize> {
@@ -580,6 +630,28 @@ mod tests {
     /// An online update homed at a leaf clique changes only the Cholesky factors
     /// on that leaf's path to the root; every off-path subtree is untouched. This
     /// is the locality that makes an incremental re-fire O(depth·w³), not O(N·w³).
+    #[test]
+    fn star_tree_equals_dense_with_shared_separator() {
+        // one shared separator across many children — exercises the assembly of
+        // multiple Schur messages into the SAME parent positions
+        let (cliques, d) = star_clique_tree(6, 3, 3, 3);
+        let mut nx = lcg(5);
+        let mut jt = JunctionTreeCholesky::new(cliques, 1.0, d);
+        let nc = jt.n_cliques();
+        for _ in 0..(50 * nc) {
+            let c = ((nx() + 0.5) * nc as f32) as usize % nc;
+            let m = jt.cliques[c].vars.len();
+            let phi: Vec<f32> = (0..m).map(|_| nx()).collect();
+            jt.update(c, &phi, nx());
+        }
+        let want = dense_reference(&jt);
+        let got = jt.solve();
+        let max_err = (0..d)
+            .map(|i| (want[i] - got[i]).abs())
+            .fold(0.0f32, f32::max);
+        assert!(max_err < 1e-3, "star max |dense - jt| = {max_err}");
+    }
+
     #[test]
     fn online_update_only_perturbs_path_to_root() {
         let (cliques, _d) = balanced_binary_tree(4, 2, 3);

@@ -15,7 +15,9 @@
 //!
 //! Run: `cargo run --release --example evolvent_multifrontal -- [--depth=N] [--seed=N]`
 
-use holonomy_learn::{balanced_binary_tree, r2_score, InfoEvolventHead, JunctionTreeCholesky};
+use holonomy_learn::{
+    balanced_binary_tree, r2_score, star_clique_tree, InfoEvolventHead, JunctionTreeCholesky,
+};
 
 struct Rng(u64);
 impl Rng {
@@ -46,10 +48,17 @@ fn main() {
     // DATA-SCARCE regime where no clique determines its own vars, so the separator
     // coupling MF keeps (and BLOCK drops) becomes load-bearing.
     let per = arg("--per=", 60) as usize;
-    let (sep, res) = (2usize, 3usize);
+    // fanout>0 switches to a STAR topology: one separator shared across `fanout`
+    // children (separator-sharing axis). fanout=0 => balanced binary tree.
+    let fanout = arg("--fanout=", 0) as usize;
+    let (sep, res) = (if fanout > 0 { 3 } else { 2 }, 3usize);
     let mut rng = Rng(11 + seed);
 
-    let (cliques, d) = balanced_binary_tree(depth, sep, res);
+    let (cliques, d) = if fanout > 0 {
+        star_clique_tree(fanout, sep, res, res)
+    } else {
+        balanced_binary_tree(depth, sep, res)
+    };
     let nc = cliques.len();
     // true weights over all d features
     let w_true: Vec<f32> = (0..d).map(|_| rng.g()).collect();
@@ -127,7 +136,7 @@ fn main() {
     let dense_store = d * d;
     let dense_flops = (d as u64).pow(3) / 6;
     println!(
-        "depth {depth} seed {seed} per {per}  d {d} cliques {nc}  |  R2 MF {:.4} DENSE {:.4} BLOCK {:.4}  |  wRMSE MF {:.4} BLOCK {:.4}  |  storage MF {} dense {} ({:.1}%)  flops MF {} dense~{} ({:.0}x)  |  locality: mean path {:.1} / {} cliques",
+        "depth {depth} fanout {fanout} seed {seed} per {per}  d {d} cliques {nc}  |  R2 MF {:.4} DENSE {:.4} BLOCK {:.4}  |  wRMSE MF {:.4} BLOCK {:.4}  |  storage MF {} dense {} ({:.1}%)  flops MF {} dense~{} ({:.0}x)  |  locality: mean path {:.1} / {} cliques",
         r2_score(&pm, &yt),
         r2_score(&pd, &yt),
         r2_score(&pb, &yt),

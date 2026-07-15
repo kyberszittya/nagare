@@ -1,0 +1,21 @@
+{
+  "experiment_id": "evolvent-e7",
+  "date": "2026-07-15",
+  "result": "Separator-sharing is a THRESHOLD effect, not a dose-response. Star topology (one separator shared across `fanout` children), per=4 scarce, 5 seeds kato15: block deficit is large (~0.16-0.28 R2) whenever a separator is shared, but PLATEAUS across fanout 2..32 -- does NOT grow monotonically. PARTIAL REFUTATION of the stated 'more sharing -> monotonically bigger gap' hypothesis. MF R2 == DENSE throughout.",
+  "novelty_classification": {"PARTIAL_REFUTATION": ["F-EVO-9"], "note": "Corrects a hypothesis I stated after E6. Sharing MATTERS (confirmed); degree-of-sharing beyond 2 does NOT add much (refuted). Recorded per 'multi-seed is the verdict / don't force the convenient narrative' -- single-seed (seed 0) looked monotone, 5-seed does not."},
+  "framework_impact": {
+    "interfaces_changed": ["star_clique_tree (shared-separator topology builder)"],
+    "defaults_changed": [],
+    "components_added_or_updated": [],
+    "guards_added": ["junction_tree::star_tree_equals_dense_with_shared_separator (MF == dense on a star; assembles many Schur messages into one parent)"],
+    "superseded": [],
+    "refines": "F-EVO-8: coupling value is a THRESHOLD on sharing (bounded by per-clique data budget), NOT a dose-response in number of sharers"
+  },
+  "source_changes": ["src/junction_tree.rs star_clique_tree + 1 test", "src/lib.rs re-export", "examples/evolvent_multifrontal.rs --fanout switch", "scripts/dev/plot_evolvent_sharing.py", "reports/figures/evolvent_e7_results.json"],
+  "regression_tests_added": ["junction_tree::star_tree_equals_dense_with_shared_separator"],
+  "gates": {"suite": "179/0", "fmt": "clean", "clippy": "clean"},
+  "corrections": {"post-E6-hypothesis": "I stated the scarce-regime gap would 'widen further' with more separator-sharing. Multi-seed shows it JUMPS then PLATEAUS -- monotone growth NOT supported. Corrected here."},
+  "honest_scope": ["additive-in-features linear target; single scarcity per=4, sep=3", "small d at low fanout is noisy (d=9 at fanout=1; one seed had BLOCK beat MF via over-regularization)", "plateau conclusion rests on fanout>=2", "genuinely non-additive cross-clique feature still untested"],
+  "next_experiment_authorized": false,
+  "next_experiment_proposal": {"name": "genuinely non-additive cross-clique feature (explicit product spanning a separator) -- the last open discriminating knob; joint scarcity x sharing at larger d", "reuses": ["JunctionTreeCholesky", "star_clique_tree"], "constrained_by": ["F-EVO-9"]}
+}

@@ -1,0 +1,16 @@
+{
+  "experiment": "evolvent-e7-separator-sharing",
+  "host": "kato15 (32-core, RTX6000; CPU-only)",
+  "seeds": [0,1,2,3,4],
+  "topology": "star_clique_tree(fanout, sep=3, res_root=3, res_child=3)",
+  "per": 4, "child_arity": 6,
+  "note": "STAR topology: one separator (3 vars) shared across `fanout` children -> cliques-per-separator = fanout+1. Tests 'more cliques per separator -> bigger gap'. RESULT (5 seeds median[IQR]): MF R2 == DENSE at every cell. The block deficit JUMPS when a separator is shared (fanout 1 -> >=2) but then PLATEAUS ~0.16-0.28 R2 within seed noise -- it does NOT grow monotonically with fanout. Hypothesis 'more sharing -> monotonically bigger gap' NOT supported (PARTIAL REFUTATION); 'sharing matters' supported. Mechanism: at fixed scarcity the residual vars cap both solvers, and block's per-measurement error on the shared separator is set once fanout>=2; more children add equally-sep-affected measurements, not more per-measurement error. Small-d noise dominates fanout=1 (d=9).",
+  "rows": [
+    {"fanout": 1,  "cliques": 2,  "d": 9,   "mf_r2": 0.639, "dense_r2": 0.639, "block_r2": 0.552, "gap_med": 0.098, "gap_q1": 0.019, "gap_q3": 0.103},
+    {"fanout": 2,  "cliques": 3,  "d": 12,  "mf_r2": 0.882, "dense_r2": 0.882, "block_r2": 0.626, "gap_med": 0.184, "gap_q1": 0.158, "gap_q3": 0.348},
+    {"fanout": 4,  "cliques": 5,  "d": 18,  "mf_r2": 0.792, "dense_r2": 0.792, "block_r2": 0.630, "gap_med": 0.162, "gap_q1": 0.110, "gap_q3": 0.292},
+    {"fanout": 8,  "cliques": 9,  "d": 30,  "mf_r2": 0.868, "dense_r2": 0.868, "block_r2": 0.621, "gap_med": 0.228, "gap_q1": 0.184, "gap_q3": 0.292},
+    {"fanout": 16, "cliques": 17, "d": 54,  "mf_r2": 0.880, "dense_r2": 0.880, "block_r2": 0.614, "gap_med": 0.278, "gap_q1": 0.218, "gap_q3": 0.309},
+    {"fanout": 32, "cliques": 33, "d": 102, "mf_r2": 0.874, "dense_r2": 0.874, "block_r2": 0.710, "gap_med": 0.189, "gap_q1": 0.156, "gap_q3": 0.240}
+  ]
+}

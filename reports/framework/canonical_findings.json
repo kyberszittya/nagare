@@ -275,6 +275,21 @@
       "regression_tests": ["junction_tree::single_clique_equals_dense (now covers solve_block_diagonal)"],
       "superseded_findings": [],
       "open_questions": ["separator-sharing axis (sep, depth) -- gap should grow with more cliques per separator", "a genuinely non-additive cross-clique feature (explicit product spanning a separator) -- does the gap widen beyond data-scarcity?", "contiguous-storage rewrite + wall-clock benchmark (E5 follow-up)"]
+    },
+    {
+      "id": "F-EVO-9",
+      "claim": "Separator-SHARING is a THRESHOLD effect, not a dose-response. Star topology (one separator of 3 vars shared across `fanout` children => fanout+1 cliques per separator), fixed data-scarcity (per=4, child arity 6), 5 seeds kato15: the block-diagonal deficit is LARGE (~0.16-0.28 R2 median) whenever a separator is shared, materially more than minimal-sharing fanout=1 (0.10) and comparable to E6's within-tree gap -- BUT it does NOT grow monotonically with fanout: the gap JUMPS at fanout 1->2 then PLATEAUS across fanout 2..32 (medians 0.184,0.162,0.228,0.278,0.189, IQRs heavily overlapping). MF R2 == DENSE at every cell. PARTIAL REFUTATION of the stated hypothesis 'more cliques per separator -> monotonically bigger gap': sharing MATTERS (confirmed), degree-of-sharing beyond 2 does NOT add much (refuted). Mechanism (inferred): at fixed scarcity the residual vars cap both solvers, and block's per-measurement error on the shared separator is set once fanout>=2 -- more children add equally-sep-affected measurements, not more per-measurement error.",
+      "classification": "PARTIAL_REFUTATION (measurement; corrects a stated hypothesis)",
+      "source_experiment": "evolvent E7 (examples/evolvent_multifrontal.rs --fanout star topology, kato15 6 fanouts x 5 seeds)",
+      "raw_evidence": ["reports/2026-07-15-evolvent-e7-sharing.md", "reports/figures/evolvent-sharing.png", "reports/figures/evolvent_e7_results.json"],
+      "confidence": "medium-high (5 seeds; the PLATEAU/non-monotonicity is clear, the exact plateau level is noisy -- IQRs overlap, small-d noise dominates fanout=1)",
+      "scope": "additive-in-features linear target; single scarcity (per=4) and separator width (sep=3); small d at low fanout (d=9 at fanout=1 is noisy -- one seed had BLOCK beat MF via over-regularization). Plateau conclusion rests on fanout>=2.",
+      "limitations": "does NOT test a genuinely non-additive cross-clique feature (the last open discriminating knob); the joint scarcity x sharing sweep at larger d untested; single-seed (seed 0) looked monotone -- multi-seed is the verdict.",
+      "framework_consequence": "No new component (uses star_clique_tree + existing solve/solve_block_diagonal). REFINES F-EVO-8: the coupling's value is a THRESHOLD on sharing (turns on when a separator is shared) bounded by the per-clique data budget, NOT a dose-response in the number of sharers. New topology helper star_clique_tree (shared-separator) + regression test.",
+      "code_changes": ["src/junction_tree.rs star_clique_tree + star_tree_equals_dense_with_shared_separator test", "src/lib.rs re-export", "examples/evolvent_multifrontal.rs --fanout switch"],
+      "regression_tests": ["junction_tree::star_tree_equals_dense_with_shared_separator"],
+      "superseded_findings": [],
+      "open_questions": ["a genuinely non-additive cross-clique feature (explicit product spanning a separator)", "joint scarcity x sharing sweep at larger d (shed small-d noise)", "contiguous-storage rewrite + wall-clock (E5 follow-up)"]
     }
   ]
 }
