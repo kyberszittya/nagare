@@ -1,0 +1,20 @@
+{
+  "experiment": "dataset-benchmark-snapshot",
+  "date": "2026-07-16",
+  "host": "Hajdus-MacBook-Pro (arm64, CPU)",
+  "seeds": [0,1,2],
+  "note": "So-far dataset snapshot. evolvent_bench (frozen evolvent line, still a valid dataset measurement): median-of-3 R2/ACC + indicative single-shot wall-clock (Instant, NOT criterion). auroc_eval: the ON-MISSION entropy-pool closed-form learner, AUROC clean + hard. Arms A=one-pass RLS(evolvent) B=one-pass SGD C=200-epoch MLP. Fixtures california.csv + iris.csv present.",
+  "supervised": [
+    {"dataset": "gen_reg",        "metric": "R2",  "evolvent": 0.973, "sgd": 0.967, "mlp": 0.966, "evolvent_ms": 724, "mlp_ms": 1327, "kind": "reg"},
+    {"dataset": "gen_reg_highd",  "metric": "R2",  "evolvent": 0.307, "sgd": 0.135, "mlp": 0.422, "evolvent_ms": 765, "mlp_ms": 3434, "kind": "reg"},
+    {"dataset": "california",     "metric": "R2",  "evolvent": 0.664, "sgd": 0.654, "mlp": 0.676, "evolvent_ms": 180, "mlp_ms": 415,  "kind": "reg"},
+    {"dataset": "gen_cls",        "metric": "ACC", "evolvent": 0.881, "sgd": 0.863, "mlp": 0.884, "evolvent_ms": 368, "mlp_ms": 771,  "kind": "cls"},
+    {"dataset": "gen_cls_multi",  "metric": "ACC", "evolvent": 0.986, "sgd": 0.957, "mlp": 0.935, "evolvent_ms": 560, "mlp_ms": 1740, "kind": "cls"},
+    {"dataset": "iris",           "metric": "ACC", "evolvent": 0.947, "sgd": 0.895, "mlp": 0.947, "evolvent_ms": 14,  "mlp_ms": 26,   "kind": "cls"}
+  ],
+  "auroc_entropy_pool": [
+    {"task": "moons",  "clean": 1.000, "hard": 1.000},
+    {"task": "spiral", "clean": 1.000, "hard": 0.959},
+    {"task": "xor",    "clean": 1.000, "hard": 1.000}
+  ]
+}

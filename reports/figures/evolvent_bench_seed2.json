@@ -1,0 +1,11 @@
+{
+ "seed": 2, "m_rff": 512, "mlp_epochs": 200,
+ "results": [
+  {"dataset": "gen_reg", "metric": "R2", "evolvent": 0.9712, "sgd": 0.9542, "mlp": 0.9626},
+  {"dataset": "gen_reg_highd", "metric": "R2", "evolvent": 0.3069, "sgd": 0.1557, "mlp": 0.3574},
+  {"dataset": "california_reg", "metric": "R2", "evolvent": 0.6636, "sgd": 0.6538, "mlp": 0.6759},
+  {"dataset": "gen_cls", "metric": "ACC", "evolvent": 0.8370, "sgd": 0.7700, "mlp": 0.7620},
+  {"dataset": "gen_cls_multi", "metric": "ACC", "evolvent": 0.9860, "sgd": 0.9567, "mlp": 0.9353},
+  {"dataset": "iris_cls", "metric": "ACC", "evolvent": 0.9474, "sgd": 0.9737, "mlp": 0.9474}
+ ]
+}
