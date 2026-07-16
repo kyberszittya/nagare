@@ -42,7 +42,7 @@
       "supersedes": null,
       "superseded_by": null,
       "default": true,
-      "note": "Proves the MECHANISM half of 'one step to deep-representation learning' (feedback survives rotor composition through depth, closed-form). Empirical half next: entropy objective on this stack + the entropy-top-vs-mean-top double dissociation through depth."
+      "note": "Proves the MECHANISM half of 'one step to deep-representation learning' (feedback survives rotor composition through depth, closed-form). EMPIRICAL half now DEMONSTRATED (F-HOLO-1): deep+entropy double dissociation (deep+entropy 0.759 vs remove-depth 0.561 / remove-entropy 0.542 / chance 0.544) -- the net LEARNS useful features THROUGH DEPTH read by entropy not mean. Trained by GD on the closed-form gradient (stepping stone); the INSTANTANEOUS entropy-feedback rule is the remaining gap. See examples/holonomy_deep_dissociation.rs."
     },
     {
       "name": "conv2d",

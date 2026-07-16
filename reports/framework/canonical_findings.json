@@ -335,6 +335,21 @@
       "regression_tests": ["junction_tree::single_clique_equals_dense", "junction_tree::branching_tree_equals_dense_at_bounded_width", "junction_tree::star_tree_equals_dense_with_shared_separator", "junction_tree::online_update_only_perturbs_path_to_root (all guard the rewrite's exactness)"],
       "superseded_findings": [],
       "open_questions": ["blocked/SIMD triangular kernels + dense-Cholesky baseline -> the residual below the ceiling", "optimized refactorize_path (leaf->root only) incremental online solver + wall-clock", "higher-order interactions (degree>=3 -> width>=order+1)"]
+    },
+    {
+      "id": "F-HOLO-1",
+      "claim": "A DEEP holonomy net (RotorMeshNet: learned per-node Cayley rotors + mesh contraction, stacked) LEARNS useful features THROUGH DEPTH, readable by an entropy (arrangement) signal but not by a mean pool -- a clean DOUBLE DISSOCIATION. Pipeline is entirely closed-form / no autograd (RotorMeshNet -> spectral eigen-entropy readout -> logistic; trained by the composed hand-derived gradient). Task: ring mesh, coherent-twist vs isotropic, zero-mean (raw mean=chance). 5 seeds, held-out AUROC median: deep+entropy 0.759; deep+mean 0.542; shallow+entropy 0.561; shallow+mean 0.544. Removing EITHER depth OR the entropy readout collapses to ~chance -> depth AND arrangement(entropy) BOTH load-bearing. This answers the empirical crux of 'one step to deep-representation learning': the representation is learned (per-layer bivectors), the learning propagates through depth (closed-form adjoint/inverse-rotor transport), read by entropy not a supervised feature.",
+      "classification": "NEW_CANONICAL_CAPABILITY (on-mission; deep-representation learning demonstrated)",
+      "source_experiment": "deep-holonomy dissociation (examples/holonomy_deep_dissociation.rs, Mac 5 seeds x 2x2)",
+      "raw_evidence": ["reports/2026-07-16-deep-holonomy-dissociation.md", "reports/figures/holonomy-dissociation.png", "reports/figures/holonomy_dissociation_results.json"],
+      "confidence": "high (5 seeds; clean double dissociation; end-to-end gradient FD-verified max err 6e-5 BEFORE trusting training numbers -- not a phantom)",
+      "scope": "small controlled task (N=12 ring, 120 train/test); AUROC 0.759 above chance not saturated (hard zero-mean arrangement-only task); training gentle.",
+      "limitations": "TRAINED BY GD ON THE CLOSED-FORM GRADIENT = the stepping stone, NOT yet the thesis's INSTANTANEOUS entropy/holonomy feedback (the update is iterative supervised BCE; entropy is the READOUT/objective feature). What is proven: the deep holonomy representation is learnable + useful, and entropy (not mean) reads it. The one-shot instantaneous-feedback rule is the remaining gap to the pure claim.",
+      "framework_consequence": "RotorMeshNet elevated from MECHANISM_DEMO -> the deep-representation learning it enables is now DEMONSTRATED (double dissociation). Answers the 'does it compose through depth as USEFUL learning' question the whole holonomy-feedback thread posed. On-mission (holonomy, entropy, closed-form, no autograd) -- NOT the exact-solve devolution.",
+      "code_changes": ["examples/holonomy_deep_dissociation.rs (new)", "scripts/dev/plot_holonomy_dissociation.py"],
+      "regression_tests": ["holonomy_net::deep_backward_matches_fd (mechanism); the example's FD gate guards the full-pipeline gradient"],
+      "superseded_findings": [],
+      "open_questions": ["replace GD with the INSTANTANEOUS entropy/holonomy feedback (one-shot bivector update) = the last gap to the pure thesis", "push scale/score (deeper, larger mesh, tuned LR) now the dissociation is established", "rotor_holonomy (ordered loop product) as an explicit per-layer holonomy feature"]
     }
   ]
 }

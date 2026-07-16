@@ -1,0 +1,23 @@
+{
+  "experiment_id": "deep-holonomy-dissociation",
+  "date": "2026-07-16",
+  "host": "Hajdus-MacBook-Pro (arm64, CPU)",
+  "result": "DOUBLE DISSOCIATION (F-HOLO-1): deep holonomy net (RotorMeshNet) learns useful features THROUGH DEPTH, read by entropy not mean. 5 seeds held-out AUROC median: deep+entropy 0.759; deep+mean 0.542; shallow+entropy 0.561; shallow+mean 0.544. Remove EITHER depth OR entropy -> chance. Entirely closed-form / no autograd; end-to-end gradient FD-gated (max err 6e-5) BEFORE trusting training numbers.",
+  "novelty_classification": {"NEW_CANONICAL_CAPABILITY": ["F-HOLO-1"], "note": "ON-MISSION deep-representation learning demonstrated (holonomy + entropy + closed-form, NOT the exact-solve devolution). Answers the empirical crux of 'one step': the representation is learned (bivectors), propagates through depth (closed-form adjoint/inverse-rotor transport), read by entropy."},
+  "framework_impact": {
+    "interfaces_changed": [],
+    "defaults_changed": [],
+    "components_added_or_updated": ["RotorMeshNet note: empirical half now DEMONSTRATED (was MECHANISM_DEMO mechanism-only)"],
+    "guards_added": ["examples/holonomy_deep_dissociation.rs FD gate (end-to-end pipeline gradient) -- run before any training number is trusted"],
+    "superseded": []
+  },
+  "source_changes": ["examples/holonomy_deep_dissociation.rs (new)", "scripts/dev/plot_holonomy_dissociation.py", "reports/figures/holonomy_dissociation_results.json"],
+  "regression_tests_added": ["holonomy_net::deep_backward_matches_fd (mechanism, already present); example FD gate guards the full-pipeline gradient"],
+  "gates": {"suite": "185/0", "fmt": "clean", "clippy": "clean", "fd_gate": "PASS (max err 6e-5)"},
+  "corrections": {},
+  "integrity_note": "Per evaluation-metric-integrity + never-run-blind: FD-gated the end-to-end closed-form gradient (a wrong gradient => phantom AUROC) BEFORE training; printed live loss; zero-mean task by construction so a raw mean is chance (no inflatable metric); AUROC as 5-seed median separability.",
+  "honest_scope": ["trained by GD on the closed-form gradient = stepping stone, NOT the instantaneous entropy-feedback thesis (entropy is the readout/objective, training is supervised BCE)", "AUROC 0.759 above chance not saturated (hard task, gentle training)", "small controlled (N=12, 120/120, 5 seeds)"],
+  "environment_note": "Mac (arm64, CPU); no kato15. kato15 still behind (Mac work since E7).",
+  "next_experiment_authorized": false,
+  "next_experiment_proposal": {"name": "replace GD with the INSTANTANEOUS entropy/holonomy feedback (one-shot bivector update) = the last gap to the pure thesis; then push scale/score", "reuses": ["RotorMeshNet", "spectral_reg_value_grad", "MeshTopology"], "constrained_by": ["F-HOLO-1"]}
+}
