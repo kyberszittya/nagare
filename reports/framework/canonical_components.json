@@ -38,11 +38,11 @@
       "purpose": "SPINE / the learnable deep layer. Sign-conditioned aggregation over each signed hyperedge, Schmidhuber highway gate, per-sign mean, inner + diagonal-outer Chebyshev splines. Hand-derived closed-form gradients.",
       "owning_module": "src/ops/hsikan.rs",
       "symbols": ["hsikan_forward", "hsikan_forward_chunked", "hsikan_backward", "HsikanConfig", "HsikanParams", "HsikanEdges", "SplineKind"],
-      "version": "1.0", "status": "CANONICAL", "layer": "spine",
-      "source_experiment": "HSiKAN structural-leverage arc (H1 scaling + H2 causal SUPPORTED: scramble + DeepSets double-dissociation, 3.7->61x with chain length); signed-link real-spine",
-      "evidence_paths": ["reports/2026-07-16-real-spine-signed-link.md"],
-      "dependencies": ["catmull_rom (ChebyCR)"], "supersedes": null, "superseded_by": null, "default": true,
-      "note": "The KAN spline nonlinearity is the lever; the signed-hyperedge topology is often INERT (hsikan-mlp-hybrid audit)."
+      "version": "1.1", "status": "CANONICAL", "layer": "spine",
+      "source_experiment": "HSiKAN structural-leverage arc (H1 scaling + H2 causal SUPPORTED: scramble + DeepSets double-dissociation, 3.7->61x with chain length); signed-link real-spine; v1.1 edge-chunk rayon parallelization",
+      "evidence_paths": ["reports/2026-07-16-real-spine-signed-link.md", "reports/2026-07-16-hsikan-parallel-vs-pytorch.md", "reports/figures/hsikan-bench.png"],
+      "dependencies": ["catmull_rom (ChebyCR)", "rayon"], "supersedes": null, "superseded_by": null, "default": true,
+      "note": "The KAN spline nonlinearity is the lever; the signed-hyperedge topology is often INERT (hsikan-mlp-hybrid audit). v1.1 (2026-07-16): forward/backward partition the T hyperedges into min(threads,T) contiguous chunks on the rayon pool (each edge independent; grad_x + param grads summed once). Scales 7.3x at 16 threads, checksum-identical to serial (chunk_parallel_matches_serial gate). Set RAYON_NUM_THREADS=1 to force serial. Public API + cache token unchanged. See F-HSIKAN-PAR."
     },
     {
       "name": "Gömb-Soma cascade",

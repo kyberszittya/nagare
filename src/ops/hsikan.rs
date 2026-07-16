@@ -27,6 +27,7 @@
 
 use crate::ops::catmull_rom::{chebyshev_cr_backward, chebyshev_cr_forward, CatmullRomCache};
 use crate::ops::kochanek_bartels::{kb_backward, kb_forward, KbCache};
+use rayon::prelude::*;
 
 /// Shape + architecture of one HSiKAN layer evaluation.
 #[derive(Debug, Clone, Copy)]
@@ -149,9 +150,12 @@ pub struct HsikanEdges<'a> {
     pub signs: &'a [i8],
 }
 
-/// Cache saved by the forward for the closed-form backward.
+/// One edge-chunk's forward state, saved for that chunk's closed-form backward.
+///
+/// The forward partitions the `T` hyperedges into contiguous chunks so the (per-edge
+/// independent) work can run on separate threads; each chunk keeps its own state here.
 #[derive(Debug, Clone)]
-pub struct HsikanCache {
+struct ChunkCache {
     n_nodes: usize,
     h_v: Vec<f32>,
     inner_pre: Vec<Vec<f32>>,
@@ -160,6 +164,20 @@ pub struct HsikanCache {
     outer_spline: Vec<BranchSpline>,
     basis: Vec<f32>,
     counts: Vec<f32>,
+}
+
+/// Cache saved by the forward for the closed-form backward.
+///
+/// Holds one [`ChunkCache`] per edge-chunk (a single element when the forward ran
+/// serially). The public API is unchanged — callers treat this as an opaque token
+/// threaded from [`hsikan_forward`] to [`hsikan_backward`].
+#[derive(Debug, Clone)]
+pub struct HsikanCache {
+    n_nodes: usize,
+    /// Per-chunk sub-caches, in edge order.
+    chunks: Vec<ChunkCache>,
+    /// Edge count of each chunk, same order as `chunks` (prefix-summed for slicing).
+    chunk_edges: Vec<usize>,
 }
 
 /// Per-branch spline forward state saved for the closed-form backward, tagged by basis.
@@ -400,12 +418,14 @@ fn outer_forward(outer_coef: &[f32], agg: &[f32], cfg: HsikanConfig) -> OuterFor
 ///
 /// # Panics
 /// Panics if any precondition on buffer lengths is violated.
-pub fn hsikan_forward(
+/// Serial forward over one (sub)set of edges → `h_e (T_sub, d)` and its [`ChunkCache`].
+/// This is the whole-op computation; [`hsikan_forward`] runs it per edge-chunk.
+fn forward_serial(
     params: HsikanParams<'_>,
     x: &[f32],
     edges: HsikanEdges<'_>,
     cfg: HsikanConfig,
-) -> (Vec<f32>, HsikanCache) {
+) -> (Vec<f32>, ChunkCache) {
     let (n_rows, d) = (cfg.n_rows(), cfg.hidden);
     assert_eq!(edges.vertices.len(), n_rows);
     assert_eq!(edges.signs.len(), n_rows);
@@ -426,7 +446,7 @@ pub fn hsikan_forward(
     let (agg, counts) = aggregate(edges.signs, &inner_pre, &t_gate, &h_v, cfg);
     let (h_e, outer_spline) = outer_forward(params.outer_coef, &agg, cfg);
 
-    let cache = HsikanCache {
+    let cache = ChunkCache {
         n_nodes,
         h_v,
         inner_pre,
@@ -437,6 +457,93 @@ pub fn hsikan_forward(
         counts,
     };
     (h_e, cache)
+}
+
+/// Contiguous edge-chunk ranges: split `t` edges into `≤ p` chunks of `ceil(t/p)`.
+/// Every chunk is non-empty; `p == 1` (or `t <= p`) yields a single whole-set range.
+fn chunk_ranges(t: usize, p: usize) -> Vec<(usize, usize)> {
+    if t == 0 {
+        return Vec::new();
+    }
+    let step = t.div_ceil(p.max(1));
+    (0..t)
+        .step_by(step)
+        .map(|s| (s, (s + step).min(t)))
+        .collect()
+}
+
+/// Edge-chunk-parallel forward driver over `p` chunks (`p == 1` ⇒ serial). Each chunk is
+/// per-edge independent, so the chunks run on the rayon pool and their `h_e` slices are
+/// concatenated in edge order; correctness is identical to a single serial pass.
+fn forward_chunked(
+    params: HsikanParams<'_>,
+    x: &[f32],
+    edges: HsikanEdges<'_>,
+    cfg: HsikanConfig,
+    p: usize,
+) -> (Vec<f32>, HsikanCache) {
+    let (k, d) = (cfg.arity, cfg.hidden);
+    let n_nodes = x.len() / d;
+    let parts: Vec<(Vec<f32>, ChunkCache)> = chunk_ranges(cfg.n_edges, p)
+        .par_iter()
+        .map(|&(s, e)| {
+            let sub_edges = HsikanEdges {
+                vertices: &edges.vertices[s * k..e * k],
+                signs: &edges.signs[s * k..e * k],
+            };
+            let sub_cfg = HsikanConfig {
+                n_edges: e - s,
+                ..cfg
+            };
+            forward_serial(params, x, sub_edges, sub_cfg)
+        })
+        .collect();
+
+    let mut h_e = Vec::with_capacity(cfg.n_edges * d);
+    let mut chunks = Vec::with_capacity(parts.len());
+    let mut chunk_edges = Vec::with_capacity(parts.len());
+    for (he, cache) in parts {
+        chunk_edges.push(he.len() / d);
+        h_e.extend_from_slice(&he);
+        chunks.push(cache);
+    }
+    (
+        h_e,
+        HsikanCache {
+            n_nodes,
+            chunks,
+            chunk_edges,
+        },
+    )
+}
+
+/// Forward HSiKAN layer. Returns `h_e (T, d)` and a backward cache.
+///
+/// The `T` hyperedges are partitioned into `min(rayon threads, T)` contiguous chunks
+/// evaluated in parallel (each hyperedge is independent); the result is bit-order-identical
+/// to a serial pass. Set `RAYON_NUM_THREADS=1` to force the serial path.
+///
+/// # Preconditions
+/// Buffer lengths match `cfg`: `vertices`/`signs` are `(T·k)`, coef buffers
+/// `(S·d·cheb_k)`, `gate_w` `(d·d)`, `gate_b` `(d)`, `x` a multiple of `d`.
+///
+/// # Postconditions
+/// `h_e.len() == T·d`; `cache` carries every intermediate the backward needs.
+///
+/// # Panics
+/// Panics if any precondition on buffer lengths is violated.
+pub fn hsikan_forward(
+    params: HsikanParams<'_>,
+    x: &[f32],
+    edges: HsikanEdges<'_>,
+    cfg: HsikanConfig,
+) -> (Vec<f32>, HsikanCache) {
+    let n_rows = cfg.n_rows();
+    assert_eq!(edges.vertices.len(), n_rows);
+    assert_eq!(edges.signs.len(), n_rows);
+    assert_eq!(x.len() % cfg.hidden, 0);
+    let p = rayon::current_num_threads().min(cfg.n_edges).max(1);
+    forward_chunked(params, x, edges, cfg, p)
 }
 
 /// Forward-only HSiKAN over hyperedges in `chunk_t`-sized batches — the deploy /
@@ -483,7 +590,7 @@ pub fn hsikan_forward_chunked(
 }
 
 /// Outer-spline backward → `(grad_outer_coef, grad_agg)`.
-fn outer_backward(cache: &HsikanCache, grad_he: &[f32], cfg: HsikanConfig) -> (Vec<f32>, Vec<f32>) {
+fn outer_backward(cache: &ChunkCache, grad_he: &[f32], cfg: HsikanConfig) -> (Vec<f32>, Vec<f32>) {
     let (t, d, s_br, bl) = (cfg.n_edges, cfg.hidden, cfg.n_branches, cfg.branch_len());
     let mut grad_outer_coef = vec![0.0f32; s_br * bl];
     let mut grad_agg = vec![0.0f32; t * s_br * d];
@@ -506,7 +613,7 @@ fn outer_backward(cache: &HsikanCache, grad_he: &[f32], cfg: HsikanConfig) -> (V
 fn distribute_branch(
     s: usize,
     edges: HsikanEdges<'_>,
-    cache: &HsikanCache,
+    cache: &ChunkCache,
     grad_agg: &[f32],
     cfg: HsikanConfig,
     grad_hv: &mut [f32],
@@ -542,7 +649,7 @@ fn distribute_branch(
 /// Inner-spline backward across branches → `(grad_inner_coef, grad_hv, grad_t_gate)`.
 fn inner_backward(
     edges: HsikanEdges<'_>,
-    cache: &HsikanCache,
+    cache: &ChunkCache,
     grad_agg: &[f32],
     cfg: HsikanConfig,
 ) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
@@ -573,7 +680,7 @@ fn inner_backward(
 /// Highway-gate backward: gate param grads + gate-path vertex grad into `grad_hv`.
 fn gate_backward(
     params: HsikanParams<'_>,
-    cache: &HsikanCache,
+    cache: &ChunkCache,
     grad_t_gate: &[f32],
     cfg: HsikanConfig,
     grad_hv: &mut [f32],
@@ -629,14 +736,14 @@ fn scatter_grad(
 ///
 /// # Panics
 /// Panics if `grad_he.len() != T·d`.
-pub fn hsikan_backward(
+/// Serial backward for one edge-chunk against its [`ChunkCache`].
+fn backward_serial(
     params: HsikanParams<'_>,
     edges: HsikanEdges<'_>,
-    cache: &HsikanCache,
+    cache: &ChunkCache,
     grad_he: &[f32],
     cfg: HsikanConfig,
 ) -> HsikanBackward {
-    assert_eq!(grad_he.len(), cfg.n_edges * cfg.hidden);
     let (grad_outer_coef, grad_agg) = outer_backward(cache, grad_he, cfg);
     let (grad_inner_coef, mut grad_hv, grad_t_gate) = inner_backward(edges, cache, &grad_agg, cfg);
     let (grad_gate_w, grad_gate_b) = gate_backward(params, cache, &grad_t_gate, cfg, &mut grad_hv);
@@ -648,6 +755,95 @@ pub fn hsikan_backward(
         grad_gate_w,
         grad_gate_b,
     }
+}
+
+/// Add `b` into `a` element-wise (`a += b`), for gradient reduction across chunks.
+fn add_into(a: &mut [f32], b: &[f32]) {
+    for (x, &y) in a.iter_mut().zip(b) {
+        *x += y;
+    }
+}
+
+/// Sum per-chunk gradients into a single [`HsikanBackward`]. Each edge contributes
+/// additively to every gradient (param grads accumulate over edges; `grad_x` is a
+/// scatter-add over each edge's vertices), so the chunk partition sums exactly.
+fn reduce_backward(parts: Vec<HsikanBackward>) -> HsikanBackward {
+    let mut it = parts.into_iter();
+    let mut acc = it.next().expect("reduce_backward: at least one chunk");
+    for p in it {
+        add_into(&mut acc.grad_x, &p.grad_x);
+        add_into(&mut acc.grad_inner_coef, &p.grad_inner_coef);
+        add_into(&mut acc.grad_outer_coef, &p.grad_outer_coef);
+        add_into(&mut acc.grad_gate_w, &p.grad_gate_w);
+        add_into(&mut acc.grad_gate_b, &p.grad_gate_b);
+    }
+    acc
+}
+
+/// Backward HSiKAN layer.
+///
+/// Mirrors the forward's edge-chunk partition: each chunk's gradients are computed in
+/// parallel against its [`ChunkCache`], then summed. The sum is exact — every gradient
+/// is a per-edge accumulation — so the result matches a serial backward up to
+/// floating-point summation order.
+///
+/// # Preconditions
+/// `grad_he.len() == T·d`; `cache` is the value returned by the matching
+/// [`hsikan_forward`]; `params`/`edges`/`cfg` match that forward call.
+///
+/// # Postconditions
+/// Returns gradients for the node embeddings and all four parameter groups.
+/// When `cfg.use_highway` is false, the two gate gradients are all-zero.
+///
+/// # Panics
+/// Panics if `grad_he.len() != T·d`.
+pub fn hsikan_backward(
+    params: HsikanParams<'_>,
+    edges: HsikanEdges<'_>,
+    cache: &HsikanCache,
+    grad_he: &[f32],
+    cfg: HsikanConfig,
+) -> HsikanBackward {
+    assert_eq!(grad_he.len(), cfg.n_edges * cfg.hidden);
+    let (k, d) = (cfg.arity, cfg.hidden);
+    if cache.chunks.is_empty() {
+        return HsikanBackward {
+            grad_x: vec![0.0; cache.n_nodes * d],
+            grad_inner_coef: vec![0.0; cfg.param_len()],
+            grad_outer_coef: vec![0.0; cfg.param_len()],
+            grad_gate_w: vec![0.0; d * d],
+            grad_gate_b: vec![0.0; d],
+        };
+    }
+    let mut ranges = Vec::with_capacity(cache.chunks.len());
+    let mut acc = 0usize;
+    for &ne in &cache.chunk_edges {
+        ranges.push((acc, acc + ne));
+        acc += ne;
+    }
+    let parts: Vec<HsikanBackward> = cache
+        .chunks
+        .par_iter()
+        .zip(ranges.par_iter())
+        .map(|(chunk_cache, &(s, e))| {
+            let sub_edges = HsikanEdges {
+                vertices: &edges.vertices[s * k..e * k],
+                signs: &edges.signs[s * k..e * k],
+            };
+            let sub_cfg = HsikanConfig {
+                n_edges: e - s,
+                ..cfg
+            };
+            backward_serial(
+                params,
+                sub_edges,
+                chunk_cache,
+                &grad_he[s * d..e * d],
+                sub_cfg,
+            )
+        })
+        .collect();
+    reduce_backward(parts)
 }
 
 #[cfg(test)]
@@ -824,5 +1020,61 @@ mod tests {
         // Kochanek-Bartels basis: every packed grad (control points + TCB tangents),
         // plus grad_x and gate grads, must match finite difference.
         fd_sweep(|| Fixture::with_kind(true, SplineKind::KochanekBartels));
+    }
+
+    #[test]
+    fn chunk_parallel_matches_serial() {
+        // Edge-chunk partition (2..16 chunks) must reproduce the single serial pass —
+        // forward h_e bit-close, and every backward gradient exact up to fp summation.
+        let cfg = HsikanConfig::new(6, 3, 4, 2, 5, 4, true);
+        let n_nodes = 9;
+        let x: Vec<f32> = (0..n_nodes * 4)
+            .map(|i| 0.15 * ((i as f32 * 1.7).sin()))
+            .collect();
+        let vertices: Vec<u32> = (0..6 * 3).map(|i| (i % n_nodes) as u32).collect();
+        let signs: Vec<i8> = (0..6 * 3)
+            .map(|i| if i % 2 == 0 { 1 } else { -1 })
+            .collect();
+        let total = cfg.n_branches * cfg.branch_len();
+        let inner_coef: Vec<f32> = (0..total).map(|i| 0.1 * ((i as f32 * 0.9).cos())).collect();
+        let outer_coef: Vec<f32> = (0..total).map(|i| 0.1 * ((i as f32 * 1.3).sin())).collect();
+        let gate_w: Vec<f32> = (0..16).map(|i| 0.05 * ((i as f32 * 0.7).sin())).collect();
+        let gate_b = vec![-2.0f32, -1.5, -2.5, -1.0];
+        let params = HsikanParams {
+            inner_coef: &inner_coef,
+            outer_coef: &outer_coef,
+            gate_w: &gate_w,
+            gate_b: &gate_b,
+        };
+        let edges = HsikanEdges {
+            vertices: &vertices,
+            signs: &signs,
+        };
+
+        let (h1, c1) = forward_chunked(params, &x, edges, cfg, 1);
+        assert_eq!(c1.chunks.len(), 1, "p=1 must be a single chunk");
+        let grad_he = vec![1.0f32; h1.len()];
+        let g1 = hsikan_backward(params, edges, &c1, &grad_he, cfg);
+
+        for p in [2usize, 3, 6, 16] {
+            let (hp, cp) = forward_chunked(params, &x, edges, cfg, p);
+            assert!(cp.chunks.len() >= 2, "p={p} should split into ≥2 chunks");
+            for (a, b) in hp.iter().zip(&h1) {
+                assert!((a - b).abs() < 1e-6, "forward p={p}: {a} vs {b}");
+            }
+            let gp = hsikan_backward(params, edges, &cp, &grad_he, cfg);
+            for (name, a, b) in [
+                ("grad_x", &gp.grad_x, &g1.grad_x),
+                ("grad_inner_coef", &gp.grad_inner_coef, &g1.grad_inner_coef),
+                ("grad_outer_coef", &gp.grad_outer_coef, &g1.grad_outer_coef),
+                ("grad_gate_w", &gp.grad_gate_w, &g1.grad_gate_w),
+                ("grad_gate_b", &gp.grad_gate_b, &g1.grad_gate_b),
+            ] {
+                assert_eq!(a.len(), b.len(), "{name} len p={p}");
+                for (u, v) in a.iter().zip(b) {
+                    assert!((u - v).abs() < 1e-5, "{name} p={p}: {u} vs {v}");
+                }
+            }
+        }
     }
 }
