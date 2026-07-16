@@ -8,6 +8,7 @@ pub mod cv_data;
 pub mod datasets;
 pub mod detector;
 pub mod features;
+pub mod holonomy_net;
 pub mod junction_tree;
 pub mod learner;
 pub mod mesh_tensor;
@@ -38,6 +39,7 @@ pub use detector::{
     gen_scene, leaf_center_object, leaf_on_object, obox_contains, DetectorConfig, NodePred,
     SbshDetector,
 };
+pub use holonomy_net::{RotorMeshCache, RotorMeshNet};
 pub use junction_tree::{balanced_binary_tree, star_clique_tree, Clique, JunctionTreeCholesky};
 pub use learner::{
     evaluate_local, forward_timing, run_stress_ablation, Config, EntropyPoolLocalLearner, GateMode,

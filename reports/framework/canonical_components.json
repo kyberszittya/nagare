@@ -25,6 +25,26 @@
       "note": "ON-MISSION re-anchor after the evolvent/Cholesky devolution (see feedback-nagare-closed-form-thesis-not-gaps): latent = mesh tensor contracted, no normal equations. Next: nonlinear per-edge map (HSiKAN/Gomb-Soma) on the edge field + entropy/holonomy feedback as the learning rule."
     },
     {
+      "name": "RotorMeshNet",
+      "purpose": "DEEP holonomy representation over a simplicial/hypergraph mesh -- the compositional auto-holonomy, PROVEN to compose through depth with a closed-form (no-autograd) backward. Each layer = ROTATE (learned per-node Cayley bivector -> unit quaternion rotor, transports the node 3-vector field; the bivectors ARE the learned representation) + MIX (one MeshTopology::conv_round, node->edge->node, spreads the transported field across the simplicial neighborhood). Rotate+mix is genuinely deep (pure SO(3) rotations collapse; the mesh mix between them re-combines). The end-to-end backward composes the two FD-verified atoms (cayley_rotor + conv_round); the per-layer grad_v = inverse-rotor (quaternion-conjugate) transport of the upstream gradient = the ADJOINT holonomy transport that replaces backprop's tape.",
+      "owning_module": "src/holonomy_net.rs",
+      "symbols": ["RotorMeshNet", "RotorMeshNet::new", "RotorMeshNet::depth", "RotorMeshNet::bivecs_mut", "RotorMeshNet::forward", "RotorMeshNet::backward", "RotorMeshCache"],
+      "version": "0.1",
+      "status": "MECHANISM_DEMO",
+      "source_experiment": "deep-holonomy-representation step 1 (2026-07-16, user directive 'one step to deep-representation learning via Clifford/quaternion auto-holonomy + hypergraph->simplices')",
+      "evidence_paths": ["reports/2026-07-16-deep-holonomy-net-mechanism.md"],
+      "supported_tasks": ["deep learnable holonomy embedding over a mesh (rotate+mix stack)", "compositional auto-holonomy with closed-form FD-verified backward through depth", "substrate for entropy/holonomy-feedback deep representation learning"],
+      "observation_schema": "MeshTopology + per-layer bivecs (n_nodes,3); forward(v0 (n_nodes,3))",
+      "output_schema": "forward -> final field (n_nodes,3) + cache; backward(cache, grad_out) -> (per-layer grad_bivecs, grad_v0) -- composed closed-form, FD-verified end-to-end",
+      "dependencies": ["cayley_rotor", "mesh_tensor (MeshTopology::conv_round)"],
+      "known_limitations": ["MECHANISM proven (deep closed-form backward FD-verified); the LEARNING RULE is NOT wired yet -- descending this gradient is iterative GD (a stepping stone), the on-thesis instantaneous ENTROPY/holonomy feedback is the next step", "field width fixed d=3 (rotor on a 3-vector/node)", "the DISCRIMINATING experiment (entropy-top beats mean-top THROUGH DEPTH = learns useful deep features) is NOT yet run -- that is the empirical crux of 'one step'"],
+      "canonical_tests": ["holonomy_net::deep_backward_matches_fd", "holonomy_net::depth_collapses_without_the_mesh_mix_but_not_with_it"],
+      "supersedes": null,
+      "superseded_by": null,
+      "default": true,
+      "note": "Proves the MECHANISM half of 'one step to deep-representation learning' (feedback survives rotor composition through depth, closed-form). Empirical half next: entropy objective on this stack + the entropy-top-vs-mean-top double dissociation through depth."
+    },
+    {
       "name": "conv2d",
       "purpose": "Learned 2-D convolution — the Neocognitron S-cell (spatial feature detector).",
       "owning_module": "src/ops/conv2d.rs",
