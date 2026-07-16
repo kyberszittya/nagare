@@ -2,8 +2,87 @@
   "schema_version": "1.0",
   "updated": "2026-07-15",
   "framework": "nagare / holonomy_learn (closed-form, FD-verified, no autograd)",
-  "note": "Query this registry before creating a new component (anti-bloat rule). All backwards are hand-derived and FD-verified; there is no autograd in this crate.",
+  "note": "Query this registry before creating a new component (anti-bloat rule). All backwards hand-derived and FD-verified; no autograd. CLASSIFICATION (user-directed 2026-07-16): (a) SPINE = the real deep-learning stack (ChebyCR -> Clifford-FIR -> Gömb -> HSiKAN -> Gömb-Soma, + alpha-mix, + geometric rotors) [system map claude.ai/code/artifact/cca528aa]; (b) KEEP/USEFUL = EvolventHead family (closed-form one-pass online learner -- 'evolvent head is fine'); (c) DROP = JunctionTreeCholesky (Cholesky 'no need'); (d) EVALUATE = MeshTensor, RotorMeshNet (mechanism-demos; useful KERNELS cayley_rotor/rotor_holonomy already in the spine -- keep for provenance, low priority). Do NOT reflexively trash: check usefulness first.",
   "components": [
+    {
+      "name": "ChebyCR (Chebyshev-Catmull-Rom)",
+      "purpose": "SPINE / basis. The nonlinearity every spline layer reuses: per-channel Catmull-Rom on [-1,1] with Chebyshev-generated control points (train-CR / deploy-Chebyshev). Explicit closed-form gradient buffers.",
+      "owning_module": "src/ops/catmull_rom.rs",
+      "symbols": ["chebyshev_cr_forward", "chebyshev_cr_backward", "catmull_rom_forward", "catmull_rom_backward", "chebyshev_control_points", "chebyshev_deploy_forward"],
+      "version": "1.0", "status": "CANONICAL", "layer": "spine",
+      "source_experiment": "core op (pre-existing); the KAN spline nonlinearity repeatedly found to be THE lever (topology inert) -- see hsikan-mlp-hybrid / cuboid-tip",
+      "evidence_paths": [], "dependencies": [],
+      "supersedes": null, "superseded_by": null, "default": true,
+      "note": "Reused by HSiKAN (inner+outer splines) and KAN. Standardise inputs to [-1,1] upstream or the spline saturates."
+    },
+    {
+      "name": "Clifford-FIR",
+      "purpose": "SPINE / signed aggregation. Entry operator: signed-cycle pool + per-vertex features -> per-cycle features. Backward via the Clifford derivative on Cl(0,1)≅ℂ, one multivector (a,b) unifying the σ=±1 sign branches.",
+      "owning_module": "src/ops/clifford_fir.rs (from hymeko_graph::spine)",
+      "symbols": ["clifford_fir_forward", "clifford_fir_backward", "CliffordFIR"],
+      "version": "1.0", "status": "CANONICAL", "layer": "spine",
+      "source_experiment": "the foundational entry operator", "evidence_paths": ["reports/2026-07-16-real-spine-signed-link.md"],
+      "dependencies": [], "supersedes": null, "superseded_by": null, "default": true
+    },
+    {
+      "name": "Gömb (gomb_shell)",
+      "purpose": "SPINE / filter-bank shell. M parallel Clifford-FIR banks over the same cycle pool, concatenated -- the 'V1 volume'. Pure orchestration over Clifford-FIR; no new derivative.",
+      "owning_module": "src/ops/gomb_shell.rs",
+      "symbols": ["gomb_outer_forward", "gomb_outer_backward"],
+      "version": "1.0", "status": "CANONICAL", "layer": "spine",
+      "source_experiment": "OuterFIRShell port", "evidence_paths": ["reports/2026-07-16-real-spine-signed-link.md"],
+      "dependencies": ["clifford_fir"], "supersedes": null, "superseded_by": null, "default": true
+    },
+    {
+      "name": "HSiKAN (Highway-SignedKAN)",
+      "purpose": "SPINE / the learnable deep layer. Sign-conditioned aggregation over each signed hyperedge, Schmidhuber highway gate, per-sign mean, inner + diagonal-outer Chebyshev splines. Hand-derived closed-form gradients.",
+      "owning_module": "src/ops/hsikan.rs",
+      "symbols": ["hsikan_forward", "hsikan_forward_chunked", "hsikan_backward", "HsikanConfig", "HsikanParams", "HsikanEdges", "SplineKind"],
+      "version": "1.0", "status": "CANONICAL", "layer": "spine",
+      "source_experiment": "HSiKAN structural-leverage arc (H1 scaling + H2 causal SUPPORTED: scramble + DeepSets double-dissociation, 3.7->61x with chain length); signed-link real-spine",
+      "evidence_paths": ["reports/2026-07-16-real-spine-signed-link.md"],
+      "dependencies": ["catmull_rom (ChebyCR)"], "supersedes": null, "superseded_by": null, "default": true,
+      "note": "The KAN spline nonlinearity is the lever; the signed-hyperedge topology is often INERT (hsikan-mlp-hybrid audit)."
+    },
+    {
+      "name": "Gömb-Soma cascade",
+      "purpose": "SPINE / the deep net. Three-shell cascade x0 -> Gömb (Clifford-FIR banks) -> HSiKAN -> inner CPML tiers -> node emb -> edge head. Driven as a signed-link predictor.",
+      "owning_module": "examples/cpml_signed_link.rs (composition over the spine ops)",
+      "symbols": ["(composition: gomb_outer_forward + hsikan_forward + tier cores)"],
+      "version": "1.0", "status": "CANONICAL", "layer": "spine",
+      "source_experiment": "signed-link on SNAP bitcoin-alpha (2 seeds + sign-shuffle): task IS structural (~0.87-0.89, shuffle->chance); cascade competitive with the inner core once trained enough (0.847@250it undertrained -> 0.875@1000it)",
+      "evidence_paths": ["reports/2026-07-16-real-spine-signed-link.md"],
+      "dependencies": ["gomb_shell", "hsikan", "clifford_fir", "catmull_rom"],
+      "supersedes": null, "superseded_by": null, "default": true,
+      "note": "CORRECTION on record: an earlier 'cascade HURTS -0.034' claim was an UNDERTRAINING artifact of the matched-250-iter budget; at 1000 iters it lands ~0.875, level with the inner core."
+    },
+    {
+      "name": "alpha-mix projection (P-graph)",
+      "purpose": "SPINE / subspace mixing. y = alpha*P(x) + (1-alpha)*x, P = oblique-safe projector onto span(U); closed-form symmetric backward. The P-graph / holonomy-basis warm-start mixing (PROJECTION_ALPHA=0.72).",
+      "owning_module": "src/ops/project_alpha_mix.rs (via src/projection.rs::apply_alpha_mix)",
+      "symbols": ["project_alpha_mix_forward", "project_alpha_mix_backward", "ProjectAlphaMixShape", "ProjectionBasis::apply_alpha_mix"],
+      "version": "1.0", "status": "CANONICAL", "layer": "spine",
+      "source_experiment": "learner warm-start projection", "evidence_paths": [],
+      "dependencies": [], "supersedes": null, "superseded_by": null, "default": true
+    },
+    {
+      "name": "geometric ops (Cayley rotor / rotor holonomy / FSR mixer)",
+      "purpose": "SPINE / geometric. Cayley bivector->unit quaternion (Spin(3)=SU(2), closed-form); rotor_holonomy = ordered non-commutative rotor product around a cycle; FSR mixer = linear + Cayley rotor + signed scatter sequence mixer.",
+      "owning_module": "src/ops/{cayley_rotor,rotor_holonomy,fsr_mixer}.rs",
+      "symbols": ["cayley_rotor_forward/backward", "rotor_holonomy_forward/backward", "FsrMixer"],
+      "version": "1.0", "status": "CANONICAL", "layer": "spine",
+      "source_experiment": "geometric substrate (Clifford/quaternion holonomy)", "evidence_paths": [],
+      "dependencies": [], "supersedes": null, "superseded_by": null, "default": true
+    },
+    {
+      "name": "KAN (tabular)",
+      "purpose": "SPINE / baseline. Generic Kolmogorov-Arnold layer over Chebyshev-CR splines, no signed structure. The plain-KAN tabular baseline.",
+      "owning_module": "src/ops/kan.rs",
+      "symbols": ["kan_forward", "kan_backward", "KanConfig"],
+      "version": "1.0", "status": "CANONICAL", "layer": "spine",
+      "source_experiment": "tabular baseline", "evidence_paths": [],
+      "dependencies": ["catmull_rom"], "supersedes": null, "superseded_by": null, "default": true
+    },
     {
       "name": "MeshTensor / MeshTopology",
       "purpose": "The hypergraph latent space AS a mesh tensor (contraction, NOT inversion). The signed-hypergraph incidence (cycles/signs/scale) is the MESH (MeshTopology = the operator side); the latent is a TENSOR FIELD on it -- a d-vector per node and per hyperedge (MeshTensor = the state side). Computation is CONTRACTION along the mesh (node<->edge), delegating to hg_message. The on-mission hypergraph<->tensor conjugation and the substrate a holonomy embedding (HSiKAN / Gomb-Soma) + holonomy feedback act on. Replaces the flat-vector/precision-matrix mis-framing of the (frozen) evolvent line.",
@@ -265,7 +344,8 @@
       "owning_module": "src/junction_tree.rs",
       "symbols": ["JunctionTreeCholesky", "JunctionTreeCholesky::new (cliques,ridge,d)", "update", "solve", "solve_block_diagonal", "factor_storage", "factor_flops", "ancestors_inclusive", "factor_checksum", "Clique", "balanced_binary_tree"],
       "version": "1.0",
-      "status": "DEPLOYABLE",
+      "status": "DEPRECATED",
+      "deprecated_reason": "Cholesky/junction-tree was the exact-solve devolution -- user: 'no need for Cholesky' (2026-07-16). Kept for provenance; do NOT build on it.",
       "source_experiment": "evolvent E5 (examples/evolvent_multifrontal.rs, kato15 5 seeds x 4 depths)",
       "evidence_paths": ["reports/2026-07-15-evolvent-e5-multifrontal.md", "reports/figures/evolvent-multifrontal.png", "reports/figures/evolvent_e5_results.json"],
       "supported_tasks": ["exact sparse solve of a bounded-width (junction-tree) SPD precision", "incremental/online least-squares over a clique tree with log-depth locality", "the solve-time realization of InfoEvolventHead", "measuring what cross-clique (separator) coupling is worth (solve_block_diagonal baseline)"],

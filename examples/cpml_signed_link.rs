@@ -558,7 +558,9 @@ fn run_cascade(
     let mut s_head = AdamState::new(head.w.len() + head.b.len());
     let ntr = tr_y.len() as f32;
 
-    for it in 0..250 {
+    // DIAGNOSTIC (undertraining check): cascade budget tunable via env, default 250.
+    let casc_iters = std::env::var("CASC_ITERS").ok().and_then(|s| s.parse().ok()).unwrap_or(250usize);
+    for it in 0..casc_iters {
         // Forward.
         let y_out = gomb_outer_forward(&batch, x0, &banks, n, F);
         let (x_out, cnt_out) = scatter_mean_forward(&batch.cycles, 3, &y_out, HC, n);
