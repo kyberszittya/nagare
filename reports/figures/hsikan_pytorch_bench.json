@@ -1,0 +1,12 @@
+{
+  "experiment": "hsikan-vs-pytorch-cpu-time-and-memory",
+  "date": "2026-07-16",
+  "host": "Hajdus-MacBook-Pro (arm64, CPU); PyTorch 2.12.0",
+  "setup": "HSiKAN forward+backward (sign-routed Chebyshev splines + highway gate over signed hyperedges, arity 3, d=16, cheb 6, 2 branches), 100 iters. Nagare = closed-form no-tape (SINGLE-THREADED, 0 rayon). PyTorch = same architecture with autograd, measured at 1 thread (per-core fair) and 6 threads (default). Peak RSS via /usr/bin/time -l.",
+  "note": "PER-CORE (1 thread): Nagare HSiKAN is 2.3x FASTER than PyTorch (24 vs 52 ms @20k, 62 vs 140 @50k, 124 vs 283 @100k). MEMORY: Nagare uses 4-5x LESS peak RSS (86 vs 459 MB, 207 vs 843, 405 vs 1468) -- no autograd tape + no framework baseline. PyTorch only wins WALL-CLOCK by using 6 threads (Nagare is single-threaded -- parallelism left on the table). So on HSiKAN: Nagare wins per-core time AND memory decisively; PyTorch's only edge is multithreading Nagare hasn't used yet.",
+  "rows": [
+    {"edges": 20000,  "nagare_ms": 24.1, "pytorch_ms_1thr": 52.5,  "pytorch_ms_6thr": 20.5, "nagare_rss_mb": 85.7,  "pytorch_rss_mb": 459.4},
+    {"edges": 50000,  "nagare_ms": 62.0, "pytorch_ms_1thr": 139.7, "pytorch_ms_6thr": 51.3, "nagare_rss_mb": 206.9, "pytorch_rss_mb": 842.7},
+    {"edges": 100000, "nagare_ms": 123.8,"pytorch_ms_1thr": 282.7, "pytorch_ms_6thr": 104.8,"nagare_rss_mb": 404.9, "pytorch_rss_mb": 1468.4}
+  ]
+}
