@@ -1,0 +1,49 @@
+%% Nagare — architecture & learning dynamics (2026-07-16).
+%% Forward spine (representation) DOWN; learning signal = adjoint holonomy transport UP the same loop.
+%% Interactive/rendered version: claude.ai/code/artifact/6f8b53db.
+flowchart TB
+    IN["signed hypergraph IR / SO(3) connection\n(vertices + signed cycles; edges carry rotors; boundary = connection)"]
+
+    subgraph SPINE["forward spine — closed-form cascade (Gomb-Soma)"]
+        direction TB
+        CR["ChebyCR — Chebyshev·Catmull-Rom spline basis\n(catmull_rom / chebyshev_cr) = the measured lever"]
+        HG["Hypergraph incidence — signed node<->edge contraction\n(hg_message) = coboundary as tensor contraction"]
+        CF["Clifford-FIR — signed-cycle agg, Cl(0,1) derivative\n(clifford_fir)"]
+        GB["Gomb — bank of M Clifford-FIR filters\n(gomb_shell)"]
+        HK["HSiKAN — highway signed-KAN (deep spline core)\n(hsikan v1.1, rayon-parallel, 2-5x vs CPU PyTorch)"]
+        CP["CPML tier core — degree-tier stratified cycle pooling\n(cpml_tier)"]
+        RH["Rotor holonomy — ordered loop product H=q_{k-1}...q0\n(rotor_holonomy / cayley_rotor) = connection transport"]
+        RO["Gomb-Soma readout — rotation-invariant covariance eigen-entropy\n(global_entropy_pool) = the LEARNING SIGNAL, not a loss"]
+        CR --> HG --> CF --> GB --> HK --> CP --> RH --> RO
+    end
+
+    IN --> CR
+
+    subgraph LEARN["learning dynamics — no autograd tape"]
+        direction TB
+        L1["Every op: hand-derived FD-verified closed-form backward\n(FD gate max|analytic-fd|<6e-5 before any training number)"]
+        L2["Differentiation = connection transport (Ambrose-Singer)\ngrad_v = Rbar . grad  (inverse-rotor / quaternion-conjugate adjoint)"]
+        L3["Feedback signal = ENTROPY, broadcast global+instantaneous\n(fused_entropy_update; entropy-pool fast-weight 5-seed AUROC 1.000)"]
+        L4["Exact update: solve, don't descend\n(Evolvent one-pass; Adam over Cayley chart when iterated)"]
+        L1 --> L2 --> L3 --> L4
+    end
+
+    RO -. "entropy broadcast" .-> L3
+    LEARN -. "adjoint transport UP the spine (closed form)" .-> SPINE
+
+    subgraph EV["evidence arc — auto-holonomy"]
+        direction TB
+        B1A["B1a (Z2): spectral solves; learned = wash"]
+        B1B["B1b (SO(n)): rotor_holonomy genuine detector 0.81/0.85; fusion wins"]
+        H1["F-HOLO-1: deep RotorMeshNet learns THROUGH DEPTH (double dissociation)"]
+        H2["F-HOLO-2: trivial entropy 0.944 > deep 0.894 -> MEASURE THE CEILING first"]
+        H3["F-HOLO-3: closed Clifford one-shot solve REACHES oracle 1.000 (MLP 0.626); estimator==oracle"]
+        H4["F-HOLO-4: nonlinear curvature FIELD -> exact solve BLIND 0.520; ChebyCR patch readout REACHES oracle 1.000"]
+        G2["GAP #2 (open): LEARNED holonomy-native rotor/patch rule composing through depth, beating the fixed exact solve"]
+        B1A --> B1B --> H1 --> H2 --> H3 --> H4 --> G2
+    end
+
+    RO --> EV
+
+    THESIS["THESIS: exact / verified / designed, NOT approximate / opaque / learned-features.\nno-autograd + fixed structured basis + CPU = the thesis, not deficits."]
+    EV --> THESIS

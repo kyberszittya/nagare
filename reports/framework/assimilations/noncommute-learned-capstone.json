@@ -1,0 +1,47 @@
+{
+ "experiment_id": "noncommute-learned-capstone",
+ "date": "2026-07-17",
+ "host": "Apple M5 Pro, macOS 26.5.2, CPU",
+ "result": "F-HOLO-10 (CAPSTONE, thesis-confirming): end-to-end learning THROUGH rotor_holonomy CORRUPTS it (trainable-W1 0.513, chance) while FREEZING the fixed op + learning the readout WORKS (frozen-W1 0.968); generic-MLP 0.541, fixed-commutator 1.000. FD gate 6.3e-5 (not a phantom). => designed op FIXED, learn ON TOP not THROUGH.",
+ "novelty_classification": {
+  "NEW_MECHANISM": [
+   "end-to-end trainable-through-holonomy corrupts; fixed-op+readout works"
+  ],
+  "NEGATIVE_RESULT_REQUIRING_A_GUARD": [
+   "do NOT deploy an end-to-end trained rotor stack on non-abelian tasks - fix the holonomy op, learn a readout"
+  ],
+  "note": "Operationally confirms the exact/designed>learned thesis; completes the arc."
+ },
+ "framework_impact": {
+  "interfaces_changed": [],
+  "defaults_changed": [],
+  "components_added_or_updated": [
+   "demonstrated rotor_holonomy as a differentiable core layer (composed closed-form backward, FD-gated 6.3e-5) - trainable but should be used FIXED"
+  ],
+  "guards_added": [
+   "non-abelian deploy pattern: fixed rotor_holonomy + learned readout, NOT end-to-end trained rotor stack"
+  ],
+  "findings_added": [
+   "F-HOLO-10"
+  ]
+ },
+ "source_changes": [
+  "examples/noncommute_learned.rs (NEW: HoloNet end-to-end, composed closed-form backward, FD gate, trainable/frozen arms)"
+ ],
+ "regression_tests_added": [
+  "noncommute_learned::fd_gate (runtime integrity assertion, 6.3e-5)"
+ ],
+ "gates": {
+  "capstone": "designed op must stay FIXED: frozen-W1 0.968 vs trainable-W1 0.513; both > generic-MLP only when frozen",
+  "fd_gate": "6.3e-5 PASS (gradient correct - failure is optimization not phantom)",
+  "tests": "173 passed / 0 failed",
+  "lint": "clippy -D warnings clean; fmt clean",
+  "perf": "272 s wall"
+ },
+ "corrections": [],
+ "integrity_note": "FD gate proves the trainable-W1 failure is genuine optimization, not a gradient bug; frozen-W1 is the discriminating test localizing it to the trainable pre-composition. Not forced.",
+ "honest_scope": "one non-abelian task; unconstrained-linear W1 (a rotor-manifold W1 untested); the fixed-op-wins finding stands regardless.",
+ "environment_note": "rustc 1.96.1; uncommitted.",
+ "next_experiment_authorized": "real pose-graph SLAM loop-closure consistency (SE(3) holonomy, g2o) with the FIXED rotor_holonomy + learned readout pattern - now justified and prescribed by F-HOLO-9/10.",
+ "next_experiment_proposal": "acquire a standard g2o pose-graph benchmark (sphere2500/torus/garage), compute per-loop SE(3) holonomy residuals (fixed op), learn a lightweight outlier/consistency readout, vs classical chi-square baselines - the real-data validation of the now-characterized pattern."
+}

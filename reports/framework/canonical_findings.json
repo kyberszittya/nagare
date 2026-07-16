@@ -1,644 +1,822 @@
 {
-  "schema_version": "1.0",
-  "updated": "2026-07-16",
-  "framework": "nagare / holonomy_learn",
-  "findings": [
-    {
-      "id": "F-ARC-1",
-      "claim": "An explicit structural/geometric prior earns its place ONLY where (a) the base mechanism lacks the signal AND (b) the prior's op can EXPRESS the constraint. Redundant or harmful everywhere else.",
-      "classification": "NEW_EVALUATION_REQUIREMENT",
-      "sub_type": "experiment-planning rule",
-      "source_experiment": "Neocognitron arc (N2b, N3, entropy-top, P2, P3, P4)",
-      "raw_evidence": [
-        "reports/2026-07-14-neocognitron-n3-deep-stack.md",
-        "reports/2026-07-14-neocognitron-entropy-top.md",
-        "reports/2026-07-14-sbsh-pose-p3-skeleton-win.md",
-        "reports/2026-07-14-sbsh-pose-p4-closed-loop.md"
-      ],
-      "confidence": "high (6 phases, both signs of each condition observed)",
-      "scope": "prior-vs-base A/Bs in this framework",
-      "limitations": "controlled analytic tasks; not yet stress-tested on cluttered real data",
-      "framework_consequence": "Every future prior-vs-base experiment proposal must state which of (a)/(b) it expects to satisfy and how it will test each.",
-      "code_changes": [],
-      "regression_tests": [],
-      "superseded_findings": [],
-      "open_questions": [
-        "does the law hold with nonlinear per-edge messages?"
-      ]
-    },
-    {
-      "id": "F-N2b-1",
-      "claim": "Under a LEARNABLE S-cell, the explicit rotation-invariant C-cell is REDUNDANT: the learnable conv discovers an orientation-agnostic invariant itself (C8 ~= C1), even on a task that forces oriented features (energy baseline at chance 0.47, S-cell 0.73).",
-      "classification": "NEGATIVE_RESULT_CLOSING_A_DIRECTION",
-      "source_experiment": "neocognitron N2b (examples/neocognitron_aniso.rs)",
-      "raw_evidence": [
-        "reports/2026-07-14-neocognitron-n2b-learned-scell.md",
-        "reports/figures/neocognitron-aniso.png"
-      ],
-      "confidence": "high",
-      "scope": "single learnable S/C block with a global-mean readout",
-      "limitations": "does not apply to compositional/deep regimes (see F-N3-1)",
-      "framework_consequence": "Do not add the C-cell for rotation-invariance under a single learnable block expecting a win; it is a no-op there.",
-      "code_changes": [],
-      "regression_tests": [
-        "sc_block::c1_group_is_orientation_specific (C1 path runs)"
-      ],
-      "superseded_findings": [],
-      "open_questions": []
-    },
-    {
-      "id": "F-N3-1",
-      "claim": "In a COMPOSITIONAL deep regime the C-cell becomes LOAD-BEARING: C8 fits corner-vs-bar (train 1.000, all seeds), C1 cannot fit (train ~chance). The compositional structure defeats the N2b implicit-invariance dodge.",
-      "classification": "NEW_MECHANISM",
-      "source_experiment": "neocognitron N3 (examples/neocognitron_deep.rs)",
-      "raw_evidence": [
-        "reports/2026-07-14-neocognitron-n3-deep-stack.md"
-      ],
-      "confidence": "high (5 seeds)",
-      "scope": "2-block stack, compositional oriented task",
-      "limitations": "does not by itself give global rotation generalization (F-N3-2)",
-      "framework_consequence": "ScBlock C-cell documented as load-bearing in compositional/can't-fit regimes.",
-      "code_changes": [],
-      "regression_tests": [
-        "sc_block::two_block_stack_backward_matches_fd"
-      ],
-      "superseded_findings": [],
-      "open_questions": []
-    },
-    {
-      "id": "F-N3-2",
-      "claim": "LOCAL per-feature orientation-invariance (group_pool C-cell) is NOT global rotation-invariance of a spatial configuration: held-out-rotation AUROC hugs chance for both depths, because a downstream spatial conv still sees a globally-rotated pattern.",
-      "classification": "NEW_MECHANISM",
-      "source_experiment": "neocognitron N3",
-      "raw_evidence": [
-        "reports/2026-07-14-neocognitron-n3-deep-stack.md"
-      ],
-      "confidence": "high (5 seeds)",
-      "scope": "S/C stack with a spatial readout",
-      "limitations": "closed by F-ENT-1 (global-invariant top)",
-      "framework_consequence": "group_pool docstring + registry record the local/global distinction; global rotation-invariance requires the entropy top.",
-      "code_changes": [
-        "src/ops/group_pool.rs known_limitations",
-        "canonical_components.json"
-      ],
-      "regression_tests": [],
-      "superseded_findings": [],
-      "open_questions": []
-    },
-    {
-      "id": "F-ENT-1",
-      "claim": "The response-weighted covariance EIGEN-ENTROPY is a globally-rotation-invariant AND arrangement-sensitive descriptor: it closes the N3 gap (held-out-rotation recognition AUROC 1.000, 5 seeds), the SAME covariance's principal angle is a rotation-equivariant pose readout (0.9deg MAE), and the update is real-time (~300us, ~3300/s). Confirms the user's Neocognitron hypothesis.",
-      "classification": "NEW_CANONICAL_CAPABILITY",
-      "source_experiment": "neocognitron entropy-top (examples/neocognitron_entropy.rs)",
-      "raw_evidence": [
-        "reports/2026-07-14-neocognitron-entropy-top.md",
-        "reports/figures/neocognitron-entropy.png",
-        "reports/figures/ent_*.json"
-      ],
-      "confidence": "high (5 seeds, all claims)",
-      "scope": "controlled 2-shape task; mechanism validated not scaled",
-      "limitations": "needs oriented S-cell upstream (F-ENT-2); not clutter-tested",
-      "framework_consequence": "global_entropy_pool is CANONICAL and the recommended rotation-invariant top; supersedes the arrangement-blind channel-mean top.",
-      "code_changes": [
-        "src/ops/global_entropy_pool.rs (new op + pose readout)",
-        "lib.rs re-export"
-      ],
-      "regression_tests": [
-        "global_entropy_pool::entropy_is_rotation_invariant",
-        "global_entropy_pool::bar_has_lower_entropy_than_corner",
-        "global_entropy_pool::principal_angle_tracks_bar_orientation",
-        "global_entropy_pool::backward_matches_fd"
-      ],
-      "superseded_findings": [],
-      "open_questions": [
-        "multi-object per-region entropy pools"
-      ]
-    },
-    {
-      "id": "F-ENT-2",
-      "claim": "An entropy-pool top has a COLD-START failure: a random conv gives a near-isotropic covariance -> uninformative Hs gradient -> the S-cell never forms edges and training stalls (2/5 seeds stuck at chance). Warm-starting the S-cell oriented fixes it (5/5 reach target).",
-      "classification": "NEGATIVE_RESULT_REQUIRING_A_GUARD",
-      "source_experiment": "neocognitron entropy-top",
-      "raw_evidence": [
-        "reports/2026-07-14-neocognitron-entropy-top.md"
-      ],
-      "confidence": "high",
-      "scope": "any ScBlock feeding global_entropy_pool from a cold start",
-      "limitations": "",
-      "framework_consequence": "GUARD assimilated: `oriented_sobel_bank` / `ScBlock::new_oriented` extracted to framework; entropy-pool docstring and this finding cross-reference. Future entropy-pool pipelines must warm-start the S-cell oriented.",
-      "code_changes": [
-        "src/ops/sc_block.rs oriented_sobel_bank + new_oriented",
-        "lib.rs re-export",
-        "4 drivers now import it"
-      ],
-      "regression_tests": [
-        "sc_block::oriented_bank_is_structured_not_isotropic",
-        "sc_block::new_oriented_installs_the_bank"
-      ],
-      "superseded_findings": [],
-      "open_questions": []
-    },
-    {
-      "id": "F-P2-1",
-      "claim": "The skeleton hg_conv is NEUTRAL when the occluded joint is over-constrained (recoverable from local visible structure): a 2-link arm's middle joint is recovered by the backbone alone; the P1 unblock (multi-pose localization ~1.7px, no coord channels) is the real positive.",
-      "classification": "NEGATIVE_RESULT_CLOSING_A_DIRECTION",
-      "sub_type": "scoped-neutral (base mechanism satisfies signal; fails F-ARC-1 condition a)",
-      "source_experiment": "SBSH pose P2 (examples/pose_backbone.rs)",
-      "raw_evidence": [
-        "reports/2026-07-14-sbsh-pose-p2-backbone.md",
-        "reports/figures/pose-backbone.png"
-      ],
-      "confidence": "high (5 seeds)",
-      "scope": "tree skeleton, locally-recoverable joint",
-      "limitations": "occlusion-box-shape can leak a bracketed joint (see F-P4-2)",
-      "framework_consequence": "Do not expect the skeleton to help a locally over-constrained joint; needs redundant long-range structure (F-P3-1).",
-      "code_changes": [],
-      "regression_tests": [],
-      "superseded_findings": [],
-      "open_questions": []
-    },
-    {
-      "id": "F-P3-1",
-      "claim": "The skeleton hg_conv is DECISIVE when a redundant structural constraint exists AND the recovery is expressible: coupled arms (L=R+offset), a single-neighbour translation the shared elin expresses exactly. Occluded-arm recovery 2.6 vs 6.9px; left/right disambiguation 5.9 vs 24px (5 seeds).",
-      "classification": "NEW_MECHANISM",
-      "source_experiment": "SBSH pose P3 (examples/pose_symmetry.rs)",
-      "raw_evidence": [
-        "reports/2026-07-14-sbsh-pose-p3-skeleton-win.md",
-        "reports/figures/pose-symmetry.png"
-      ],
-      "confidence": "high (5 seeds)",
-      "scope": "redundant coupling with translation recovery",
-      "limitations": "shared elin cannot express reflection/asymmetric closure (F-P4-1)",
-      "framework_consequence": "skeleton_hg_refine registered as MECHANISM_DEMO; canonical extraction deferred to the per-edge transform (see F-P4-1).",
-      "code_changes": [],
-      "regression_tests": [],
-      "superseded_findings": [],
-      "open_questions": [
-        "reflection symmetry needs a per-edge transform"
-      ]
-    },
-    {
-      "id": "F-P4-1",
-      "claim": "The signed hg_conv with a SINGLE SHARED elin CANNOT express an asymmetric affine loop closure (C=B+D-A): on the loop edges it collapses recovery to the neighbour MIDPOINT (measured oracle 6.5px), so a closed-loop skeleton HURTS the clean coupler (10.7 vs 7.3px, 5 seeds).",
-      "classification": "NEGATIVE_RESULT_REQUIRING_A_GUARD",
-      "source_experiment": "SBSH pose P4 (examples/pose_loop.rs)",
-      "raw_evidence": [
-        "reports/2026-07-14-sbsh-pose-p4-closed-loop.md",
-        "reports/figures/pose-loop.png"
-      ],
-      "confidence": "high (derived then measured, 5 seeds)",
-      "scope": "closed kinematic loop / asymmetric neighbour combination",
-      "limitations": "",
-      "framework_consequence": "GUARD/record: skeleton_hg_refine kept NON-CANONICAL for loops; measured spec for the next op = PER-EDGE TRANSFORM (each hyperedge owns its learned map). Do NOT extract the shared-elin refine as canonical.",
-      "code_changes": [
-        "canonical_components.json extraction_blocked_reason on skeleton_hg_refine"
-      ],
-      "regression_tests": [],
-      "superseded_findings": [],
-      "open_questions": [
-        "build per-edge transform op; re-run P4 to confirm loop flips hurts->wins",
-        "general (nonlinear) 4-bar closure may need a per-edge nonlinearity"
-      ]
-    },
-    {
-      "id": "F-P4-2",
-      "claim": "An occlusion box drawn to span a joint bracketed by visible neighbours LEAKS that joint's position via the hole shape (P2 elbow, P4 coupler ~1.7px 'recovered' regardless of method). Such occluded numbers are confounded and must not be used as a structural-recovery verdict.",
-      "classification": "NEW_EVALUATION_REQUIREMENT",
-      "source_experiment": "SBSH pose P2 + P4",
-      "raw_evidence": [
-        "reports/2026-07-14-sbsh-pose-p4-closed-loop.md"
-      ],
-      "confidence": "high",
-      "scope": "occlusion-robustness evaluation for keypoints",
-      "limitations": "",
-      "framework_consequence": "Evaluation rule: to test structural recovery, occlude a WHOLE separate substructure (P3-style) or verify the box does not bracket the target; rest the verdict on an unconfounded (e.g. clean, or cross-structure) comparison.",
-      "code_changes": [],
-      "regression_tests": [],
-      "superseded_findings": [],
-      "open_questions": []
-    },
-    {
-      "id": "F-EVO-1",
-      "claim": "Forgetting-RLS (lambda<1) with many features diverges from covariance windup: the precision matrix inflates by 1/lambda per step in poorly-excited directions until a sample hits them and the weights explode (measured RMSE ~1e4).",
-      "classification": "BUG_FIX_WITH_ARCHITECTURAL_IMPACT",
-      "source_experiment": "evolvent E0",
-      "raw_evidence": [
-        "reports/2026-07-15-evolvent-e0-stream.md"
-      ],
-      "confidence": "high",
-      "scope": "any EvolventHead with lambda<1 and un-excited feature directions",
-      "limitations": "",
-      "framework_consequence": "EvolventHead carries a covariance-trace guard on by default (bounds trace(P) -> bounds gain). GUARD assimilated in the shared component.",
-      "code_changes": [
-        "src/online.rs p_trace_max + with_trace_cap + trace scaling in update"
-      ],
-      "regression_tests": [
-        "online::windup_guard_keeps_it_bounded"
-      ],
-      "superseded_findings": [],
-      "open_questions": [
-        "directional forgetting removes windup without a trace cap"
-      ]
-    },
-    {
-      "id": "F-EVO-2",
-      "claim": "The evolvent (exact one-pass forgetting-RLS) is more SAMPLE-EFFICIENT at cold-start than online-SGD: it reaches lower error in the first window on all 5 seeds (0.34 vs 0.46) and ties a backprop-MLP. But it is O(d^2) PER UPDATE (slower than backprop O(d)); 'fast' = sample-fast, not FLOP-fast.",
-      "classification": "NEW_MECHANISM",
-      "source_experiment": "evolvent E0",
-      "raw_evidence": [
-        "reports/2026-07-15-evolvent-e0-stream.md",
-        "reports/figures/evolvent-stream.json"
-      ],
-      "confidence": "high (5 seeds)",
-      "scope": "online linear-in-features readout",
-      "limitations": "advantage is at cold-start / low-data; washes out on long stationary segments",
-      "framework_consequence": "The evolvent's value is data-efficiency and adaptation, not per-update compute; benchmark it in low-data / rapid-drift regimes.",
-      "code_changes": [],
-      "regression_tests": [
-        "online::converges_to_batch_ridge"
-      ],
-      "superseded_findings": [],
-      "open_questions": []
-    },
-    {
-      "id": "F-EVO-3",
-      "claim": "Plain forgetting-RLS is NOT robustly competitive with backprop-Adam on a long non-stationary stream: a windup-stable config (high lambda + tight cap) under-tracks (steady RMSE 1.6 vs backprop 0.3), while an aggressive config diverges. The strong hypothesis (evolvent beats slow backprop outright) is unsupported by plain RLS.",
-      "classification": "NEGATIVE_RESULT_REQUIRING_A_GUARD",
-      "source_experiment": "evolvent E0",
-      "raw_evidence": [
-        "reports/2026-07-15-evolvent-e0-stream.md"
-      ],
-      "confidence": "high (5 seeds)",
-      "scope": "long-regime non-stationary streaming with plain (isotropic-forgetting) RLS",
-      "limitations": "E0 task has long segments where SGD converges; does not test the rapid-drift regime",
-      "framework_consequence": "EvolventHead is EXPERIMENTAL not CANONICAL; do NOT default an evolvent readout as 'beats backprop'. Path to CANONICAL = directional-forgetting variant + rapid-drift benchmark (E1).",
-      "code_changes": [
-        "registry: EvolventHead status EXPERIMENTAL"
-      ],
-      "regression_tests": [],
-      "superseded_findings": [],
-      "open_questions": [
-        "directional/selective forgetting for windup-free aggressive tracking",
-        "rapid-drift task where sample-efficiency is decisive",
-        "deeper evolvent (local closed-form beyond the readout)"
-      ]
-    },
-    {
-      "id": "F-EVO-4",
-      "claim": "On STATIC supervised datasets (generated + real, cls + reg), the one-pass evolvent (RLS on a fixed RFF basis) is COMPETITIVE with a 200-epoch backprop MLP: over 6 datasets it WINS 2 (multi-class classification: gen_cls 0.950 vs 0.934, gen_cls_multi 0.995 vs 0.977), LOSES 2 (hard high-d regression gen_reg_highd 0.326 vs 0.408; iris 0.947 vs 0.961), TIES 2 (gen_reg, california). Beats one-pass SGD on all 6. ~1/10 training cost, no lr/epoch/arch tuning. 50 seeds, kato15.",
-      "classification": "NEW_CANONICAL_CAPABILITY",
-      "correction": "The first run (commit a-side) used a buggy RNG (inputs biased to [-1,0)); the 'matches/beats 5/6, decisive on hard regimes' claim was a data artifact and is RETRACTED. Fixed RNG (>>32/2^32, commit 1d63e68) re-run gives the competitive verdict above; the hard high-d regression REVERSES (MLP wins).",
-      "source_experiment": "evolvent E1 (examples/evolvent_bench.rs, 50 seeds, kato15 32-core, FIXED RNG)",
-      "raw_evidence": [
-        "reports/2026-07-15-evolvent-e1-static-benchmark.md",
-        "reports/figures/evolvent-bench.png",
-        "reports/figures/evolvent_bench_seeds/*.json"
-      ],
-      "confidence": "high (50 seeds, median[IQR], corrected)",
-      "scope": "static supervised learning with a fixed expressive (RFF) basis; multi-output via one-hot RLS",
-      "limitations": "fixed RFF basis underfits hard high-d nonlinear targets -> learned-feature MLP wins there; long-drift streaming remains F-EVO-3",
-      "framework_consequence": "EvolventHead DEPLOYABLE for static supervised readouts on the strength of COMPETITIVE accuracy + one-pass + no-tuning (not superiority). Multi-output (classification) canonical. Bug fixed in evolvent_stream/bench/hypergraph RNG.",
-      "code_changes": [
-        "src/online.rs multi-output EvolventHead",
-        "examples RNG fix (>>32/2^32)",
-        "registry: EvolventHead status DEPLOYABLE"
-      ],
-      "regression_tests": [
-        "online::one_hot_classifies_blobs",
-        "online::converges_to_batch_ridge"
-      ],
-      "superseded_findings": [],
-      "open_questions": [
-        "Nagare op basis (HSiKAN/rotor) instead of RFF -- lift on the hard high-d / california?",
-        "directional-forgetting streaming (F-EVO-3)"
-      ]
-    },
-    {
-      "id": "F-EVO-5",
-      "claim": "The dense PAIRWISE precision is both a cost (O(d^2)) and a REPRESENTATION limit: a genuine 3-way hyperedge interaction x_a x_b x_c is L2-orthogonal to all pairwise features, so a pairwise model provably cannot capture it (measured R2 ~0.15 on a 3-way-dominant target, 5 seeds). A HYPEREDGE-CLIQUE (block-structured) precision -- one small b_e x b_e block per hyperedge with a shared residual -- recovers it: block R2 0.997 == dense-hyperedge 0.997 at 20x less precision storage (980 vs 19600 nnz), on both disjoint and overlapping hypergraphs.",
-      "classification": "NEW_CANONICAL_CAPABILITY",
-      "source_experiment": "evolvent E3 (examples/evolvent_hypergraph.rs, 5 seeds)",
-      "raw_evidence": [
-        "reports/2026-07-15-evolvent-e3-hypergraph-precision.md",
-        "reports/figures/evolvent-hypergraph.png"
-      ],
-      "confidence": "high (5 seeds + closed-form orthogonality)",
-      "scope": "additive-over-hyperedges targets with bounded-width structure; block precision = block-diagonal RLS",
-      "limitations": "block precision drops cross-block (separator) coupling -- negligible for additive-over-hyperedge targets here, but would matter for non-additive cross-hyperedge structure; the higher-order term must be an explicit feature",
-      "framework_consequence": "New component BlockEvolventHead (O(d*w)) registered. The alternative to the pairwise item: hyperedge-clique precision keeps higher-order + cuts cost. Ties the evolvent line to the signed-hypergraph substrate (hg_message, SBSH bounded width).",
-      "code_changes": [
-        "src/online.rs BlockEvolventHead + 2 tests",
-        "examples/evolvent_hypergraph.rs"
-      ],
-      "regression_tests": [
-        "online::single_block_equals_dense",
-        "online::block_matches_dense_when_separable"
-      ],
-      "superseded_findings": [],
-      "open_questions": [
-        "junction-tree (block-tridiagonal) precision for genuine cross-hyperedge coupling",
-        "update the block precision THROUGH hg_message (higher-order tensor apply)",
-        "SBSH width certificate as the tractability guarantee"
-      ]
-    },
-    {
-      "id": "F-EVO-6",
-      "claim": "The INFORMATION FORM (junction-tree) evolvent -- accumulate J = Phi^T Phi + ridge*I and b = Phi^T y, solve J w = b -- is EXACT (= dense RLS, keeps ALL cross-hyperedge/separator coupling) while J is SPARSE for local (bounded-width) measurements. Measured (kato15, 5 seeds x 4 sizes, local-window chain): INFO R2 == DENSE R2 to printed precision at EVERY (n,seed) cell; info-matrix storage 21.6% -> 11.1% -> 5.6% -> 2.8% of dense as n 48->96->192->384 (halves per doubling: nnz(J)=O(n*w) vs dense O(n^2)). Block-diagonal (E3) trails by <=0.0003 -- it drops the separator coupling INFO keeps exactly. This is the exact version of the E3 path and realises the hypergraph<->tensor conjugation: J IS the signed-hypergraph incidence made numerical (nonzero J[i,k] == GMRF conditional-dependence edge).",
-      "classification": "NEW_CANONICAL_CAPABILITY (classical primitive, novel-to-framework wiring)",
-      "source_experiment": "evolvent E4 (examples/evolvent_junction.rs, kato15 5 seeds x 4 n)",
-      "raw_evidence": [
-        "reports/2026-07-15-evolvent-e4-junction-tree.md",
-        "reports/figures/evolvent-junction.png",
-        "reports/figures/evolvent_e4_results.json"
-      ],
-      "confidence": "high (5 seeds x 4 sizes; INFO==DENSE is an algebraic identity, the run confirms the implementation)",
-      "scope": "local / bounded-width measurements (sparse J); linear-in-features single-output readout. NOT a win for dense/global measurements (J fills -> same O(d^2) as dense).",
-      "limitations": "sparsity is a property of the DATA not the head; current solve is dense Gaussian elimination O(d^3) -- the O(d*w^2) block-tridiagonal Cholesky that exploits nnz is NOT yet implemented (E4 measures the STORAGE + EXACTNESS win, not a solve-TIME win); InfoEvolventHead is a CLASSICAL primitive (information filter / Lauritzen-Spiegelhalter junction tree) -- no algorithmic-novelty claim, the framework value is the exact+sparse evolvent head + hypergraph conjugation.",
-      "framework_consequence": "New component InfoEvolventHead (DEPLOYABLE for local-measurement structure) registered. Completes the evolvent precision family: dense P O(d^2) exact -> block-diagonal O(d*w) approximate -> information J O(d*w) EXACT. Answers the user's 'make P sparse and tensor-like -- conjugation between hypergraph and tensor interface'.",
-      "code_changes": [
-        "src/online.rs InfoEvolventHead + 1 test",
-        "src/lib.rs re-export",
-        "examples/evolvent_junction.rs"
-      ],
-      "regression_tests": [
-        "online::info_form_equals_dense_and_is_sparse"
-      ],
-      "superseded_findings": [],
-      "open_questions": [
-        "sparse block-tridiagonal Cholesky O(d*w^2) -- turn the storage win into a solve-time win",
-        "a NON-additive cross-hyperedge target where BLOCK loses materially and INFO/dense hold (the discriminating block-vs-info test)",
-        "update J THROUGH hg_message on the signed-hypergraph substrate",
-        "SBSH bounded-width certificate as the solve tractability guarantee"
-      ]
-    },
-    {
-      "id": "F-EVO-7",
-      "claim": "The MULTIFRONTAL (clique-tree) Cholesky driven by the hypergraph -- eliminate each clique's residual leaves->root, send the Schur complement over its separator up to the parent (the message = a tensor contraction over the eliminated interior onto the separator boundary), back-substitute root->leaves -- is EXACT (= dense Cholesky of the assembled J) at storage O(sum|C|^2)=O(d*w^2) and factorization O(sum|C|^3)=O(d*w^3). Measured (kato15, 5 seeds x 4 depths, branching binary clique tree): MF R2 == DENSE R2 at every (depth,seed); factorization flop speedup 18x->77x->314x->1270x as d 105->889 (grows (d/w)^2); storage 10.7%->1.3% of dense. An online update touches EXACTLY its clique's path to the root (proven by regression test: changed factors == ancestors_inclusive(leaf)) -> mean path = depth = log2(N) cliques, so incremental re-fire is O(log N * w^3) not O(N * w^3). This is the SOLVE-TIME realization of the E4 information form -- the corner of the precision family that is exact AND cheap-to-solve AND cheap-to-update-online.",
-      "classification": "NEW_CANONICAL_CAPABILITY (classical method, novel-to-framework wiring)",
-      "source_experiment": "evolvent E5 (examples/evolvent_multifrontal.rs, kato15 5 seeds x 4 depths)",
-      "raw_evidence": [
-        "reports/2026-07-15-evolvent-e5-multifrontal.md",
-        "reports/figures/evolvent-multifrontal.png",
-        "reports/figures/evolvent_e5_results.json"
-      ],
-      "confidence": "high (5 seeds x 4 depths; MF==DENSE and update-locality are algebraic identities the runs + tests confirm)",
-      "scope": "bounded-width (junction-tree) SPD precision; a valid clique tree (RIP, separator subset of parent) is required; single-output linear-in-features. The BLOCK gap is small here (~0.0002) BECAUSE the target is additive-over-cliques and data-rich per clique (regime property, not a method limit) -- the data-scarce / non-additive discriminating target is still open.",
-      "limitations": "the flop win is an ANALYTIC count (Sum|C|^3 vs d^3/6) not a wall-clock benchmark (needs contiguous-storage rewrite + criterion at large d); the incremental re-fire is PROVEN-local but the optimized refactorize_path is NOT built (measure-before-optimize); multifrontal is a CLASSICAL method (Duff-Reid 1983 / junction-tree elimination) -- no algorithmic-novelty claim, framework value = the hypergraph clique tree AS the assembly tree and separators AS messages.",
-      "framework_consequence": "New component JunctionTreeCholesky (DEPLOYABLE) registered. Completes the evolvent precision family: dense O(d^2)/O(d^3) exact -> block-diagonal O(d*w) approx -> information O(d*w) exact-but-dense-solve -> MULTIFRONTAL O(d*w^2)/O(d*w^3) exact-and-sparse-solve. Delivers the F-EVO-6 open item (block-tridiagonal Cholesky + width certificate).",
-      "code_changes": [
-        "src/junction_tree.rs new module (JunctionTreeCholesky + Clique + balanced_binary_tree) + 3 tests",
-        "src/lib.rs module + re-exports",
-        "examples/evolvent_multifrontal.rs",
-        "scripts/dev/plot_evolvent_multifrontal.py"
-      ],
-      "regression_tests": [
-        "junction_tree::single_clique_equals_dense",
-        "junction_tree::branching_tree_equals_dense_at_bounded_width",
-        "junction_tree::online_update_only_perturbs_path_to_root"
-      ],
-      "superseded_findings": [],
-      "open_questions": [
-        "contiguous-storage rewrite + wall-clock criterion benchmark (analytic flops -> measured time)",
-        "optimized refactorize_path (recompute only the leaf->root path) = the incremental online solver",
-        "non-additive / data-scarce cross-clique target (block loses materially, MF/dense hold)",
-        "route the separator message literally through hg_message on a signed hypergraph"
-      ]
-    },
-    {
-      "id": "F-EVO-8",
-      "claim": "The value of the cross-clique (separator) coupling is a FUNCTION OF DATA DENSITY, and it is large exactly when data is scarce. Discriminating test (kato15, 5 seeds, branching clique tree depth 6, d=441, 63 cliques, clique arity ~8): sweeping measurements-per-clique `per`, the R2 gap MF-minus-BLOCK (separator-dropping) rises from 0.089 (per=2) to a PEAK 0.159 at per=6 (below arity, data-scarce), then falls to 0.006 at per=40 (data-rich, the E5 regime). MULTIFRONTAL R2 == DENSE R2 at every (per,seed). Weight-recovery RMSE confirms: BLOCK mis-estimates the separator variables (per=6: 0.615 vs MF 0.492) because it sees only their residual clique's data while MF pools every clique that shares them. This closes the block-vs-info question open since E3: E5's tiny ~0.0002 gap was a data-rich REGIME property, not a method limit; the coupling is worth up to ~0.16 R2 when data is scarce.",
-      "classification": "MEASUREMENT (resolves an open question; no new component)",
-      "source_experiment": "evolvent E6 (examples/evolvent_multifrontal.rs --per sweep, kato15 5 seeds x 7 densities)",
-      "raw_evidence": [
-        "reports/2026-07-15-evolvent-e6-scarcity.md",
-        "reports/figures/evolvent-scarcity.png",
-        "reports/figures/evolvent_e6_results.json"
-      ],
-      "confidence": "high (5 seeds x 7 densities; monotone-then-peak trend consistent across seeds)",
-      "scope": "additive-in-features linear target; the scarcity is genuine data-scarcity (per < clique arity), NOT a manufactured non-additive coupling; single depth (6). The gap peaks just below clique arity and vanishes when data-rich.",
-      "limitations": "the gap is a property of the (structure, data-density) pair, not of MF alone -- MF exactness is regime-independent, block-diagonal is nearly as good AND cheaper in the rich regime; separator-sharing axis (sep, depth) and a genuinely non-additive cross-clique feature untested.",
-      "framework_consequence": "No new component -- uses JunctionTreeCholesky::solve vs solve_block_diagonal. Resolves F-EVO-5/6/7 open question 'a non-additive/data-scarce cross-clique target where BLOCK loses materially': ANSWERED via data-scarcity (block loses up to 0.16 R2). Quantifies WHEN to pay for the coupling (keep it when data-scarce; block-diagonal suffices when rich). Added regression coverage for solve_block_diagonal (single_clique_equals_dense).",
-      "code_changes": [
-        "examples/evolvent_multifrontal.rs --per axis + weight-recovery RMSE",
-        "src/junction_tree.rs single_clique_equals_dense extended to cover solve_block_diagonal"
-      ],
-      "regression_tests": [
-        "junction_tree::single_clique_equals_dense (now covers solve_block_diagonal)"
-      ],
-      "superseded_findings": [],
-      "open_questions": [
-        "separator-sharing axis (sep, depth) -- gap should grow with more cliques per separator",
-        "a genuinely non-additive cross-clique feature (explicit product spanning a separator) -- does the gap widen beyond data-scarcity?",
-        "contiguous-storage rewrite + wall-clock benchmark (E5 follow-up)"
-      ]
-    },
-    {
-      "id": "F-EVO-9",
-      "claim": "Separator-SHARING is a THRESHOLD effect, not a dose-response. Star topology (one separator of 3 vars shared across `fanout` children => fanout+1 cliques per separator), fixed data-scarcity (per=4, child arity 6), 5 seeds kato15: the block-diagonal deficit is LARGE (~0.16-0.28 R2 median) whenever a separator is shared, materially more than minimal-sharing fanout=1 (0.10) and comparable to E6's within-tree gap -- BUT it does NOT grow monotonically with fanout: the gap JUMPS at fanout 1->2 then PLATEAUS across fanout 2..32 (medians 0.184,0.162,0.228,0.278,0.189, IQRs heavily overlapping). MF R2 == DENSE at every cell. PARTIAL REFUTATION of the stated hypothesis 'more cliques per separator -> monotonically bigger gap': sharing MATTERS (confirmed), degree-of-sharing beyond 2 does NOT add much (refuted). Mechanism (inferred): at fixed scarcity the residual vars cap both solvers, and block's per-measurement error on the shared separator is set once fanout>=2 -- more children add equally-sep-affected measurements, not more per-measurement error.",
-      "classification": "PARTIAL_REFUTATION (measurement; corrects a stated hypothesis)",
-      "source_experiment": "evolvent E7 (examples/evolvent_multifrontal.rs --fanout star topology, kato15 6 fanouts x 5 seeds)",
-      "raw_evidence": [
-        "reports/2026-07-15-evolvent-e7-sharing.md",
-        "reports/figures/evolvent-sharing.png",
-        "reports/figures/evolvent_e7_results.json"
-      ],
-      "confidence": "medium-high (5 seeds; the PLATEAU/non-monotonicity is clear, the exact plateau level is noisy -- IQRs overlap, small-d noise dominates fanout=1)",
-      "scope": "additive-in-features linear target; single scarcity (per=4) and separator width (sep=3); small d at low fanout (d=9 at fanout=1 is noisy -- one seed had BLOCK beat MF via over-regularization). Plateau conclusion rests on fanout>=2.",
-      "limitations": "does NOT test a genuinely non-additive cross-clique feature (the last open discriminating knob); the joint scarcity x sharing sweep at larger d untested; single-seed (seed 0) looked monotone -- multi-seed is the verdict.",
-      "framework_consequence": "No new component (uses star_clique_tree + existing solve/solve_block_diagonal). REFINES F-EVO-8: the coupling's value is a THRESHOLD on sharing (turns on when a separator is shared) bounded by the per-clique data budget, NOT a dose-response in the number of sharers. New topology helper star_clique_tree (shared-separator) + regression test.",
-      "code_changes": [
-        "src/junction_tree.rs star_clique_tree + star_tree_equals_dense_with_shared_separator test",
-        "src/lib.rs re-export",
-        "examples/evolvent_multifrontal.rs --fanout switch"
-      ],
-      "regression_tests": [
-        "junction_tree::star_tree_equals_dense_with_shared_separator"
-      ],
-      "superseded_findings": [],
-      "open_questions": [
-        "a genuinely non-additive cross-clique feature (explicit product spanning a separator)",
-        "joint scarcity x sharing sweep at larger d (shed small-d noise)",
-        "contiguous-storage rewrite + wall-clock (E5 follow-up)"
-      ]
-    },
-    {
-      "id": "F-EVO-10",
-      "claim": "A genuinely NON-ADDITIVE cross-clique term is a REPRESENTABILITY limit, not an estimation gap. Target y = Sum_k[w0*rk0 + w1*rk1 + beta*(rk0*rk1)] + w_h*h; the product prod_k=rk0*rk1 is fittable ONLY by a clique wide enough to contain both operands. Measured (Mac, 5 seeds x 5 beta, K=12 triples, width-4 star clique tree): MF-WIDE (multifrontal hosting the product) R2 == DENSE-WIDE R2 EXACTLY at every (beta,seed), flat ~0.998 regardless of beta, at 14% of dense storage. NARROW (linear-only, product omitted) COLLAPSES as beta grows: 0.999 -> 0.926 -> 0.748 -> 0.376 -> 0.060 -- and this is the DATA-RICH regime (per=40), so more data does NOT close it: the term is simply absent from the narrow hypothesis space. The required treewidth = the target's interaction order (a degree-2 interaction needs width >= 3); the SBSH bounded-width certificate is exactly the check that the tree's width covers the data's interaction order -- the validity precondition for the whole E4-E7 line.",
-      "classification": "NEW_CANONICAL_CAPABILITY (measurement; closes the non-additive question, distinct axis from F-EVO-8/9)",
-      "source_experiment": "evolvent E8 (examples/evolvent_width.rs, Mac 5 seeds x 5 beta)",
-      "raw_evidence": [
-        "reports/2026-07-15-evolvent-e8-width.md",
-        "reports/figures/evolvent-width.png",
-        "reports/figures/evolvent_e8_results.json"
-      ],
-      "confidence": "high (5 seeds; MF-WIDE==DENSE-WIDE is an algebraic identity, NARROW collapse is monotone and large across all seeds)",
-      "scope": "explicit product feature (linear-in-features model; the clique tree makes the interaction affordable+exactly-solvable at bounded width, does NOT discover it); degree-2 interaction, single arity. Rich regime (per=40) -- deliberately NOT scarcity.",
-      "limitations": "the non-additive term must be an explicit feature; NARROW's collapse is because the feature is absent from its basis (honest content of 'too narrow'); higher-order interactions (degree>=3 -> width>=order+1) untested; beta is a controlled dial, not fit from real data.",
-      "framework_consequence": "No new component (reuses JunctionTreeCholesky + InfoEvolventHead). CLOSES the non-additive-cross-clique open question of F-EVO-5/6/7/9: it does NOT touch the E6/E7 estimation plateau -- it is a DISTINCT axis (representability = treewidth vs interaction order). Establishes the width certificate as the VALIDITY precondition for the exactness line: the multifrontal solver handles non-additive terms exactly at O(d*w^3) iff width >= interaction order. Separates the two mechanisms cleanly: estimation gap (E6, closes with data) vs representability gap (E8, closes with width).",
-      "code_changes": [
-        "examples/evolvent_width.rs (new)",
-        "scripts/dev/plot_evolvent_width.py"
-      ],
-      "regression_tests": [
-        "(reuses E5 junction_tree exactness tests; example is the integration evidence)"
-      ],
-      "superseded_findings": [],
-      "open_questions": [
-        "higher-order interactions (degree>=3 -> width>=order+1)",
-        "wire the SBSH width certificate as an explicit precondition check on JunctionTreeCholesky::new",
-        "contiguous-storage rewrite + wall-clock (E5 follow-up)"
-      ]
-    },
-    {
-      "id": "F-EVO-11",
-      "claim": "WALL-CLOCK validation (criterion, §10) of the E5/F-EVO-7 analytic flop win: the multifrontal solve (JunctionTreeCholesky::solve) vs dense Gaussian (InfoEvolventHead::solve, identical answer) on the branching tree, d 105->889. MEASURED speedup 5.9x -> 16.4x -> 63x -> 255x -- grows exactly as the O(d*w^3) vs O(d^3) asymptotic predicts (same (d/w)^2 growth as the flop count), CONFIRMING the direction. BUT the analytic flop count (18x-1270x) OVERSTATED the deployable speedup by a stable ~5x (flop/measured -> 5.0x for large d): the dense baseline is a contiguous cache-friendly d*d array while the multifrontal chases many small per-clique Vecs (allocation + pointer-chase) and re-allocates frontals each solve. At d=889: 85us vs 21.8ms (255x, online-viable). The flop count is the CEILING a contiguous-storage rewrite would approach.",
-      "classification": "VALIDATION_WITH_CORRECTION (measurement; corrects the magnitude of F-EVO-7's flop claim)",
-      "source_experiment": "evolvent E9 (benches/evolvent_solve_bench.rs, criterion 0.5, Mac)",
-      "raw_evidence": [
-        "reports/2026-07-16-evolvent-e9-wallclock.md",
-        "reports/figures/evolvent-wallclock.png",
-        "reports/figures/evolvent_e9_results.json"
-      ],
-      "confidence": "high (criterion 30 samples, tight CIs ~1-2%; ratios stable across the size sweep)",
-      "scope": "single machine (Mac arm64); dense baseline is Gaussian elimination (~2x flops of pure Cholesky) so the ratio is a mild over-estimate of the pure-algorithmic win; both solvers re-factorize from scratch each solve.",
-      "limitations": "absolute us are machine-specific (ratios transfer); a dense-CHOLESKY baseline would narrow the ratio by up to ~2x; the contiguous-storage rewrite that would close the ~5x flop-to-measured gap is NOT built.",
-      "framework_consequence": "CORRECTS F-EVO-7 and the JunctionTreeCholesky registry note: cite MEASURED 5.9x-255x as the deployable speedup, the 18x-1270x flop count as the CEILING. Direction and growth of F-EVO-7 stand; magnitude corrected downward ~5x. Gives the contiguous-storage rewrite a measured target (~5x on the table). Closes the 'analytic flops not wall-clock' caveat repeated across E5-E8.",
-      "code_changes": [
-        "benches/evolvent_solve_bench.rs (new)",
-        "Cargo.toml [[bench]] registration (criterion already a dev-dep)",
-        "scripts/dev/plot_evolvent_wallclock.py",
-        "canonical_components.json + F-EVO-7 note corrections"
-      ],
-      "regression_tests": [
-        "(benchmark, not a correctness test; solver exactness already guarded by E5 junction_tree tests)"
-      ],
-      "superseded_findings": [],
-      "open_questions": [
-        "contiguous-storage multifrontal (one arena) -> close the ~5x gap toward the flop ceiling",
-        "dense-Cholesky baseline for the pure-algorithmic ratio",
-        "wall-clock of the incremental refactorize_path once built"
-      ]
-    },
-    {
-      "id": "F-EVO-12",
-      "claim": "The CONTIGUOUS-STORAGE rewrite of JunctionTreeCholesky closes E9's predicted ~5x headroom. Rewriting the internals from per-clique Vec<Vec<f32>> to FLAT ARENAS (precomputed offsets for frontals/rhs/factors + precomputed parent-local assembly map + reused scratch; no per-clique alloc, no position() search in the hot path) -- SAME public API, SAME exact answer (4 exactness tests pass, E5/E6/E7/E8 example numbers byte-identical) -- makes the multifrontal solve 2.6-2.8x faster (criterion): d=889 31.7us vs 85us. Measured speedup vs dense Gauss 5.9-255x -> 16.7-682x; flop/measured gap 5.0x -> 1.86x (large d), at d=105 essentially AT the flop ceiling (1.08x).",
-      "classification": "OPTIMIZATION (measured; closes F-EVO-11's open question)",
-      "source_experiment": "evolvent E10 (src/junction_tree.rs rewrite + benches/evolvent_solve_bench.rs re-run, criterion, Mac)",
-      "raw_evidence": [
-        "reports/2026-07-16-evolvent-e10-contiguous.md",
-        "reports/figures/evolvent-contiguous.png",
-        "reports/figures/evolvent_e10_results.json"
-      ],
-      "confidence": "high (criterion tight CIs; 2.7x self-speedup flat across d; correctness guarded by 4 exactness tests + byte-identical example outputs)",
-      "scope": "single machine (ratios transfer); the rewrite changed only memory layout + assembly-map precompute, arithmetic identical.",
-      "limitations": "the 682x is vs a Gaussian-elim dense baseline (~2x flops of pure Cholesky) -> the layout-INDEPENDENT number is the 2.7x self-speedup; a Cholesky baseline would show ~2x more residual (true algorithmic residual vs Cholesky ~3-4x). Remaining headroom (frontal-extraction + triangular solves not blocked/SIMD) NOT pursued -- E9's ~5x caveat is closed.",
-      "framework_consequence": "JunctionTreeCholesky component UPDATED in place (no v2, no new type -- §6.5 #13): flat-arena internals. Resolves F-EVO-11's open 'contiguous-storage rewrite' item and the E5-E8 'flops not wall-clock' caveat lineage. Deployable speedup is now 16.7x-682x. The measured 2.7x confirms E9's diagnosis (allocation overhead) was correct.",
-      "code_changes": [
-        "src/junction_tree.rs (contiguous rewrite: flat arenas, precomputed offsets+assembly map, reused scratch, buffer-based *_into helpers, dead n_sep removed)",
-        "benches/evolvent_solve_bench.rs re-run",
-        "scripts/dev/plot_evolvent_contiguous.py",
-        "canonical_components.json + F-EVO-11 limitation update"
-      ],
-      "regression_tests": [
-        "junction_tree::single_clique_equals_dense",
-        "junction_tree::branching_tree_equals_dense_at_bounded_width",
-        "junction_tree::star_tree_equals_dense_with_shared_separator",
-        "junction_tree::online_update_only_perturbs_path_to_root (all guard the rewrite's exactness)"
-      ],
-      "superseded_findings": [],
-      "open_questions": [
-        "blocked/SIMD triangular kernels + dense-Cholesky baseline -> the residual below the ceiling",
-        "optimized refactorize_path (leaf->root only) incremental online solver + wall-clock",
-        "higher-order interactions (degree>=3 -> width>=order+1)"
-      ]
-    },
-    {
-      "id": "F-HOLO-1",
-      "claim": "A DEEP holonomy net (RotorMeshNet: learned per-node Cayley rotors + mesh contraction, stacked) LEARNS useful features THROUGH DEPTH, readable by an entropy (arrangement) signal but not by a mean pool -- a clean DOUBLE DISSOCIATION. Pipeline is entirely closed-form / no autograd (RotorMeshNet -> spectral eigen-entropy readout -> logistic; trained by the composed hand-derived gradient). Task: ring mesh, coherent-twist vs isotropic, zero-mean (raw mean=chance). 5 seeds, held-out AUROC median: deep+entropy 0.759; deep+mean 0.542; shallow+entropy 0.561; shallow+mean 0.544. Removing EITHER depth OR the entropy readout collapses to ~chance -> depth AND arrangement(entropy) BOTH load-bearing. This answers the empirical crux of 'one step to deep-representation learning': the representation is learned (per-layer bivectors), the learning propagates through depth (closed-form adjoint/inverse-rotor transport), read by entropy not a supervised feature.",
-      "classification": "NEW_CANONICAL_CAPABILITY (on-mission; deep-representation learning demonstrated)",
-      "source_experiment": "deep-holonomy dissociation (examples/holonomy_deep_dissociation.rs, Mac 5 seeds x 2x2)",
-      "raw_evidence": [
-        "reports/2026-07-16-deep-holonomy-dissociation.md",
-        "reports/figures/holonomy-dissociation.png",
-        "reports/figures/holonomy_dissociation_results.json"
-      ],
-      "confidence": "high (5 seeds; clean double dissociation; end-to-end gradient FD-verified max err 6e-5 BEFORE trusting training numbers -- not a phantom)",
-      "scope": "small controlled task (N=12 ring, 120 train/test); AUROC 0.759 above chance not saturated (hard zero-mean arrangement-only task); training gentle.",
-      "limitations": "TRAINED BY GD ON THE CLOSED-FORM GRADIENT = the stepping stone, NOT yet the thesis's INSTANTANEOUS entropy/holonomy feedback (the update is iterative supervised BCE; entropy is the READOUT/objective feature). What is proven: the deep holonomy representation is learnable + useful, and entropy (not mean) reads it. CONVERGENCE (added): ONE pass already = 0.728 (near-instantaneous: architecture + linear probe over random deep rotors; vs shallow 0.561), and the committed 2x2 (lr=0.05) was UNDERTRAINED (~0.74) -- with lr=2.0 it refines to 0.90 (dissociation STRONGER than committed). BUT the near-instant part is the architecture+probe; the rotor-WEIGHT learning (0.73->0.90) is still ITERATIVE GD. The pure one-shot instantaneous ROTOR rule is the remaining OPEN frontier (measured honestly, not faked).",
-      "framework_consequence": "RotorMeshNet's learning-THROUGH-DEPTH is DEMONSTRATED (double dissociation over its OWN ablations). ***COMPETITIVENESS RETRACTED by F-HOLO-2***: a trivial raw-entropy baseline (2 params) BEATS the holonomy net (0.944 vs 0.894) on this task -- the dissociation is internally real but the apparatus does NOT earn its complexity here. The learning-through-depth claim STANDS; do not cite this as competitive. On-mission (holonomy, entropy, closed-form, no autograd) -- NOT the exact-solve devolution.",
-      "code_changes": [
-        "examples/holonomy_deep_dissociation.rs (new)",
-        "scripts/dev/plot_holonomy_dissociation.py"
-      ],
-      "regression_tests": [
-        "holonomy_net::deep_backward_matches_fd (mechanism); the example's FD gate guards the full-pipeline gradient"
-      ],
-      "superseded_findings": [],
-      "open_questions": [
-        "replace GD with the INSTANTANEOUS entropy/holonomy feedback (one-shot bivector update) = the last gap to the pure thesis",
-        "push scale/score (deeper, larger mesh, tuned LR) now the dissociation is established",
-        "rotor_holonomy (ordered loop product) as an explicit per-layer holonomy feature"
-      ]
-    },
-    {
-      "id": "F-HOLO-2",
-      "claim": "COMPETITIVENESS = NEGATIVE on this task. Fair fight (same data, 5 seeds, held-out AUROC median): TRIVIAL raw-field entropy + logistic (NO holonomy net, ~2 params) = 0.944 BEATS deep holonomy+entropy (Adam, ~110 params) = 0.894; MLP 36->3->1 = 0.690; MLP 36->16->1 = 0.666; raw-mean sanity = 0.559. The coherent-twist vs isotropic classes are already separated by the RAW field's covariance eigen-entropy, so the deep rotor apparatus is unnecessary and here slightly COUNTERPRODUCTIVE (random rotors+mesh mix partly scramble the cleanly-visible coherence). MLPs trail both -> the ENTROPY readout (2nd-order stat) is the lever, not depth or holonomy. RETRACTS F-HOLO-1's competitiveness implication (the double dissociation over the net's OWN ablations is real, but against the right external baseline the whole thing loses).",
-      "classification": "NEGATIVE_WITH_MECHANISM (competitiveness retraction; measured, honest)",
-      "source_experiment": "deep-holonomy competitiveness fair fight (examples/holonomy_deep_dissociation.rs COMPETITIVENESS section, Mac 5 seeds)",
-      "raw_evidence": [
-        "reports/2026-07-16-deep-holonomy-dissociation.md",
-        "reports/figures/holonomy-fairfight.png",
-        "reports/figures/holonomy_dissociation_results.json"
-      ],
-      "confidence": "high (5 seeds, same data, external baselines incl. a 2-param trivial and two MLPs; FD-gated pipeline)",
-      "scope": "THIS synthetic task (coherent-twist vs isotropic ring mesh) -- which is solvable by raw entropy, so it cannot discriminate holonomy's value. Not a statement that holonomy is useless in general; a statement that this task does not justify it.",
-      "limitations": "the task was designed by the agent and turns out too easy for raw entropy; a task where raw entropy FAILS but the holonomy transform SUCCEEDS is needed to measure holonomy's value.",
-      "framework_consequence": "RotorMeshNet stays MECHANISM_DEMO (learning-through-depth demonstrated, competitiveness NOT). Evaluation-metric-integrity lesson recorded: measure the trivial/baseline CEILING before optimizing under it (0.944 trivial > 0.894 holonomy -- the whole optimization ran under a ceiling a 2-param method exceeds). Part 2 (real dataset) is PREMATURE until the method beats trivial baselines on a controlled task where holonomy is genuinely necessary.",
-      "code_changes": [
-        "examples/holonomy_deep_dissociation.rs (gen_data, run_mlp, run_trivial, fair-fight section)",
-        "scripts/dev/plot_holonomy_fairfight.py"
-      ],
-      "regression_tests": [
-        "(experiment; the FD gate guards the holonomy arm's gradient)"
-      ],
-      "superseded_findings": [],
-      "open_questions": [
-        "a task where raw entropy fails but holonomy succeeds (per-node-varying twist that must be un-wound; multi-scale/compositional structure invisible to a single covariance) -- the discriminating test of holonomy's VALUE",
-        "only then: real dataset"
-      ]
-    },
-    {
-      "id": "F-HSIKAN-PAR",
-      "claim": "HSiKAN (closed-form, no-autograd) parallelizes and, at matched threads, beats CPU PyTorch on BOTH axes. Same-architecture HSiKAN fwd+bwd (arity 3, d=16, cheb 6, 2 branches), Mac arm64. SINGLE THREAD: Nagare 2.3x faster than PyTorch (62 vs 140 ms @50k) and 4-5x less peak RSS (207 vs 843 MB @50k; 42x on a TINY model, 6.7 vs 281 MB, where PyTorch's ~280 MB import baseline dominates). Before this change the whole Nagare spine (kan/hsikan/clifford_fir/gomb_shell) was SINGLE-THREADED (only linear used rayon), so PyTorch's 6-thread default won wall-clock. NOW: hsikan_forward/backward partition the T hyperedges into min(threads,T) contiguous chunks on the rayon pool -> scales 7.3x at 16 threads (61->8.3 ms @50k) while PyTorch saturates ~6-8 threads (51->42 ms). MATCHED 16 THREADS: Nagare ~5x faster (8.1 vs 42 ms @50k; 16.8 vs 81 ms @100k) AND ~3x less memory (269 vs 843 MB; 568 vs 1468 MB). Cost of parallelism: P-fold transient grad_x copies raise Nagare RSS 196->269 MB (50k) / 386->568 MB (100k) from 1->16 threads -- still 2.6-3.1x under PyTorch. FURTHER SCENARIOS (2026-07-16): (kato15 32-core Xeon) Nagare scales 165->32 ms 1->32 threads and DEGRADES GRACEFULLY (saturates 16->32: 34->32ms), while PyTorch REGRESSES CATASTROPHICALLY at 32 threads (160->5360 ms @50k, 33x slowdown = CPU intra-op over-subscription thrash on tiny d=16) -- Nagare best 32ms vs PyTorch best 160ms(@8thr) = 5x, matched-32 = 167x. (Dim sweep) 1->16-thread speedup is ~FLAT in d: 7.26x(d16)/7.93x(d32)/7.80x(d64) -- so scaling below 16 threads is NOT d-bandwidth-limited; the kato15 16->32 flattening is a separate 32-core regime whose cause is NOT isolated (memory bandwidth / per-chunk work too small at 32 chunks / NUMA / turbo all plausible) = hypothesis not conclusion. (Deploy vs train, 50k d16 8thr) forward-only via hsikan_forward_chunked = 16 MB vs PyTorch no_grad 469 MB = 29x LESS deploy memory, 1.9x faster; training 3.7x faster; closed-form backward adds only +29% over forward vs PyTorch tape-replay +150%.",
-      "classification": "POSITIVE (measured; correctness-gated)",
-      "source_experiment": "HSiKAN edge-chunk rayon parallelization + vs-PyTorch CPU time/memory benchmark",
-      "raw_evidence": [
-        "reports/2026-07-16-hsikan-parallel-vs-pytorch.md",
-        "reports/figures/hsikan-bench.png",
-        "reports/figures/hsikan_pytorch_bench.json",
-        "reports/figures/hsikan-scenarios.png"
-      ],
-      "confidence": "high (checksum identical across thread counts; chunk_parallel_matches_serial FD-consistency test; 147/0 lib suite; peak RSS via /usr/bin/time -l)",
-      "scope": "CPU, d=16 signed-hyperedge HSiKAN, Mac arm64 vs PyTorch 2.12. The 42x memory ratio is a TINY-model artifact of PyTorch's fixed import baseline; the durable at-scale memory win is 2.6-5x. Not a GPU claim.",
-      "limitations": "Only hsikan is parallelized; kan/clifford_fir/gomb_shell remain single-threaded. Chunk parallelism trades memory (P-fold grad_x) for speed. The 16->32-thread flattening on kato15 is NOT causally isolated (bandwidth vs chunk-granularity vs NUMA) -- do not assert 'bandwidth-bound' as settled. PyTorch's 32-thread thrash is specific to small d=16 CPU intra-op; larger d or GPU would differ.",
-      "framework_consequence": "HSiKAN component -> v1.1, default parallel; public API + cache token unchanged (chunk count internal). Answers 'can the closed-form spine accelerate with threads?' = YES, and the no-tape memory advantage survives threading. Same rayon edge-chunk pattern is the template for parallelizing the rest of the spine (clifford_fir/gomb_shell) if needed. Deploy path (hsikan_forward_chunked) confirmed as the low-memory inference route (16 MB @50k). The no-tape thesis shows strongest on the DEPLOY memory axis (29x) and backward-overhead (+29% vs +150%).",
-      "code_changes": [
-        "src/ops/hsikan.rs (ChunkCache split, forward_serial/forward_chunked/chunk_ranges, backward_serial/reduce_backward, chunk_parallel_matches_serial test)",
-        "examples/hsikan_mem_bench.rs",
-        "scripts/dev/hsikan_pytorch.py",
-        "scripts/dev/plot_hsikan_bench.py"
-      ],
-      "regression_tests": [
-        "ops::hsikan::tests::chunk_parallel_matches_serial",
-        "ops::hsikan::tests::backward_matches_finite_difference",
-        "ops::hsikan::tests::kb_backward_matches_finite_difference"
-      ],
-      "superseded_findings": [],
-      "open_questions": [
-        "parallelize clifford_fir/gomb_shell with the same edge/bank-chunk pattern if the full Gömb-Soma cascade becomes the bottleneck",
-        "reduce the P-fold grad_x memory via sparse per-chunk vertex-grad scatter if RSS becomes the constraint",
-        "GPU port of the chunked op"
-      ]
-    }
-  ]
+ "schema_version": "1.0",
+ "updated": "2026-07-17",
+ "framework": "nagare / holonomy_learn",
+ "findings": [
+  {
+   "id": "F-ARC-1",
+   "claim": "An explicit structural/geometric prior earns its place ONLY where (a) the base mechanism lacks the signal AND (b) the prior's op can EXPRESS the constraint. Redundant or harmful everywhere else.",
+   "classification": "NEW_EVALUATION_REQUIREMENT",
+   "sub_type": "experiment-planning rule",
+   "source_experiment": "Neocognitron arc (N2b, N3, entropy-top, P2, P3, P4)",
+   "raw_evidence": [
+    "reports/2026-07-14-neocognitron-n3-deep-stack.md",
+    "reports/2026-07-14-neocognitron-entropy-top.md",
+    "reports/2026-07-14-sbsh-pose-p3-skeleton-win.md",
+    "reports/2026-07-14-sbsh-pose-p4-closed-loop.md"
+   ],
+   "confidence": "high (6 phases, both signs of each condition observed)",
+   "scope": "prior-vs-base A/Bs in this framework",
+   "limitations": "controlled analytic tasks; not yet stress-tested on cluttered real data",
+   "framework_consequence": "Every future prior-vs-base experiment proposal must state which of (a)/(b) it expects to satisfy and how it will test each.",
+   "code_changes": [],
+   "regression_tests": [],
+   "superseded_findings": [],
+   "open_questions": [
+    "does the law hold with nonlinear per-edge messages?"
+   ]
+  },
+  {
+   "id": "F-N2b-1",
+   "claim": "Under a LEARNABLE S-cell, the explicit rotation-invariant C-cell is REDUNDANT: the learnable conv discovers an orientation-agnostic invariant itself (C8 ~= C1), even on a task that forces oriented features (energy baseline at chance 0.47, S-cell 0.73).",
+   "classification": "NEGATIVE_RESULT_CLOSING_A_DIRECTION",
+   "source_experiment": "neocognitron N2b (examples/neocognitron_aniso.rs)",
+   "raw_evidence": [
+    "reports/2026-07-14-neocognitron-n2b-learned-scell.md",
+    "reports/figures/neocognitron-aniso.png"
+   ],
+   "confidence": "high",
+   "scope": "single learnable S/C block with a global-mean readout",
+   "limitations": "does not apply to compositional/deep regimes (see F-N3-1)",
+   "framework_consequence": "Do not add the C-cell for rotation-invariance under a single learnable block expecting a win; it is a no-op there.",
+   "code_changes": [],
+   "regression_tests": [
+    "sc_block::c1_group_is_orientation_specific (C1 path runs)"
+   ],
+   "superseded_findings": [],
+   "open_questions": []
+  },
+  {
+   "id": "F-N3-1",
+   "claim": "In a COMPOSITIONAL deep regime the C-cell becomes LOAD-BEARING: C8 fits corner-vs-bar (train 1.000, all seeds), C1 cannot fit (train ~chance). The compositional structure defeats the N2b implicit-invariance dodge.",
+   "classification": "NEW_MECHANISM",
+   "source_experiment": "neocognitron N3 (examples/neocognitron_deep.rs)",
+   "raw_evidence": [
+    "reports/2026-07-14-neocognitron-n3-deep-stack.md"
+   ],
+   "confidence": "high (5 seeds)",
+   "scope": "2-block stack, compositional oriented task",
+   "limitations": "does not by itself give global rotation generalization (F-N3-2)",
+   "framework_consequence": "ScBlock C-cell documented as load-bearing in compositional/can't-fit regimes.",
+   "code_changes": [],
+   "regression_tests": [
+    "sc_block::two_block_stack_backward_matches_fd"
+   ],
+   "superseded_findings": [],
+   "open_questions": []
+  },
+  {
+   "id": "F-N3-2",
+   "claim": "LOCAL per-feature orientation-invariance (group_pool C-cell) is NOT global rotation-invariance of a spatial configuration: held-out-rotation AUROC hugs chance for both depths, because a downstream spatial conv still sees a globally-rotated pattern.",
+   "classification": "NEW_MECHANISM",
+   "source_experiment": "neocognitron N3",
+   "raw_evidence": [
+    "reports/2026-07-14-neocognitron-n3-deep-stack.md"
+   ],
+   "confidence": "high (5 seeds)",
+   "scope": "S/C stack with a spatial readout",
+   "limitations": "closed by F-ENT-1 (global-invariant top)",
+   "framework_consequence": "group_pool docstring + registry record the local/global distinction; global rotation-invariance requires the entropy top.",
+   "code_changes": [
+    "src/ops/group_pool.rs known_limitations",
+    "canonical_components.json"
+   ],
+   "regression_tests": [],
+   "superseded_findings": [],
+   "open_questions": []
+  },
+  {
+   "id": "F-ENT-1",
+   "claim": "The response-weighted covariance EIGEN-ENTROPY is a globally-rotation-invariant AND arrangement-sensitive descriptor: it closes the N3 gap (held-out-rotation recognition AUROC 1.000, 5 seeds), the SAME covariance's principal angle is a rotation-equivariant pose readout (0.9deg MAE), and the update is real-time (~300us, ~3300/s). Confirms the user's Neocognitron hypothesis.",
+   "classification": "NEW_CANONICAL_CAPABILITY",
+   "source_experiment": "neocognitron entropy-top (examples/neocognitron_entropy.rs)",
+   "raw_evidence": [
+    "reports/2026-07-14-neocognitron-entropy-top.md",
+    "reports/figures/neocognitron-entropy.png",
+    "reports/figures/ent_*.json"
+   ],
+   "confidence": "high (5 seeds, all claims)",
+   "scope": "controlled 2-shape task; mechanism validated not scaled",
+   "limitations": "needs oriented S-cell upstream (F-ENT-2); not clutter-tested",
+   "framework_consequence": "global_entropy_pool is CANONICAL and the recommended rotation-invariant top; supersedes the arrangement-blind channel-mean top.",
+   "code_changes": [
+    "src/ops/global_entropy_pool.rs (new op + pose readout)",
+    "lib.rs re-export"
+   ],
+   "regression_tests": [
+    "global_entropy_pool::entropy_is_rotation_invariant",
+    "global_entropy_pool::bar_has_lower_entropy_than_corner",
+    "global_entropy_pool::principal_angle_tracks_bar_orientation",
+    "global_entropy_pool::backward_matches_fd"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "multi-object per-region entropy pools"
+   ]
+  },
+  {
+   "id": "F-ENT-2",
+   "claim": "An entropy-pool top has a COLD-START failure: a random conv gives a near-isotropic covariance -> uninformative Hs gradient -> the S-cell never forms edges and training stalls (2/5 seeds stuck at chance). Warm-starting the S-cell oriented fixes it (5/5 reach target).",
+   "classification": "NEGATIVE_RESULT_REQUIRING_A_GUARD",
+   "source_experiment": "neocognitron entropy-top",
+   "raw_evidence": [
+    "reports/2026-07-14-neocognitron-entropy-top.md"
+   ],
+   "confidence": "high",
+   "scope": "any ScBlock feeding global_entropy_pool from a cold start",
+   "limitations": "",
+   "framework_consequence": "GUARD assimilated: `oriented_sobel_bank` / `ScBlock::new_oriented` extracted to framework; entropy-pool docstring and this finding cross-reference. Future entropy-pool pipelines must warm-start the S-cell oriented.",
+   "code_changes": [
+    "src/ops/sc_block.rs oriented_sobel_bank + new_oriented",
+    "lib.rs re-export",
+    "4 drivers now import it"
+   ],
+   "regression_tests": [
+    "sc_block::oriented_bank_is_structured_not_isotropic",
+    "sc_block::new_oriented_installs_the_bank"
+   ],
+   "superseded_findings": [],
+   "open_questions": []
+  },
+  {
+   "id": "F-P2-1",
+   "claim": "The skeleton hg_conv is NEUTRAL when the occluded joint is over-constrained (recoverable from local visible structure): a 2-link arm's middle joint is recovered by the backbone alone; the P1 unblock (multi-pose localization ~1.7px, no coord channels) is the real positive.",
+   "classification": "NEGATIVE_RESULT_CLOSING_A_DIRECTION",
+   "sub_type": "scoped-neutral (base mechanism satisfies signal; fails F-ARC-1 condition a)",
+   "source_experiment": "SBSH pose P2 (examples/pose_backbone.rs)",
+   "raw_evidence": [
+    "reports/2026-07-14-sbsh-pose-p2-backbone.md",
+    "reports/figures/pose-backbone.png"
+   ],
+   "confidence": "high (5 seeds)",
+   "scope": "tree skeleton, locally-recoverable joint",
+   "limitations": "occlusion-box-shape can leak a bracketed joint (see F-P4-2)",
+   "framework_consequence": "Do not expect the skeleton to help a locally over-constrained joint; needs redundant long-range structure (F-P3-1).",
+   "code_changes": [],
+   "regression_tests": [],
+   "superseded_findings": [],
+   "open_questions": []
+  },
+  {
+   "id": "F-P3-1",
+   "claim": "The skeleton hg_conv is DECISIVE when a redundant structural constraint exists AND the recovery is expressible: coupled arms (L=R+offset), a single-neighbour translation the shared elin expresses exactly. Occluded-arm recovery 2.6 vs 6.9px; left/right disambiguation 5.9 vs 24px (5 seeds).",
+   "classification": "NEW_MECHANISM",
+   "source_experiment": "SBSH pose P3 (examples/pose_symmetry.rs)",
+   "raw_evidence": [
+    "reports/2026-07-14-sbsh-pose-p3-skeleton-win.md",
+    "reports/figures/pose-symmetry.png"
+   ],
+   "confidence": "high (5 seeds)",
+   "scope": "redundant coupling with translation recovery",
+   "limitations": "shared elin cannot express reflection/asymmetric closure (F-P4-1)",
+   "framework_consequence": "skeleton_hg_refine registered as MECHANISM_DEMO; canonical extraction deferred to the per-edge transform (see F-P4-1).",
+   "code_changes": [],
+   "regression_tests": [],
+   "superseded_findings": [],
+   "open_questions": [
+    "reflection symmetry needs a per-edge transform"
+   ]
+  },
+  {
+   "id": "F-P4-1",
+   "claim": "The signed hg_conv with a SINGLE SHARED elin CANNOT express an asymmetric affine loop closure (C=B+D-A): on the loop edges it collapses recovery to the neighbour MIDPOINT (measured oracle 6.5px), so a closed-loop skeleton HURTS the clean coupler (10.7 vs 7.3px, 5 seeds).",
+   "classification": "NEGATIVE_RESULT_REQUIRING_A_GUARD",
+   "source_experiment": "SBSH pose P4 (examples/pose_loop.rs)",
+   "raw_evidence": [
+    "reports/2026-07-14-sbsh-pose-p4-closed-loop.md",
+    "reports/figures/pose-loop.png"
+   ],
+   "confidence": "high (derived then measured, 5 seeds)",
+   "scope": "closed kinematic loop / asymmetric neighbour combination",
+   "limitations": "",
+   "framework_consequence": "GUARD/record: skeleton_hg_refine kept NON-CANONICAL for loops; measured spec for the next op = PER-EDGE TRANSFORM (each hyperedge owns its learned map). Do NOT extract the shared-elin refine as canonical.",
+   "code_changes": [
+    "canonical_components.json extraction_blocked_reason on skeleton_hg_refine"
+   ],
+   "regression_tests": [],
+   "superseded_findings": [],
+   "open_questions": [
+    "build per-edge transform op; re-run P4 to confirm loop flips hurts->wins",
+    "general (nonlinear) 4-bar closure may need a per-edge nonlinearity"
+   ]
+  },
+  {
+   "id": "F-P4-2",
+   "claim": "An occlusion box drawn to span a joint bracketed by visible neighbours LEAKS that joint's position via the hole shape (P2 elbow, P4 coupler ~1.7px 'recovered' regardless of method). Such occluded numbers are confounded and must not be used as a structural-recovery verdict.",
+   "classification": "NEW_EVALUATION_REQUIREMENT",
+   "source_experiment": "SBSH pose P2 + P4",
+   "raw_evidence": [
+    "reports/2026-07-14-sbsh-pose-p4-closed-loop.md"
+   ],
+   "confidence": "high",
+   "scope": "occlusion-robustness evaluation for keypoints",
+   "limitations": "",
+   "framework_consequence": "Evaluation rule: to test structural recovery, occlude a WHOLE separate substructure (P3-style) or verify the box does not bracket the target; rest the verdict on an unconfounded (e.g. clean, or cross-structure) comparison.",
+   "code_changes": [],
+   "regression_tests": [],
+   "superseded_findings": [],
+   "open_questions": []
+  },
+  {
+   "id": "F-EVO-1",
+   "claim": "Forgetting-RLS (lambda<1) with many features diverges from covariance windup: the precision matrix inflates by 1/lambda per step in poorly-excited directions until a sample hits them and the weights explode (measured RMSE ~1e4).",
+   "classification": "BUG_FIX_WITH_ARCHITECTURAL_IMPACT",
+   "source_experiment": "evolvent E0",
+   "raw_evidence": [
+    "reports/2026-07-15-evolvent-e0-stream.md"
+   ],
+   "confidence": "high",
+   "scope": "any EvolventHead with lambda<1 and un-excited feature directions",
+   "limitations": "",
+   "framework_consequence": "EvolventHead carries a covariance-trace guard on by default (bounds trace(P) -> bounds gain). GUARD assimilated in the shared component.",
+   "code_changes": [
+    "src/online.rs p_trace_max + with_trace_cap + trace scaling in update"
+   ],
+   "regression_tests": [
+    "online::windup_guard_keeps_it_bounded"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "directional forgetting removes windup without a trace cap"
+   ]
+  },
+  {
+   "id": "F-EVO-2",
+   "claim": "The evolvent (exact one-pass forgetting-RLS) is more SAMPLE-EFFICIENT at cold-start than online-SGD: it reaches lower error in the first window on all 5 seeds (0.34 vs 0.46) and ties a backprop-MLP. But it is O(d^2) PER UPDATE (slower than backprop O(d)); 'fast' = sample-fast, not FLOP-fast.",
+   "classification": "NEW_MECHANISM",
+   "source_experiment": "evolvent E0",
+   "raw_evidence": [
+    "reports/2026-07-15-evolvent-e0-stream.md",
+    "reports/figures/evolvent-stream.json"
+   ],
+   "confidence": "high (5 seeds)",
+   "scope": "online linear-in-features readout",
+   "limitations": "advantage is at cold-start / low-data; washes out on long stationary segments",
+   "framework_consequence": "The evolvent's value is data-efficiency and adaptation, not per-update compute; benchmark it in low-data / rapid-drift regimes.",
+   "code_changes": [],
+   "regression_tests": [
+    "online::converges_to_batch_ridge"
+   ],
+   "superseded_findings": [],
+   "open_questions": []
+  },
+  {
+   "id": "F-EVO-3",
+   "claim": "Plain forgetting-RLS is NOT robustly competitive with backprop-Adam on a long non-stationary stream: a windup-stable config (high lambda + tight cap) under-tracks (steady RMSE 1.6 vs backprop 0.3), while an aggressive config diverges. The strong hypothesis (evolvent beats slow backprop outright) is unsupported by plain RLS.",
+   "classification": "NEGATIVE_RESULT_REQUIRING_A_GUARD",
+   "source_experiment": "evolvent E0",
+   "raw_evidence": [
+    "reports/2026-07-15-evolvent-e0-stream.md"
+   ],
+   "confidence": "high (5 seeds)",
+   "scope": "long-regime non-stationary streaming with plain (isotropic-forgetting) RLS",
+   "limitations": "E0 task has long segments where SGD converges; does not test the rapid-drift regime",
+   "framework_consequence": "EvolventHead is EXPERIMENTAL not CANONICAL; do NOT default an evolvent readout as 'beats backprop'. Path to CANONICAL = directional-forgetting variant + rapid-drift benchmark (E1).",
+   "code_changes": [
+    "registry: EvolventHead status EXPERIMENTAL"
+   ],
+   "regression_tests": [],
+   "superseded_findings": [],
+   "open_questions": [
+    "directional/selective forgetting for windup-free aggressive tracking",
+    "rapid-drift task where sample-efficiency is decisive",
+    "deeper evolvent (local closed-form beyond the readout)"
+   ]
+  },
+  {
+   "id": "F-EVO-4",
+   "claim": "On STATIC supervised datasets (generated + real, cls + reg), the one-pass evolvent (RLS on a fixed RFF basis) is COMPETITIVE with a 200-epoch backprop MLP: over 6 datasets it WINS 2 (multi-class classification: gen_cls 0.950 vs 0.934, gen_cls_multi 0.995 vs 0.977), LOSES 2 (hard high-d regression gen_reg_highd 0.326 vs 0.408; iris 0.947 vs 0.961), TIES 2 (gen_reg, california). Beats one-pass SGD on all 6. ~1/10 training cost, no lr/epoch/arch tuning. 50 seeds, kato15.",
+   "classification": "NEW_CANONICAL_CAPABILITY",
+   "correction": "The first run (commit a-side) used a buggy RNG (inputs biased to [-1,0)); the 'matches/beats 5/6, decisive on hard regimes' claim was a data artifact and is RETRACTED. Fixed RNG (>>32/2^32, commit 1d63e68) re-run gives the competitive verdict above; the hard high-d regression REVERSES (MLP wins).",
+   "source_experiment": "evolvent E1 (examples/evolvent_bench.rs, 50 seeds, kato15 32-core, FIXED RNG)",
+   "raw_evidence": [
+    "reports/2026-07-15-evolvent-e1-static-benchmark.md",
+    "reports/figures/evolvent-bench.png",
+    "reports/figures/evolvent_bench_seeds/*.json"
+   ],
+   "confidence": "high (50 seeds, median[IQR], corrected)",
+   "scope": "static supervised learning with a fixed expressive (RFF) basis; multi-output via one-hot RLS",
+   "limitations": "fixed RFF basis underfits hard high-d nonlinear targets -> learned-feature MLP wins there; long-drift streaming remains F-EVO-3",
+   "framework_consequence": "EvolventHead DEPLOYABLE for static supervised readouts on the strength of COMPETITIVE accuracy + one-pass + no-tuning (not superiority). Multi-output (classification) canonical. Bug fixed in evolvent_stream/bench/hypergraph RNG.",
+   "code_changes": [
+    "src/online.rs multi-output EvolventHead",
+    "examples RNG fix (>>32/2^32)",
+    "registry: EvolventHead status DEPLOYABLE"
+   ],
+   "regression_tests": [
+    "online::one_hot_classifies_blobs",
+    "online::converges_to_batch_ridge"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "Nagare op basis (HSiKAN/rotor) instead of RFF -- lift on the hard high-d / california?",
+    "directional-forgetting streaming (F-EVO-3)"
+   ]
+  },
+  {
+   "id": "F-EVO-5",
+   "claim": "The dense PAIRWISE precision is both a cost (O(d^2)) and a REPRESENTATION limit: a genuine 3-way hyperedge interaction x_a x_b x_c is L2-orthogonal to all pairwise features, so a pairwise model provably cannot capture it (measured R2 ~0.15 on a 3-way-dominant target, 5 seeds). A HYPEREDGE-CLIQUE (block-structured) precision -- one small b_e x b_e block per hyperedge with a shared residual -- recovers it: block R2 0.997 == dense-hyperedge 0.997 at 20x less precision storage (980 vs 19600 nnz), on both disjoint and overlapping hypergraphs.",
+   "classification": "NEW_CANONICAL_CAPABILITY",
+   "source_experiment": "evolvent E3 (examples/evolvent_hypergraph.rs, 5 seeds)",
+   "raw_evidence": [
+    "reports/2026-07-15-evolvent-e3-hypergraph-precision.md",
+    "reports/figures/evolvent-hypergraph.png"
+   ],
+   "confidence": "high (5 seeds + closed-form orthogonality)",
+   "scope": "additive-over-hyperedges targets with bounded-width structure; block precision = block-diagonal RLS",
+   "limitations": "block precision drops cross-block (separator) coupling -- negligible for additive-over-hyperedge targets here, but would matter for non-additive cross-hyperedge structure; the higher-order term must be an explicit feature",
+   "framework_consequence": "New component BlockEvolventHead (O(d*w)) registered. The alternative to the pairwise item: hyperedge-clique precision keeps higher-order + cuts cost. Ties the evolvent line to the signed-hypergraph substrate (hg_message, SBSH bounded width).",
+   "code_changes": [
+    "src/online.rs BlockEvolventHead + 2 tests",
+    "examples/evolvent_hypergraph.rs"
+   ],
+   "regression_tests": [
+    "online::single_block_equals_dense",
+    "online::block_matches_dense_when_separable"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "junction-tree (block-tridiagonal) precision for genuine cross-hyperedge coupling",
+    "update the block precision THROUGH hg_message (higher-order tensor apply)",
+    "SBSH width certificate as the tractability guarantee"
+   ]
+  },
+  {
+   "id": "F-EVO-6",
+   "claim": "The INFORMATION FORM (junction-tree) evolvent -- accumulate J = Phi^T Phi + ridge*I and b = Phi^T y, solve J w = b -- is EXACT (= dense RLS, keeps ALL cross-hyperedge/separator coupling) while J is SPARSE for local (bounded-width) measurements. Measured (kato15, 5 seeds x 4 sizes, local-window chain): INFO R2 == DENSE R2 to printed precision at EVERY (n,seed) cell; info-matrix storage 21.6% -> 11.1% -> 5.6% -> 2.8% of dense as n 48->96->192->384 (halves per doubling: nnz(J)=O(n*w) vs dense O(n^2)). Block-diagonal (E3) trails by <=0.0003 -- it drops the separator coupling INFO keeps exactly. This is the exact version of the E3 path and realises the hypergraph<->tensor conjugation: J IS the signed-hypergraph incidence made numerical (nonzero J[i,k] == GMRF conditional-dependence edge).",
+   "classification": "NEW_CANONICAL_CAPABILITY (classical primitive, novel-to-framework wiring)",
+   "source_experiment": "evolvent E4 (examples/evolvent_junction.rs, kato15 5 seeds x 4 n)",
+   "raw_evidence": [
+    "reports/2026-07-15-evolvent-e4-junction-tree.md",
+    "reports/figures/evolvent-junction.png",
+    "reports/figures/evolvent_e4_results.json"
+   ],
+   "confidence": "high (5 seeds x 4 sizes; INFO==DENSE is an algebraic identity, the run confirms the implementation)",
+   "scope": "local / bounded-width measurements (sparse J); linear-in-features single-output readout. NOT a win for dense/global measurements (J fills -> same O(d^2) as dense).",
+   "limitations": "sparsity is a property of the DATA not the head; current solve is dense Gaussian elimination O(d^3) -- the O(d*w^2) block-tridiagonal Cholesky that exploits nnz is NOT yet implemented (E4 measures the STORAGE + EXACTNESS win, not a solve-TIME win); InfoEvolventHead is a CLASSICAL primitive (information filter / Lauritzen-Spiegelhalter junction tree) -- no algorithmic-novelty claim, the framework value is the exact+sparse evolvent head + hypergraph conjugation.",
+   "framework_consequence": "New component InfoEvolventHead (DEPLOYABLE for local-measurement structure) registered. Completes the evolvent precision family: dense P O(d^2) exact -> block-diagonal O(d*w) approximate -> information J O(d*w) EXACT. Answers the user's 'make P sparse and tensor-like -- conjugation between hypergraph and tensor interface'.",
+   "code_changes": [
+    "src/online.rs InfoEvolventHead + 1 test",
+    "src/lib.rs re-export",
+    "examples/evolvent_junction.rs"
+   ],
+   "regression_tests": [
+    "online::info_form_equals_dense_and_is_sparse"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "sparse block-tridiagonal Cholesky O(d*w^2) -- turn the storage win into a solve-time win",
+    "a NON-additive cross-hyperedge target where BLOCK loses materially and INFO/dense hold (the discriminating block-vs-info test)",
+    "update J THROUGH hg_message on the signed-hypergraph substrate",
+    "SBSH bounded-width certificate as the solve tractability guarantee"
+   ]
+  },
+  {
+   "id": "F-EVO-7",
+   "claim": "The MULTIFRONTAL (clique-tree) Cholesky driven by the hypergraph -- eliminate each clique's residual leaves->root, send the Schur complement over its separator up to the parent (the message = a tensor contraction over the eliminated interior onto the separator boundary), back-substitute root->leaves -- is EXACT (= dense Cholesky of the assembled J) at storage O(sum|C|^2)=O(d*w^2) and factorization O(sum|C|^3)=O(d*w^3). Measured (kato15, 5 seeds x 4 depths, branching binary clique tree): MF R2 == DENSE R2 at every (depth,seed); factorization flop speedup 18x->77x->314x->1270x as d 105->889 (grows (d/w)^2); storage 10.7%->1.3% of dense. An online update touches EXACTLY its clique's path to the root (proven by regression test: changed factors == ancestors_inclusive(leaf)) -> mean path = depth = log2(N) cliques, so incremental re-fire is O(log N * w^3) not O(N * w^3). This is the SOLVE-TIME realization of the E4 information form -- the corner of the precision family that is exact AND cheap-to-solve AND cheap-to-update-online.",
+   "classification": "NEW_CANONICAL_CAPABILITY (classical method, novel-to-framework wiring)",
+   "source_experiment": "evolvent E5 (examples/evolvent_multifrontal.rs, kato15 5 seeds x 4 depths)",
+   "raw_evidence": [
+    "reports/2026-07-15-evolvent-e5-multifrontal.md",
+    "reports/figures/evolvent-multifrontal.png",
+    "reports/figures/evolvent_e5_results.json"
+   ],
+   "confidence": "high (5 seeds x 4 depths; MF==DENSE and update-locality are algebraic identities the runs + tests confirm)",
+   "scope": "bounded-width (junction-tree) SPD precision; a valid clique tree (RIP, separator subset of parent) is required; single-output linear-in-features. The BLOCK gap is small here (~0.0002) BECAUSE the target is additive-over-cliques and data-rich per clique (regime property, not a method limit) -- the data-scarce / non-additive discriminating target is still open.",
+   "limitations": "the flop win is an ANALYTIC count (Sum|C|^3 vs d^3/6) not a wall-clock benchmark (needs contiguous-storage rewrite + criterion at large d); the incremental re-fire is PROVEN-local but the optimized refactorize_path is NOT built (measure-before-optimize); multifrontal is a CLASSICAL method (Duff-Reid 1983 / junction-tree elimination) -- no algorithmic-novelty claim, framework value = the hypergraph clique tree AS the assembly tree and separators AS messages.",
+   "framework_consequence": "New component JunctionTreeCholesky (DEPLOYABLE) registered. Completes the evolvent precision family: dense O(d^2)/O(d^3) exact -> block-diagonal O(d*w) approx -> information O(d*w) exact-but-dense-solve -> MULTIFRONTAL O(d*w^2)/O(d*w^3) exact-and-sparse-solve. Delivers the F-EVO-6 open item (block-tridiagonal Cholesky + width certificate).",
+   "code_changes": [
+    "src/junction_tree.rs new module (JunctionTreeCholesky + Clique + balanced_binary_tree) + 3 tests",
+    "src/lib.rs module + re-exports",
+    "examples/evolvent_multifrontal.rs",
+    "scripts/dev/plot_evolvent_multifrontal.py"
+   ],
+   "regression_tests": [
+    "junction_tree::single_clique_equals_dense",
+    "junction_tree::branching_tree_equals_dense_at_bounded_width",
+    "junction_tree::online_update_only_perturbs_path_to_root"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "contiguous-storage rewrite + wall-clock criterion benchmark (analytic flops -> measured time)",
+    "optimized refactorize_path (recompute only the leaf->root path) = the incremental online solver",
+    "non-additive / data-scarce cross-clique target (block loses materially, MF/dense hold)",
+    "route the separator message literally through hg_message on a signed hypergraph"
+   ]
+  },
+  {
+   "id": "F-EVO-8",
+   "claim": "The value of the cross-clique (separator) coupling is a FUNCTION OF DATA DENSITY, and it is large exactly when data is scarce. Discriminating test (kato15, 5 seeds, branching clique tree depth 6, d=441, 63 cliques, clique arity ~8): sweeping measurements-per-clique `per`, the R2 gap MF-minus-BLOCK (separator-dropping) rises from 0.089 (per=2) to a PEAK 0.159 at per=6 (below arity, data-scarce), then falls to 0.006 at per=40 (data-rich, the E5 regime). MULTIFRONTAL R2 == DENSE R2 at every (per,seed). Weight-recovery RMSE confirms: BLOCK mis-estimates the separator variables (per=6: 0.615 vs MF 0.492) because it sees only their residual clique's data while MF pools every clique that shares them. This closes the block-vs-info question open since E3: E5's tiny ~0.0002 gap was a data-rich REGIME property, not a method limit; the coupling is worth up to ~0.16 R2 when data is scarce.",
+   "classification": "MEASUREMENT (resolves an open question; no new component)",
+   "source_experiment": "evolvent E6 (examples/evolvent_multifrontal.rs --per sweep, kato15 5 seeds x 7 densities)",
+   "raw_evidence": [
+    "reports/2026-07-15-evolvent-e6-scarcity.md",
+    "reports/figures/evolvent-scarcity.png",
+    "reports/figures/evolvent_e6_results.json"
+   ],
+   "confidence": "high (5 seeds x 7 densities; monotone-then-peak trend consistent across seeds)",
+   "scope": "additive-in-features linear target; the scarcity is genuine data-scarcity (per < clique arity), NOT a manufactured non-additive coupling; single depth (6). The gap peaks just below clique arity and vanishes when data-rich.",
+   "limitations": "the gap is a property of the (structure, data-density) pair, not of MF alone -- MF exactness is regime-independent, block-diagonal is nearly as good AND cheaper in the rich regime; separator-sharing axis (sep, depth) and a genuinely non-additive cross-clique feature untested.",
+   "framework_consequence": "No new component -- uses JunctionTreeCholesky::solve vs solve_block_diagonal. Resolves F-EVO-5/6/7 open question 'a non-additive/data-scarce cross-clique target where BLOCK loses materially': ANSWERED via data-scarcity (block loses up to 0.16 R2). Quantifies WHEN to pay for the coupling (keep it when data-scarce; block-diagonal suffices when rich). Added regression coverage for solve_block_diagonal (single_clique_equals_dense).",
+   "code_changes": [
+    "examples/evolvent_multifrontal.rs --per axis + weight-recovery RMSE",
+    "src/junction_tree.rs single_clique_equals_dense extended to cover solve_block_diagonal"
+   ],
+   "regression_tests": [
+    "junction_tree::single_clique_equals_dense (now covers solve_block_diagonal)"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "separator-sharing axis (sep, depth) -- gap should grow with more cliques per separator",
+    "a genuinely non-additive cross-clique feature (explicit product spanning a separator) -- does the gap widen beyond data-scarcity?",
+    "contiguous-storage rewrite + wall-clock benchmark (E5 follow-up)"
+   ]
+  },
+  {
+   "id": "F-EVO-9",
+   "claim": "Separator-SHARING is a THRESHOLD effect, not a dose-response. Star topology (one separator of 3 vars shared across `fanout` children => fanout+1 cliques per separator), fixed data-scarcity (per=4, child arity 6), 5 seeds kato15: the block-diagonal deficit is LARGE (~0.16-0.28 R2 median) whenever a separator is shared, materially more than minimal-sharing fanout=1 (0.10) and comparable to E6's within-tree gap -- BUT it does NOT grow monotonically with fanout: the gap JUMPS at fanout 1->2 then PLATEAUS across fanout 2..32 (medians 0.184,0.162,0.228,0.278,0.189, IQRs heavily overlapping). MF R2 == DENSE at every cell. PARTIAL REFUTATION of the stated hypothesis 'more cliques per separator -> monotonically bigger gap': sharing MATTERS (confirmed), degree-of-sharing beyond 2 does NOT add much (refuted). Mechanism (inferred): at fixed scarcity the residual vars cap both solvers, and block's per-measurement error on the shared separator is set once fanout>=2 -- more children add equally-sep-affected measurements, not more per-measurement error.",
+   "classification": "PARTIAL_REFUTATION (measurement; corrects a stated hypothesis)",
+   "source_experiment": "evolvent E7 (examples/evolvent_multifrontal.rs --fanout star topology, kato15 6 fanouts x 5 seeds)",
+   "raw_evidence": [
+    "reports/2026-07-15-evolvent-e7-sharing.md",
+    "reports/figures/evolvent-sharing.png",
+    "reports/figures/evolvent_e7_results.json"
+   ],
+   "confidence": "medium-high (5 seeds; the PLATEAU/non-monotonicity is clear, the exact plateau level is noisy -- IQRs overlap, small-d noise dominates fanout=1)",
+   "scope": "additive-in-features linear target; single scarcity (per=4) and separator width (sep=3); small d at low fanout (d=9 at fanout=1 is noisy -- one seed had BLOCK beat MF via over-regularization). Plateau conclusion rests on fanout>=2.",
+   "limitations": "does NOT test a genuinely non-additive cross-clique feature (the last open discriminating knob); the joint scarcity x sharing sweep at larger d untested; single-seed (seed 0) looked monotone -- multi-seed is the verdict.",
+   "framework_consequence": "No new component (uses star_clique_tree + existing solve/solve_block_diagonal). REFINES F-EVO-8: the coupling's value is a THRESHOLD on sharing (turns on when a separator is shared) bounded by the per-clique data budget, NOT a dose-response in the number of sharers. New topology helper star_clique_tree (shared-separator) + regression test.",
+   "code_changes": [
+    "src/junction_tree.rs star_clique_tree + star_tree_equals_dense_with_shared_separator test",
+    "src/lib.rs re-export",
+    "examples/evolvent_multifrontal.rs --fanout switch"
+   ],
+   "regression_tests": [
+    "junction_tree::star_tree_equals_dense_with_shared_separator"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "a genuinely non-additive cross-clique feature (explicit product spanning a separator)",
+    "joint scarcity x sharing sweep at larger d (shed small-d noise)",
+    "contiguous-storage rewrite + wall-clock (E5 follow-up)"
+   ]
+  },
+  {
+   "id": "F-EVO-10",
+   "claim": "A genuinely NON-ADDITIVE cross-clique term is a REPRESENTABILITY limit, not an estimation gap. Target y = Sum_k[w0*rk0 + w1*rk1 + beta*(rk0*rk1)] + w_h*h; the product prod_k=rk0*rk1 is fittable ONLY by a clique wide enough to contain both operands. Measured (Mac, 5 seeds x 5 beta, K=12 triples, width-4 star clique tree): MF-WIDE (multifrontal hosting the product) R2 == DENSE-WIDE R2 EXACTLY at every (beta,seed), flat ~0.998 regardless of beta, at 14% of dense storage. NARROW (linear-only, product omitted) COLLAPSES as beta grows: 0.999 -> 0.926 -> 0.748 -> 0.376 -> 0.060 -- and this is the DATA-RICH regime (per=40), so more data does NOT close it: the term is simply absent from the narrow hypothesis space. The required treewidth = the target's interaction order (a degree-2 interaction needs width >= 3); the SBSH bounded-width certificate is exactly the check that the tree's width covers the data's interaction order -- the validity precondition for the whole E4-E7 line.",
+   "classification": "NEW_CANONICAL_CAPABILITY (measurement; closes the non-additive question, distinct axis from F-EVO-8/9)",
+   "source_experiment": "evolvent E8 (examples/evolvent_width.rs, Mac 5 seeds x 5 beta)",
+   "raw_evidence": [
+    "reports/2026-07-15-evolvent-e8-width.md",
+    "reports/figures/evolvent-width.png",
+    "reports/figures/evolvent_e8_results.json"
+   ],
+   "confidence": "high (5 seeds; MF-WIDE==DENSE-WIDE is an algebraic identity, NARROW collapse is monotone and large across all seeds)",
+   "scope": "explicit product feature (linear-in-features model; the clique tree makes the interaction affordable+exactly-solvable at bounded width, does NOT discover it); degree-2 interaction, single arity. Rich regime (per=40) -- deliberately NOT scarcity.",
+   "limitations": "the non-additive term must be an explicit feature; NARROW's collapse is because the feature is absent from its basis (honest content of 'too narrow'); higher-order interactions (degree>=3 -> width>=order+1) untested; beta is a controlled dial, not fit from real data.",
+   "framework_consequence": "No new component (reuses JunctionTreeCholesky + InfoEvolventHead). CLOSES the non-additive-cross-clique open question of F-EVO-5/6/7/9: it does NOT touch the E6/E7 estimation plateau -- it is a DISTINCT axis (representability = treewidth vs interaction order). Establishes the width certificate as the VALIDITY precondition for the exactness line: the multifrontal solver handles non-additive terms exactly at O(d*w^3) iff width >= interaction order. Separates the two mechanisms cleanly: estimation gap (E6, closes with data) vs representability gap (E8, closes with width).",
+   "code_changes": [
+    "examples/evolvent_width.rs (new)",
+    "scripts/dev/plot_evolvent_width.py"
+   ],
+   "regression_tests": [
+    "(reuses E5 junction_tree exactness tests; example is the integration evidence)"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "higher-order interactions (degree>=3 -> width>=order+1)",
+    "wire the SBSH width certificate as an explicit precondition check on JunctionTreeCholesky::new",
+    "contiguous-storage rewrite + wall-clock (E5 follow-up)"
+   ]
+  },
+  {
+   "id": "F-EVO-11",
+   "claim": "WALL-CLOCK validation (criterion, \u00a710) of the E5/F-EVO-7 analytic flop win: the multifrontal solve (JunctionTreeCholesky::solve) vs dense Gaussian (InfoEvolventHead::solve, identical answer) on the branching tree, d 105->889. MEASURED speedup 5.9x -> 16.4x -> 63x -> 255x -- grows exactly as the O(d*w^3) vs O(d^3) asymptotic predicts (same (d/w)^2 growth as the flop count), CONFIRMING the direction. BUT the analytic flop count (18x-1270x) OVERSTATED the deployable speedup by a stable ~5x (flop/measured -> 5.0x for large d): the dense baseline is a contiguous cache-friendly d*d array while the multifrontal chases many small per-clique Vecs (allocation + pointer-chase) and re-allocates frontals each solve. At d=889: 85us vs 21.8ms (255x, online-viable). The flop count is the CEILING a contiguous-storage rewrite would approach.",
+   "classification": "VALIDATION_WITH_CORRECTION (measurement; corrects the magnitude of F-EVO-7's flop claim)",
+   "source_experiment": "evolvent E9 (benches/evolvent_solve_bench.rs, criterion 0.5, Mac)",
+   "raw_evidence": [
+    "reports/2026-07-16-evolvent-e9-wallclock.md",
+    "reports/figures/evolvent-wallclock.png",
+    "reports/figures/evolvent_e9_results.json"
+   ],
+   "confidence": "high (criterion 30 samples, tight CIs ~1-2%; ratios stable across the size sweep)",
+   "scope": "single machine (Mac arm64); dense baseline is Gaussian elimination (~2x flops of pure Cholesky) so the ratio is a mild over-estimate of the pure-algorithmic win; both solvers re-factorize from scratch each solve.",
+   "limitations": "absolute us are machine-specific (ratios transfer); a dense-CHOLESKY baseline would narrow the ratio by up to ~2x; the contiguous-storage rewrite that would close the ~5x flop-to-measured gap is NOT built.",
+   "framework_consequence": "CORRECTS F-EVO-7 and the JunctionTreeCholesky registry note: cite MEASURED 5.9x-255x as the deployable speedup, the 18x-1270x flop count as the CEILING. Direction and growth of F-EVO-7 stand; magnitude corrected downward ~5x. Gives the contiguous-storage rewrite a measured target (~5x on the table). Closes the 'analytic flops not wall-clock' caveat repeated across E5-E8.",
+   "code_changes": [
+    "benches/evolvent_solve_bench.rs (new)",
+    "Cargo.toml [[bench]] registration (criterion already a dev-dep)",
+    "scripts/dev/plot_evolvent_wallclock.py",
+    "canonical_components.json + F-EVO-7 note corrections"
+   ],
+   "regression_tests": [
+    "(benchmark, not a correctness test; solver exactness already guarded by E5 junction_tree tests)"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "contiguous-storage multifrontal (one arena) -> close the ~5x gap toward the flop ceiling",
+    "dense-Cholesky baseline for the pure-algorithmic ratio",
+    "wall-clock of the incremental refactorize_path once built"
+   ]
+  },
+  {
+   "id": "F-EVO-12",
+   "claim": "The CONTIGUOUS-STORAGE rewrite of JunctionTreeCholesky closes E9's predicted ~5x headroom. Rewriting the internals from per-clique Vec<Vec<f32>> to FLAT ARENAS (precomputed offsets for frontals/rhs/factors + precomputed parent-local assembly map + reused scratch; no per-clique alloc, no position() search in the hot path) -- SAME public API, SAME exact answer (4 exactness tests pass, E5/E6/E7/E8 example numbers byte-identical) -- makes the multifrontal solve 2.6-2.8x faster (criterion): d=889 31.7us vs 85us. Measured speedup vs dense Gauss 5.9-255x -> 16.7-682x; flop/measured gap 5.0x -> 1.86x (large d), at d=105 essentially AT the flop ceiling (1.08x).",
+   "classification": "OPTIMIZATION (measured; closes F-EVO-11's open question)",
+   "source_experiment": "evolvent E10 (src/junction_tree.rs rewrite + benches/evolvent_solve_bench.rs re-run, criterion, Mac)",
+   "raw_evidence": [
+    "reports/2026-07-16-evolvent-e10-contiguous.md",
+    "reports/figures/evolvent-contiguous.png",
+    "reports/figures/evolvent_e10_results.json"
+   ],
+   "confidence": "high (criterion tight CIs; 2.7x self-speedup flat across d; correctness guarded by 4 exactness tests + byte-identical example outputs)",
+   "scope": "single machine (ratios transfer); the rewrite changed only memory layout + assembly-map precompute, arithmetic identical.",
+   "limitations": "the 682x is vs a Gaussian-elim dense baseline (~2x flops of pure Cholesky) -> the layout-INDEPENDENT number is the 2.7x self-speedup; a Cholesky baseline would show ~2x more residual (true algorithmic residual vs Cholesky ~3-4x). Remaining headroom (frontal-extraction + triangular solves not blocked/SIMD) NOT pursued -- E9's ~5x caveat is closed.",
+   "framework_consequence": "JunctionTreeCholesky component UPDATED in place (no v2, no new type -- \u00a76.5 #13): flat-arena internals. Resolves F-EVO-11's open 'contiguous-storage rewrite' item and the E5-E8 'flops not wall-clock' caveat lineage. Deployable speedup is now 16.7x-682x. The measured 2.7x confirms E9's diagnosis (allocation overhead) was correct.",
+   "code_changes": [
+    "src/junction_tree.rs (contiguous rewrite: flat arenas, precomputed offsets+assembly map, reused scratch, buffer-based *_into helpers, dead n_sep removed)",
+    "benches/evolvent_solve_bench.rs re-run",
+    "scripts/dev/plot_evolvent_contiguous.py",
+    "canonical_components.json + F-EVO-11 limitation update"
+   ],
+   "regression_tests": [
+    "junction_tree::single_clique_equals_dense",
+    "junction_tree::branching_tree_equals_dense_at_bounded_width",
+    "junction_tree::star_tree_equals_dense_with_shared_separator",
+    "junction_tree::online_update_only_perturbs_path_to_root (all guard the rewrite's exactness)"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "blocked/SIMD triangular kernels + dense-Cholesky baseline -> the residual below the ceiling",
+    "optimized refactorize_path (leaf->root only) incremental online solver + wall-clock",
+    "higher-order interactions (degree>=3 -> width>=order+1)"
+   ]
+  },
+  {
+   "id": "F-HOLO-1",
+   "claim": "A DEEP holonomy net (RotorMeshNet: learned per-node Cayley rotors + mesh contraction, stacked) LEARNS useful features THROUGH DEPTH, readable by an entropy (arrangement) signal but not by a mean pool -- a clean DOUBLE DISSOCIATION. Pipeline is entirely closed-form / no autograd (RotorMeshNet -> spectral eigen-entropy readout -> logistic; trained by the composed hand-derived gradient). Task: ring mesh, coherent-twist vs isotropic, zero-mean (raw mean=chance). 5 seeds, held-out AUROC median: deep+entropy 0.759; deep+mean 0.542; shallow+entropy 0.561; shallow+mean 0.544. Removing EITHER depth OR the entropy readout collapses to ~chance -> depth AND arrangement(entropy) BOTH load-bearing. This answers the empirical crux of 'one step to deep-representation learning': the representation is learned (per-layer bivectors), the learning propagates through depth (closed-form adjoint/inverse-rotor transport), read by entropy not a supervised feature.",
+   "classification": "NEW_CANONICAL_CAPABILITY (on-mission; deep-representation learning demonstrated)",
+   "source_experiment": "deep-holonomy dissociation (examples/holonomy_deep_dissociation.rs, Mac 5 seeds x 2x2)",
+   "raw_evidence": [
+    "reports/2026-07-16-deep-holonomy-dissociation.md",
+    "reports/figures/holonomy-dissociation.png",
+    "reports/figures/holonomy_dissociation_results.json"
+   ],
+   "confidence": "high (5 seeds; clean double dissociation; end-to-end gradient FD-verified max err 6e-5 BEFORE trusting training numbers -- not a phantom)",
+   "scope": "small controlled task (N=12 ring, 120 train/test); AUROC 0.759 above chance not saturated (hard zero-mean arrangement-only task); training gentle.",
+   "limitations": "TRAINED BY GD ON THE CLOSED-FORM GRADIENT = the stepping stone, NOT yet the thesis's INSTANTANEOUS entropy/holonomy feedback (the update is iterative supervised BCE; entropy is the READOUT/objective feature). What is proven: the deep holonomy representation is learnable + useful, and entropy (not mean) reads it. CONVERGENCE (added): ONE pass already = 0.728 (near-instantaneous: architecture + linear probe over random deep rotors; vs shallow 0.561), and the committed 2x2 (lr=0.05) was UNDERTRAINED (~0.74) -- with lr=2.0 it refines to 0.90 (dissociation STRONGER than committed). BUT the near-instant part is the architecture+probe; the rotor-WEIGHT learning (0.73->0.90) is still ITERATIVE GD. The pure one-shot instantaneous ROTOR rule is the remaining OPEN frontier (measured honestly, not faked).",
+   "framework_consequence": "RotorMeshNet's learning-THROUGH-DEPTH is DEMONSTRATED (double dissociation over its OWN ablations). ***COMPETITIVENESS RETRACTED by F-HOLO-2***: a trivial raw-entropy baseline (2 params) BEATS the holonomy net (0.944 vs 0.894) on this task -- the dissociation is internally real but the apparatus does NOT earn its complexity here. The learning-through-depth claim STANDS; do not cite this as competitive. On-mission (holonomy, entropy, closed-form, no autograd) -- NOT the exact-solve devolution.",
+   "code_changes": [
+    "examples/holonomy_deep_dissociation.rs (new)",
+    "scripts/dev/plot_holonomy_dissociation.py"
+   ],
+   "regression_tests": [
+    "holonomy_net::deep_backward_matches_fd (mechanism); the example's FD gate guards the full-pipeline gradient"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "replace GD with the INSTANTANEOUS entropy/holonomy feedback (one-shot bivector update) = the last gap to the pure thesis",
+    "push scale/score (deeper, larger mesh, tuned LR) now the dissociation is established",
+    "rotor_holonomy (ordered loop product) as an explicit per-layer holonomy feature"
+   ]
+  },
+  {
+   "id": "F-HOLO-2",
+   "claim": "COMPETITIVENESS = NEGATIVE on this task. Fair fight (same data, 5 seeds, held-out AUROC median): TRIVIAL raw-field entropy + logistic (NO holonomy net, ~2 params) = 0.944 BEATS deep holonomy+entropy (Adam, ~110 params) = 0.894; MLP 36->3->1 = 0.690; MLP 36->16->1 = 0.666; raw-mean sanity = 0.559. The coherent-twist vs isotropic classes are already separated by the RAW field's covariance eigen-entropy, so the deep rotor apparatus is unnecessary and here slightly COUNTERPRODUCTIVE (random rotors+mesh mix partly scramble the cleanly-visible coherence). MLPs trail both -> the ENTROPY readout (2nd-order stat) is the lever, not depth or holonomy. RETRACTS F-HOLO-1's competitiveness implication (the double dissociation over the net's OWN ablations is real, but against the right external baseline the whole thing loses).",
+   "classification": "NEGATIVE_WITH_MECHANISM (competitiveness retraction; measured, honest)",
+   "source_experiment": "deep-holonomy competitiveness fair fight (examples/holonomy_deep_dissociation.rs COMPETITIVENESS section, Mac 5 seeds)",
+   "raw_evidence": [
+    "reports/2026-07-16-deep-holonomy-dissociation.md",
+    "reports/figures/holonomy-fairfight.png",
+    "reports/figures/holonomy_dissociation_results.json"
+   ],
+   "confidence": "high (5 seeds, same data, external baselines incl. a 2-param trivial and two MLPs; FD-gated pipeline)",
+   "scope": "THIS synthetic task (coherent-twist vs isotropic ring mesh) -- which is solvable by raw entropy, so it cannot discriminate holonomy's value. Not a statement that holonomy is useless in general; a statement that this task does not justify it.",
+   "limitations": "the task was designed by the agent and turns out too easy for raw entropy; a task where raw entropy FAILS but the holonomy transform SUCCEEDS is needed to measure holonomy's value.",
+   "framework_consequence": "RotorMeshNet stays MECHANISM_DEMO (learning-through-depth demonstrated, competitiveness NOT). Evaluation-metric-integrity lesson recorded: measure the trivial/baseline CEILING before optimizing under it (0.944 trivial > 0.894 holonomy -- the whole optimization ran under a ceiling a 2-param method exceeds). Part 2 (real dataset) is PREMATURE until the method beats trivial baselines on a controlled task where holonomy is genuinely necessary.",
+   "code_changes": [
+    "examples/holonomy_deep_dissociation.rs (gen_data, run_mlp, run_trivial, fair-fight section)",
+    "scripts/dev/plot_holonomy_fairfight.py"
+   ],
+   "regression_tests": [
+    "(experiment; the FD gate guards the holonomy arm's gradient)"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "a task where raw entropy fails but holonomy succeeds (per-node-varying twist that must be un-wound; multi-scale/compositional structure invisible to a single covariance) -- the discriminating test of holonomy's VALUE",
+    "only then: real dataset"
+   ]
+  },
+  {
+   "id": "F-HSIKAN-PAR",
+   "claim": "HSiKAN (closed-form, no-autograd) parallelizes and, at matched threads, beats CPU PyTorch on BOTH axes. Same-architecture HSiKAN fwd+bwd (arity 3, d=16, cheb 6, 2 branches), Mac arm64. SINGLE THREAD: Nagare 2.3x faster than PyTorch (62 vs 140 ms @50k) and 4-5x less peak RSS (207 vs 843 MB @50k; 42x on a TINY model, 6.7 vs 281 MB, where PyTorch's ~280 MB import baseline dominates). Before this change the whole Nagare spine (kan/hsikan/clifford_fir/gomb_shell) was SINGLE-THREADED (only linear used rayon), so PyTorch's 6-thread default won wall-clock. NOW: hsikan_forward/backward partition the T hyperedges into min(threads,T) contiguous chunks on the rayon pool -> scales 7.3x at 16 threads (61->8.3 ms @50k) while PyTorch saturates ~6-8 threads (51->42 ms). MATCHED 16 THREADS: Nagare ~5x faster (8.1 vs 42 ms @50k; 16.8 vs 81 ms @100k) AND ~3x less memory (269 vs 843 MB; 568 vs 1468 MB). Cost of parallelism: P-fold transient grad_x copies raise Nagare RSS 196->269 MB (50k) / 386->568 MB (100k) from 1->16 threads -- still 2.6-3.1x under PyTorch. FURTHER SCENARIOS (2026-07-16): (kato15 32-core Xeon) Nagare scales 165->32 ms 1->32 threads and DEGRADES GRACEFULLY (saturates 16->32: 34->32ms), while PyTorch REGRESSES CATASTROPHICALLY at 32 threads (160->5360 ms @50k, 33x slowdown = CPU intra-op over-subscription thrash on tiny d=16) -- Nagare best 32ms vs PyTorch best 160ms(@8thr) = 5x, matched-32 = 167x. (Dim sweep) 1->16-thread speedup is ~FLAT in d: 7.26x(d16)/7.93x(d32)/7.80x(d64) -- so scaling below 16 threads is NOT d-bandwidth-limited; the kato15 16->32 flattening is a separate 32-core regime whose cause is NOT isolated (memory bandwidth / per-chunk work too small at 32 chunks / NUMA / turbo all plausible) = hypothesis not conclusion. (Deploy vs train, 50k d16 8thr) forward-only via hsikan_forward_chunked = 16 MB vs PyTorch no_grad 469 MB = 29x LESS deploy memory, 1.9x faster; training 3.7x faster; closed-form backward adds only +29% over forward vs PyTorch tape-replay +150%.",
+   "classification": "POSITIVE (measured; correctness-gated)",
+   "source_experiment": "HSiKAN edge-chunk rayon parallelization + vs-PyTorch CPU time/memory benchmark",
+   "raw_evidence": [
+    "reports/2026-07-16-hsikan-parallel-vs-pytorch.md",
+    "reports/figures/hsikan-bench.png",
+    "reports/figures/hsikan_pytorch_bench.json",
+    "reports/figures/hsikan-scenarios.png"
+   ],
+   "confidence": "high (checksum identical across thread counts; chunk_parallel_matches_serial FD-consistency test; 147/0 lib suite; peak RSS via /usr/bin/time -l)",
+   "scope": "CPU, d=16 signed-hyperedge HSiKAN, Mac arm64 vs PyTorch 2.12. The 42x memory ratio is a TINY-model artifact of PyTorch's fixed import baseline; the durable at-scale memory win is 2.6-5x. Not a GPU claim.",
+   "limitations": "Only hsikan is parallelized; kan/clifford_fir/gomb_shell remain single-threaded. Chunk parallelism trades memory (P-fold grad_x) for speed. The 16->32-thread flattening on kato15 is NOT causally isolated (bandwidth vs chunk-granularity vs NUMA) -- do not assert 'bandwidth-bound' as settled. PyTorch's 32-thread thrash is specific to small d=16 CPU intra-op; larger d or GPU would differ.",
+   "framework_consequence": "HSiKAN component -> v1.1, default parallel; public API + cache token unchanged (chunk count internal). Answers 'can the closed-form spine accelerate with threads?' = YES, and the no-tape memory advantage survives threading. Same rayon edge-chunk pattern is the template for parallelizing the rest of the spine (clifford_fir/gomb_shell) if needed. Deploy path (hsikan_forward_chunked) confirmed as the low-memory inference route (16 MB @50k). The no-tape thesis shows strongest on the DEPLOY memory axis (29x) and backward-overhead (+29% vs +150%).",
+   "code_changes": [
+    "src/ops/hsikan.rs (ChunkCache split, forward_serial/forward_chunked/chunk_ranges, backward_serial/reduce_backward, chunk_parallel_matches_serial test)",
+    "examples/hsikan_mem_bench.rs",
+    "scripts/dev/hsikan_pytorch.py",
+    "scripts/dev/plot_hsikan_bench.py"
+   ],
+   "regression_tests": [
+    "ops::hsikan::tests::chunk_parallel_matches_serial",
+    "ops::hsikan::tests::backward_matches_finite_difference",
+    "ops::hsikan::tests::kb_backward_matches_finite_difference"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "parallelize clifford_fir/gomb_shell with the same edge/bank-chunk pattern if the full G\u00f6mb-Soma cascade becomes the bottleneck",
+    "reduce the P-fold grad_x memory via sparse per-chunk vertex-grad scatter if RSS becomes the constraint",
+    "GPU port of the chunked op"
+   ]
+  },
+  {
+   "id": "F-HOLO-3",
+   "claim": "A controlled SO(3)-connection task where trivial covariance entropy is at chance but holonomy is exact \u2014 the discriminating metric F-HOLO-2 demanded \u2014 and the CLOSED CLIFFORD one-shot curvature estimator (spanning-tree gauge-fix + cotree loop-closure residual, no training, topology-only) REACHES the oracle. Two classes with provably identical Haar edge marginals differing only in loop products: flat/integrable (g=R_iR_j^-1, zero holonomy) vs curved (per-plaquette flux F_p). 5-seed median held-out separability AUROC: trivial-entropy 0.557 (chance, GATE trivial<=0.60 PASS), trivial-mean 0.509, MLP h16 (trained) 0.553, MLP h64 3x-data 400ep (strong, trained) 0.626, oracle (rotor_holonomy over true plaquettes) 1.000, closed-Clifford (one-shot) 1.000. Flux sweep: closed form holds AUROC=1.000 down to theta_min=0.10 while MLP crawls 0.55->0.62. Estimator==oracle is a tested identity (|delta|<1e-3). ~2 us/sample on wheel-24.",
+   "classification": "NEW_CANONICAL_CAPABILITY",
+   "source_experiment": "auto-holonomy",
+   "raw_evidence": "reports/2026-07-16-auto-holonomy.md; reports/figures/auto_holonomy_dissociation.json; figures auto_holonomy_arms.png / auto_holonomy_flux_sweep.png",
+   "confidence": "measured (5-seed median, held-out; marginal-match verified in code; estimator==oracle identity tested; strong-MLP arm rules out undertraining)",
+   "scope": "SO(3) connection graphs (wheel topology), whole-graph flat-vs-curved (integrability/curvature) classification. The continuous generalization of the Z2 balance/frustration task (B1a/B2), in Rust/nagare.",
+   "limitations": "On the wheel the fundamental-cycle basis coincides with the planted plaquettes, so the closed form recovers the oracle EXACTLY (estimator==oracle by construction) rather than approximating it; a grid/torus with flux on a random plaquette subset is needed to make estimator and oracle diverge in SNR. Flux sweep floors theta_min but keeps theta_max=pi (weak-flux worst case not fully stressed). This is the EXACT gauge solve, not a LEARNED compositional rule (GAP #2 proper remains open).",
+   "framework_consequence": "New reusable capability: closed-form curvature/holonomy estimation over a signed SO(3) connection. New evaluation asset: a metric-integrity-clean discriminating task (matched marginals) on which holonomy's value is measurable \u2014 reuse it to rank any future auto-holonomy method BEFORE trusting it (the F-HOLO-2 discipline made concrete).",
+   "code_changes": "src/curvature_task.rs (generator + Haar/log helpers), src/holonomy_estimator.rs (tree_gauge_frames, cotree_residuals, curvature_energy, closed_clifford_curvature, oracle_curvature), examples/auto_holonomy_dissociation.rs, lib.rs exports.",
+   "regression_tests": [
+    "curvature_task::edge_marginals_match_between_classes",
+    "curvature_task::flat_sample_has_identity_holonomy",
+    "holonomy_estimator::estimator_equals_oracle",
+    "holonomy_estimator::flat_energy_near_zero_curved_positive",
+    "holonomy_estimator::perf_estimator_latency_budget"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "Topology where estimator strictly approximates (not equals) the oracle (grid/torus, random flux subset).",
+    "A LEARNED holonomy-native rotor rule (RotorMeshNet + entropy feedback) that composes through depth and beats the tree-gauge solve on a task where the exact gauge solve is insufficient (per-node multi-scale twist) = GAP #2 proper."
+   ]
+  },
+  {
+   "id": "F-HOLO-4",
+   "claim": "NONLINEAR CURVATURE (B+C): a spline-parameterized curvature FIELD on a 2-D SO(3) lattice patch where the F-HOLO-3 constant-rotor EXACT solve is INSUFFICIENT (blind), and a closed-form ChebyCR roughness readout recovers it. Smooth (low-order 2-D Chebyshev angle field) vs rough (spatial permutation of the SAME flux multiset+total), Haar-gauge-randomized so every edge is Haar. 5-seed median held-out separability AUROC: trivial-entropy 0.520 (chance), constant-rotor mean 0.520 (CHANCE = the F-HOLO-3 solve is blind), MLP over raw edges (trained) 0.537, Laplacian roughness 0.999, ChebyCR roughness (one-shot, no train) 1.000, oracle 1.000. Contrast sweep k_gen 2..8: ChebyCR holds 0.99-1.00 (a permutation destroys all spatial autocorrelation). ~30 us/sample on grid-12.",
+   "classification": "NEW_CANONICAL_CAPABILITY",
+   "source_experiment": "nonlinear-curvature",
+   "raw_evidence": "reports/2026-07-16-nonlinear-curvature.md; reports/figures/curvature_field_dissociation.json; curvature_field_arms.png / curvature_field_contrast_sweep.png",
+   "confidence": "measured (5-seed median, held-out; matched-marginal AND matched-mean-flux verified in code; plaquette=field and gauge-invariance identities tested)",
+   "scope": "2-D SO(3) lattice patch, smooth-vs-rough curvature-field classification; the multi-scale regime (GAP #1). Uses the real Nagare spine (ChebyCR + rotor_holonomy).",
+   "limitations": "ChebyCR is robust across generating order (a permutation always fully decorrelates) so the intended 'contrast->0' worst case is not reached; the genuinely hard case is near-white generation (no spatial autocorrelation). Readout reads the angle field only (magnitude), not directional/axis-structured curvature. This is a FIXED low-order fit, not a LEARNED patch (GAP #2 proper still open). clifford_fir readout not yet compared.",
+   "framework_consequence": "Establishes that the F-HOLO-3 constant-rotor exact solve is INSUFFICIENT for spatially-structured (nonlinear) curvature, and that a closed-form ChebyCR spline readout recovers it \u2014 the estimator!=oracle / exact-solve-insufficient regime the F-HOLO-3 assimilation authorized as next. New reusable capability: closed-form curvature-FIELD extraction + spline-roughness readout over an SO(3) connection.",
+   "code_changes": "src/curvature_field.rs (grid_graph, sample_curvature_field, chebyshev_angle_field, extract_curvature_field, constant_rotor_energy, chebycr_roughness, laplacian_roughness), examples/curvature_field_dissociation.rs, lib.rs exports.",
+   "regression_tests": [
+    "curvature_field::plaquette_holonomy_equals_field_exactly",
+    "curvature_field::gauge_leaves_curvature_invariant_and_edges_nontrivial",
+    "curvature_field::constant_rotor_mean_matched_across_classes",
+    "curvature_field::smooth_has_lower_roughness_than_rough",
+    "curvature_field::perf_roughness_latency_budget"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "near-white generation worst case (contrast->0)",
+    "directional/anisotropic curvature (non-abelian, not just angle)",
+    "LEARNED ChebyCR/Clifford-FIR patch + entropy feedback (GAP #2 proper) on this metric",
+    "clifford_fir signed-cycle readout comparison"
+   ]
+  },
+  {
+   "id": "F-HOLO-5",
+   "claim": "Holonomy-DFA learning rule (global entropy broadcast + local EXACT inverse-rotor transport) \u2014 MIXED. On the F-HOLO-1 ring-mesh substrate, same net/task/optimizer, only backward differs. 5-seed median held-out AUROC: sequential exact backprop 0.894 (align 1.0); holonomy-DFA 0.831 (grad-alignment +0.40); random-DFA (vanilla, random feedback) 0.560 (align -0.005, chance); trivial floor 0.944. POSITIVE: the exact inverse-rotor transport is the LEVER \u2014 holonomy-DFA 0.831 >> random-DFA 0.560, alignment +0.40 vs 0.00, i.e. reusing the forward connection's exact rotors as the feedback path (no random/separate feedback weights) gives DFA a real credit signal. NEGATIVE (the finding): the global broadcast does NOT compose through depth \u2014 depth NOT load-bearing under holonomy-DFA (L3 0.831 ~= L1 0.815); it learns a shallow function and trails backprop. = classic DFA depth ceiling for the rotor case.",
+   "classification": "NEW_MECHANISM",
+   "source_experiment": "holonomy-dfa",
+   "raw_evidence": "reports/2026-07-17-holonomy-dfa.md; reports/figures/holonomy_dfa_gate1.json; holonomy_dfa_gate1.png",
+   "confidence": "measured (5-seed median, held-out; gradient-alignment cosine diagnostic; top-layer-equals-sequential identity tested)",
+   "scope": "deep RotorMeshNet on the F-HOLO-1 coherent-twist substrate; measures the LEARNING RULE not task-necessity (trivial beats the net here, F-HOLO-2). Gate 1 of 2 before any SLAM scaling.",
+   "limitations": "substrate is trivial-solvable (F-HOLO-2), so this is a rule-vs-rule comparison a la DFA literature, not a task-competitiveness claim. Adam only (GD unmeasured). Naive broadcast only; a depth-composing broadcast (transport E through the inverse-rotor chain) is untested.",
+   "framework_consequence": "GATES SLAM: the auto-holonomy learning rule does NOT fall apart on small data (rotor transport gives real signal, beats random DFA), BUT the compositional-through-depth property (GAP #2's core) is NOT achieved by a naive global broadcast. Do not scale to Visual-SLAM on the naive rule. Next target isolated: a depth-composing broadcast (partial adjoint transport through the rotor chain), between raw-broadcast and full-sequential.",
+   "code_changes": "src/holonomy_net.rs::{backward_dfa, backward_from_rot_grads}; examples/holonomy_dfa_dissociation.rs.",
+   "regression_tests": [
+    "holonomy_net::dfa_top_layer_equals_sequential_lower_differs",
+    "holonomy_net::from_rot_grads_composes_with_dfa"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "depth-composing broadcast: does transporting E through the inverse-rotor chain to each layer make depth load-bearing while staying global? (GAP #2 mechanism)",
+    "Gate 2: a learning-necessary task (trivial AND fixed closed-form both fail, e.g. XOR-of-regional-curvature) before SLAM",
+    "GD vs Adam to see raw rule quality"
+   ]
+  },
+  {
+   "id": "F-HOLO-6",
+   "claim": "The depth-composing FIX for F-HOLO-5: RotorMeshNet::backward_dfa_transported transports the global credit signal DOWN through the pure inverse-rotor chain (return-path holonomy: each layer applies its own Rbar, dropping the inter-layer mesh Jacobian). RECOVERS depth-composition: L3 0.894 = exact backprop (naive broadcast 0.831), Delta-depth +0.078 vs naive +0.016. HONEST: gradient alignment stays modest (0.413, not 1.0) -> NOT the exact gradient, a depth-composing APPROXIMATION that reaches the net ceiling on this easy task; the 0.894 tie is likely the ceiling not exactness. This transported-rotor primitive = the backward of an inter-shell rotor transport = the validated connective tissue for a concentric Gomb-Soma (docs/design-concentric-gomb-soma.md). Depth-composition bottleneck RESOLVED; SLAM still gated on Gate 2.",
+   "classification": "NEW_MECHANISM",
+   "source_experiment": "holonomy-dfa",
+   "raw_evidence": "reports/2026-07-17-holonomy-dfa.md; reports/figures/holonomy_dfa_gate1.json; holonomy_dfa_gate1.png",
+   "confidence": "measured (5-seed median, held-out; top-layer-equals-sequential + lower-differs-from-naive tested; alignment diagnostic)",
+   "scope": "deep RotorMeshNet on the F-HOLO-1 substrate (measures the RULE, not task-necessity). Resolves the F-HOLO-5 depth-composition gap.",
+   "limitations": "approximation (align 0.41), not exact gradient; the 0.894 tie is the net ceiling on an easy task, not proof of exactness; not yet tested where the net is NECESSARY (Gate 2); drops the mesh-Jacobian from transport (untested whether keeping it matters on harder tasks).",
+   "framework_consequence": "The depth-composing rotor-chain transport is the mechanism GAP #2 needed and the inter-shell transport primitive for the concentric Gomb-Soma reframe. Architecture (concentric shells + rotor-spike transport) and learning-rule frontier are the SAME move. Full concentric net BUILD-GATED on Gate 2 (a learning-necessary task).",
+   "code_changes": "src/holonomy_net.rs::backward_dfa_transported (+test); examples/holonomy_dfa_dissociation.rs (TransportedDfa arm); docs/design-concentric-gomb-soma.md.",
+   "regression_tests": [
+    "holonomy_net::transported_top_matches_lower_differs_from_naive"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "does transported transport recover depth on a HARD task where the net is necessary (Gate 2)?",
+    "does keeping vs dropping the mesh-Jacobian in the transport matter there?",
+    "rotor_spike-for-cycle-fields definition (currently per-pixel V1) for the concentric build"
+   ]
+  },
+  {
+   "id": "F-HOLO-7",
+   "claim": "Gate 2 (a strictly LEARNING-NECESSARY task) is NOT achieved by XOR-of-regional-roughness, and the failure is informative. Task: F-HOLO-4 lattice split into two column-halves, each independently smooth/rough, class = do they DIFFER (|rA-rB|). 5-seed median AUROC: ALL fixed GLOBAL scalars at chance (trivial 0.526, constant-rotor 0.528, global-ChebyCR 0.512, global-Laplacian 0.529, linear 0.526) \u2014 defeats the F-HOLO-3/4 closed-form; a STRONG generic MLP (128 hidden, 600 train, 700 ep) reaches only 0.661 (up from 0.542 at 32/300 \u2014 improves but plateaus far below); oracle |rA-rB| (a FIXED REGIONAL closed-form, region_roughness_diff) 0.935 SOLVES it. => the task is BIAS-DISCRIMINATING (right regional 2nd-order pooling needed), NOT strictly learning-necessary (a fixed regional closed-form suffices; a generic MLP is insufficient).",
+   "classification": "NEGATIVE_RESULT_REQUIRING_A_GUARD",
+   "source_experiment": "gate2-learning-necessary",
+   "raw_evidence": "reports/2026-07-17-gate2-learning-necessary.md; reports/figures/gate2_xor.json; gate2_xor.png",
+   "confidence": "measured (5-seed median, held-out; MLP given a fair strong attempt 128/600/700 to rule out undertraining; all fixed-global robustly at chance)",
+   "scope": "F-HOLO-4 grid, known-region-split XOR-of-roughness. Gate 2 of the auto-holonomy arc (before concentric build / SLAM).",
+   "limitations": "the oracle is a fixed regional closed-form, so learning is not strictly necessary; a strictly-learning-necessary task needs a LATENT (per-sample-random) structure the model must discover, which is much harder to learn and not built.",
+   "framework_consequence": "GUARD: do NOT claim 'learning necessary' or scale (concentric build / SLAM) on this task \u2014 a fixed regional closed-form solves it. REFRAME: the useful next test is bias-discrimination \u2014 does the holonomy/entropy MODEL (global_entropy_pool 2nd-order + cpml_tier regional) close the generic-MLP(0.66)->oracle(0.94) gap where a generic MLP cannot? That is where the concentric Gomb-Soma bias would first earn its complexity.",
+   "code_changes": "src/curvature_field.rs (realize_field refactor + sample_regional_curvature + region_roughness_diff); examples/curvature_xor_gate2.rs; lib.rs exports.",
+   "regression_tests": [
+    "curvature_field::regional_sample_deterministic",
+    "curvature_field::regional_xor_oracle_separates_classes"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "does the holonomy/entropy model (regional 2nd-order pooling) close the MLP->oracle gap a generic MLP cannot? (the well-posed next test)",
+    "a strictly-learning-necessary task via a latent/per-sample-random region partition (no fixed closed-form works) \u2014 hard, deferred",
+    "would a conv/pooling inductive bias also close the gap (control for 'holonomy-specific' vs 'any 2nd-order bias')?"
+   ]
+  },
+  {
+   "id": "F-HOLO-8",
+   "claim": "Bias discrimination on the Gate-2 XOR-of-regional-roughness task. 5-seed median held-out AUROC (same data, only INPUT REPRESENTATION differs): generic-MLP over raw field 0.661; block-Laplacian (4 uniform column blocks, generic 2nd-order) + light head 0.929; block-entropy (4 blocks, FRAMEWORK spectral_reg_value_grad covariance eigen-entropy) + light head 0.858; oracle |rA-rB| 0.935. TWO findings: (1) POSITIVE \u2014 REGIONAL 2ND-ORDER POOLING is the lever: both block-pooled arms crush the generic MLP (0.66) and nearly reach the oracle (Laplacian 0.929); the framework's ARCHITECTURAL PRINCIPLE (cpml_tier regional + entropy 2nd-order) closes a gap generic learning cannot. (2) NOT HOLONOMY-SPECIFIC \u2014 the GENERIC Laplacian control (0.929) BEATS the framework's own entropy op (0.858); any 2nd-order regional bias suffices, a plain Laplacian is a cleaner match (eigen-entropy noisier on ~15-sample per-block covariance). Framework's SPECIFIC op is NOT the lever; the pooling STRUCTURE is.",
+   "classification": "NEW_MECHANISM",
+   "source_experiment": "bias-discrimination",
+   "raw_evidence": "reports/2026-07-17-bias-discrimination.md; reports/figures/bias_discrimination.json; bias_discrimination.png",
+   "confidence": "measured (5-seed median, held-out; same data across arms; generic MLP given a strong 128/600/700 attempt)",
+   "scope": "Gate-2 curvature-field task. Discriminates INDUCTIVE BIAS (representation), not the credit rule.",
+   "limitations": "one task; conv baseline (vs fixed block front-ends) not run; the block front-ends use uniform column blocks (a mild spatial prior) though not the true A/B split.",
+   "framework_consequence": "VALIDATES the framework's architectural PRINCIPLE (regional 2nd-order pooling closes the gap) but REFUTES holonomy-SPECIFICITY here (generic Laplacian > framework entropy op). GUARD: justify the concentric Gomb-Soma build by a task where the framework's SPECIFIC structure (non-abelian holonomy / signed hypergraph) is NECESSARY, not merely '2nd-order pooling' (a conv/Laplacian does that). Consistent with F-HOLO-2 and real-spine signed-link: framework principles validate, specific-op superiority does not.",
+   "code_changes": "src/curvature_field.rs::{block_entropy_features, block_laplacian_features}; examples/bias_discrimination.rs.",
+   "regression_tests": [
+    "curvature_field::block_entropy_higher_for_rough"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "a task where the framework's SPECIFIC (non-abelian holonomy / signed-hypergraph) structure is NECESSARY and a conv/Laplacian provably cannot substitute (the real open problem)",
+    "conv baseline as a stronger 'any spatial bias' control",
+    "why is the eigen-entropy op noisier than Laplacian here \u2014 small-sample covariance, or a genuine mismatch to the roughness signal?"
+   ]
+  },
+  {
+   "id": "F-HOLO-9",
+   "claim": "HOLONOMY-SPECIFICITY finally demonstrated. Task: two regional holonomies H_A=R(a_A,theta), H_B=R(a_B,theta) with MATCHED angle theta (built as ordered edge-rotor loop products); class = do they COMMUTE (parallel axes, [H_A,H_B]=I) or not (perp axes). Axis marginals Haar in both classes; the ONLY difference is the commutator (ordered, non-abelian). 5-seed median held-out AUROC (input=raw edges unless noted): trivial-entropy 0.509, generic-MLP(raw) 0.541, abelian-angle 0.520 (all CHANCE); MLP-on-holonomies (H_A,H_B given, 8-dim) 0.994; framework-commutator (angle([H_A,H_B]) via rotor_holonomy, fixed) 1.000. => the framework's rotor_holonomy is NECESSARY and every generic/abelian method on raw edges is STRUCTURALLY BLIND. Honest localization: the specificity is in the LOOP EXTRACTION (composing the ordered non-commutative product from raw edges), NOT the commutator per se (an MLP learns it GIVEN the holonomies) - and generic raw methods can't compose loops (cf F-HOLO-3).",
+   "classification": "NEW_CANONICAL_CAPABILITY",
+   "source_experiment": "noncommutativity",
+   "raw_evidence": "reports/2026-07-17-noncommutativity.md; reports/figures/noncommute.json; noncommute.png",
+   "confidence": "measured (5-seed median, held-out; generic MLP given a fair attempt; abelian-blindness proved in code; commutator=0 for commute / >0 for non-commute tested)",
+   "scope": "synthetic non-abelian task (two regional holonomies, commute vs not). Demonstrates NECESSITY of ordered non-commutative composition; the framework-commutator equals the planted signal (necessity, not a learned win).",
+   "limitations": "framework-commutator reaches 1.0 because the commutator IS the generative signal (necessity demo, not learned capability); a LEARNED holonomy-native model on this task is the next rung; synthetic (real non-abelian data = pose-graph SLAM).",
+   "framework_consequence": "CLOSES the F-HOLO-8 open question and CHARACTERIZES the boundary: scalar/2nd-order signals -> generic methods match/beat the framework (F-HOLO-2/real-spine/F-HOLO-8, USE THE SIMPLE THING); genuinely NON-ABELIAN signals (ordered loop composition, commutators, path-holonomy) -> rotor_holonomy is NECESSARY, generic methods structurally blind (F-HOLO-9). The holonomy machinery is justified EXACTLY when the signal is order-dependent/non-commutative (pose-graph consistency, SE(n) sync, non-abelian gauge/frustration) - a specific win, not a general one.",
+   "code_changes": "src/noncommute.rs (sample_noncommute, region_holonomy, commutator_angle, regional_angle_sum); examples/noncommute_specificity.rs; lib.rs.",
+   "regression_tests": [
+    "noncommute::loop_product_equals_target",
+    "noncommute::commute_class_has_zero_commutator_noncommute_positive",
+    "noncommute::regional_angle_matched_across_classes"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "does a LEARNED holonomy-native model (RotorMeshNet / transported-DFA) discover the commutator from raw edges where a generic MLP can't? (learning holonomy-native, not just the fixed op)",
+    "real non-abelian data: pose-graph SLAM loop-closure consistency (SE(3) holonomy) - now justified by F-HOLO-9"
+   ]
+  },
+  {
+   "id": "F-HOLO-10",
+   "claim": "CAPSTONE (thesis-confirming): end-to-end LEARNING through the holonomy op. Model raw-edges -> learned per-edge linear W1 -> rotor_holonomy (2 cycles) -> [H_A',H_B'] -> learned head, trained by COMPOSING the crate's closed-form backwards (linear_backward o rotor_holonomy_backward o linear_backward), NO autograd tape. FD gate on the end-to-end gradient PASSES (max|analytic-fd|=6.3e-5 -> not a phantom). 5-seed median held-out AUROC on the F-HOLO-9 non-commutativity task: generic-MLP(raw) 0.541; learned-holo-net TRAINABLE-W1 0.513 (CHANCE, worse than MLP); learned-holo-net FROZEN-W1 (fixed rotor_holonomy + learned head) 0.968 (SOLVES); fixed-commutator 1.000. => making the composition TRAINABLE CORRUPTS the holonomy (the trainable pre-transform is pushed off identity by the random head's backprop and destroys the delicate ordered-product signal; gradient provably correct); FREEZING the designed op + learning the readout WORKS. THESIS MEASURED: designed op FIXED, learn ON TOP not THROUGH; end-to-end differentiability is a LIABILITY here (0.968 vs 0.513).",
+   "classification": "NEW_MECHANISM",
+   "source_experiment": "noncommute-learned-capstone",
+   "raw_evidence": "reports/2026-07-17-capstone-learned-holonomy.md; reports/figures/noncommute_learned.json; noncommute_learned.png",
+   "confidence": "measured (5-seed median, held-out; FD gate 6.3e-5 rules out gradient bug; frozen-W1 discriminating test localizes the failure to the trainable pre-composition)",
+   "scope": "the F-HOLO-9 non-abelian task; end-to-end trainable holonomy pipeline vs fixed-op+readout.",
+   "limitations": "one non-abelian task; the trainable-W1 is an unconstrained linear (non-unit drift) - a manifold-constrained rotor W1 might optimize better, but the fixed-op-wins finding stands; no new lib tests (FD gate is a runtime assertion in the example).",
+   "framework_consequence": "CONFIRMS the thesis operationally: Nagare's designed holonomy ops are load-bearing as FIXED primitives; learning is a READOUT on them, NOT end-to-end training THROUGH them (which hurts, 0.968->0.513, gradient correct). Deploy pattern for non-abelian tasks (incl. pose-graph SLAM): fixed rotor_holonomy + learned readout, not a trained rotor stack. Completes the arc characterization.",
+   "code_changes": "examples/noncommute_learned.rs (HoloNet end-to-end + FD gate + trainable/frozen arms). No new lib code (composes existing linear + rotor_holonomy ops).",
+   "regression_tests": [
+    "examples/noncommute_learned.rs::fd_gate (runtime, 6.3e-5)"
+   ],
+   "superseded_findings": [],
+   "open_questions": [
+    "why is the trainable-through-ordered-product landscape bad - non-unit W1 drift + ordered-product sensitivity; would a manifold-constrained (rotor) W1 optimize?",
+    "real pose-graph SLAM with the fixed-op+readout pattern (now justified by F-HOLO-9/10)"
+   ]
+  }
+ ]
 }

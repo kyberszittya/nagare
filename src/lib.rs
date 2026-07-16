@@ -4,15 +4,19 @@
 //! research surface. It intentionally keeps the implementation plain Rust so
 //! benchmark behavior is easy to inspect.
 
+pub mod curvature_field;
+pub mod curvature_task;
 pub mod cv_data;
 pub mod datasets;
 pub mod detector;
 pub mod features;
+pub mod holonomy_estimator;
 pub mod holonomy_net;
 pub mod junction_tree;
 pub mod learner;
 pub mod mesh_tensor;
 pub mod metrics;
+pub mod noncommute;
 pub mod online;
 pub mod ops;
 pub mod optimizer;
@@ -29,6 +33,15 @@ pub const LOCAL_FEATURES: usize = STRUCTURAL_FEATURES + 1;
 pub const PROJECTION_RANK: usize = 6;
 pub const PROJECTION_ALPHA: f32 = 0.72;
 
+pub use curvature_field::{
+    block_entropy_features, block_laplacian_features, chebycr_roughness, chebyshev_angle_field,
+    constant_rotor_energy, extract_curvature_field, grid_graph, laplacian_roughness, realize_field,
+    region_roughness_diff, sample_curvature_field, sample_regional_curvature, GridGraph,
+};
+pub use curvature_task::{
+    axis_angle_quat, edge_log_field, haar_quat, rotor_angle, rotor_log, sample_connection,
+    wheel_graph, ConnGraph, Rng as CurvatureRng,
+};
 pub use cv_data::{
     feature_stats, load_idx, load_raw, load_split, rot_all, standardize_with, Split,
 };
@@ -39,6 +52,10 @@ pub use detector::{
     gen_scene, leaf_center_object, leaf_on_object, obox_contains, DetectorConfig, NodePred,
     SbshDetector,
 };
+pub use holonomy_estimator::{
+    closed_clifford_curvature, cotree_residuals, curvature_energy, oracle_curvature,
+    tree_gauge_frames,
+};
 pub use holonomy_net::{RotorMeshCache, RotorMeshNet};
 pub use junction_tree::{balanced_binary_tree, star_clique_tree, Clique, JunctionTreeCholesky};
 pub use learner::{
@@ -47,6 +64,7 @@ pub use learner::{
 };
 pub use mesh_tensor::{MeshTensor, MeshTopology};
 pub use metrics::{auroc, clifford_probability_error, cross_entropy, entropy2, softmax2, Metrics};
+pub use noncommute::{commutator_angle, region_holonomy, regional_angle_sum, sample_noncommute};
 pub use online::{BlockEvolventHead, EvolventHead, InfoEvolventHead};
 pub use ops::adam::{adam_step, AdamState};
 pub use ops::catmull_rom::{

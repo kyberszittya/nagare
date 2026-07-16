@@ -1,0 +1,10 @@
+{
+  "task": "noncommute_learned_capstone",
+  "k": 6, "seeds": 5, "fd_gate_max_err": 6.27e-5,
+  "arms": [
+    {"arm": "generic-MLP (raw)", "median_auroc": 0.541},
+    {"arm": "learned-holo trainable-W1", "median_auroc": 0.513},
+    {"arm": "learned-holo frozen-W1", "median_auroc": 0.968},
+    {"arm": "fixed-commutator", "median_auroc": 1.000}
+  ]
+}

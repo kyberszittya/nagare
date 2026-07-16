@@ -1,0 +1,7 @@
+{
+  "task":"nonlinear_curvature_field_grid",
+  "L":12,"m":11,"n_edges":264,"k_gen":3,"k_fit":3,"noise":0.05,"seeds":5,
+  "gate_pass":true,
+  "main":[{"arm":"trivial-entropy","median_auroc":0.5205},{"arm":"constant-rotor","median_auroc":0.5201},{"arm":"MLP (trained)","median_auroc":0.5372},{"arm":"Laplacian","median_auroc":0.9988},{"arm":"ChebyCR","median_auroc":1.0000},{"arm":"oracle","median_auroc":1.0000}],
+  "contrast_sweep":[{"k_gen":2,"trivial":0.5546,"constant_rotor":0.5208,"chebycr":0.9878,"oracle":1.0000},{"k_gen":3,"trivial":0.5205,"constant_rotor":0.5201,"chebycr":1.0000,"oracle":1.0000},{"k_gen":4,"trivial":0.5223,"constant_rotor":0.5280,"chebycr":0.9964,"oracle":1.0000},{"k_gen":6,"trivial":0.5063,"constant_rotor":0.5510,"chebycr":0.9990,"oracle":0.9990},{"k_gen":8,"trivial":0.5305,"constant_rotor":0.5285,"chebycr":0.9947,"oracle":0.9957}]
+}

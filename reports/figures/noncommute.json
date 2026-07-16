@@ -1,0 +1,5 @@
+{
+  "task":"noncommutativity_specificity","k":6,"seeds":5,
+  "holonomy_specific":true,"framework_commutator":1.0000,"generic_max":0.5407,"mlp_on_holonomies":0.9944,
+  "arms":[{"arm":"trivial-entropy","median_auroc":0.5090},{"arm":"generic-MLP (raw)","median_auroc":0.5407},{"arm":"abelian-angle","median_auroc":0.5204},{"arm":"MLP-on-holonomies","median_auroc":0.9944},{"arm":"framework-commutator","median_auroc":1.0000}]
+}

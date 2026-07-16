@@ -1,0 +1,48 @@
+{
+ "experiment_id": "noncommutativity",
+ "date": "2026-07-17",
+ "host": "Apple M5 Pro, macOS 26.5.2, CPU",
+ "result": "F-HOLO-9 (POSITIVE - holonomy specificity): on a genuinely non-abelian task (do two matched-magnitude regional holonomies commute), every generic/abelian method on raw edges is at chance (trivial 0.509, generic-MLP 0.541, abelian 0.520) while the framework rotor_holonomy commutator solves it (1.000). MLP-on-holonomies 0.994 localizes the specificity to the LOOP EXTRACTION (ordered non-commutative composition), which generic raw methods can't do.",
+ "novelty_classification": {
+  "NEW_CANONICAL_CAPABILITY": [
+   "F-HOLO-9 - ordered non-abelian composition is NECESSARY; generic methods structurally blind"
+  ],
+  "note": "First clean holonomy-specificity win in the arc; closes the F-HOLO-8 open question and characterizes WHEN the framework's specific ops are justified (non-abelian/order-dependent signals only)."
+ },
+ "framework_impact": {
+  "interfaces_changed": [],
+  "defaults_changed": [],
+  "components_added_or_updated": [
+   "noncommute module (sample_noncommute + commutator_angle + region_holonomy) - the non-abelian discriminating task + readout"
+  ],
+  "guards_added": [
+   "characterization guard: justify the framework's SPECIFIC ops only on non-abelian/order-dependent signals; on scalar/2nd-order signals use the simple baseline (F-HOLO-2/8)"
+  ],
+  "findings_added": [
+   "F-HOLO-9"
+  ]
+ },
+ "source_changes": [
+  "src/noncommute.rs (NEW: task + 3 readouts + 4 tests)",
+  "examples/noncommute_specificity.rs (NEW 5-arm)",
+  "src/lib.rs (+module, +4 exports)"
+ ],
+ "regression_tests_added": [
+  "noncommute::loop_product_equals_target",
+  "noncommute::commute_class_has_zero_commutator_noncommute_positive",
+  "noncommute::regional_angle_matched_across_classes",
+  "noncommute::sample_deterministic"
+ ],
+ "gates": {
+  "specificity": "HOLONOMY-SPECIFIC: framework-commutator 1.000 vs generic/abelian max 0.541",
+  "tests": "173 passed / 0 failed (4 new)",
+  "lint": "clippy -D warnings clean; fmt clean",
+  "perf": "3.1 s wall"
+ },
+ "corrections": [],
+ "integrity_note": "framework-commutator=1.0 is a NECESSITY demo (the commutator IS the planted signal), not a learned win - stated. The generic arms at chance (given a fair MLP attempt) establish structural blindness. abelian-blindness (magnitude matched) proved in code.",
+ "honest_scope": "synthetic; the win is 'ordered non-abelian composition is necessary'; a learned holonomy-native model on this task, and real pose-graph data, are the next rungs.",
+ "environment_note": "rustc 1.96.1; uncommitted.",
+ "next_experiment_authorized": "(a) a LEARNED holonomy-native model (RotorMeshNet + transported-DFA, F-HOLO-6) on this non-abelian task - does the LEARNING discover the commutator where a generic MLP-on-raw can't? (b) real pose-graph SLAM loop-closure consistency (SE(3) holonomy) - NOW justified by F-HOLO-9 (the scalar/curvature tasks were not).",
+ "next_experiment_proposal": "run RotorMeshNet + transported-DFA on the non-commutativity task (raw edges input): if the learned rotor machinery reaches the commutator's AUROC where the generic MLP is at chance, learning-holonomy-native is demonstrated on a task where it is necessary - the capstone. THEN pose-graph g2o."
+}

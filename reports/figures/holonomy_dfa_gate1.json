@@ -1,0 +1,5 @@
+{
+  "task":"holonomy_dfa_gate1_ring_mesh","N":12,"seeds":5,"epochs":200,"lr":0.05,
+  "trivial_floor":0.9444,"gate_pass":true,
+  "rules":[{"rule":"sequential (exact)","auroc_l3":0.8942,"auroc_l1":0.8153,"align_l3":1.0000},{"rule":"holonomy-DFA (naive)","auroc_l3":0.8311,"auroc_l1":0.8153,"align_l3":0.3964},{"rule":"transported-DFA","auroc_l3":0.8936,"auroc_l1":0.8153,"align_l3":0.4133},{"rule":"random-DFA","auroc_l3":0.5597,"auroc_l1":0.5419,"align_l3":-0.0054}]
+}

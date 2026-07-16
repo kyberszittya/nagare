@@ -1,0 +1,5 @@
+{
+  "task":"gate2_xor_regional_roughness","L":12,"m":11,"n_train":600,"n_test":300,"seeds":5,
+  "gate_pass":false,"fixed_max":0.5289,"learned":0.6611,"oracle":0.9353,
+  "arms":[{"arm":"trivial-entropy","median_auroc":0.5262},{"arm":"constant-rotor","median_auroc":0.5278},{"arm":"global-ChebyCR","median_auroc":0.5124},{"arm":"global-Laplacian","median_auroc":0.5289},{"arm":"linear-on-field","median_auroc":0.5259},{"arm":"learned-MLP","median_auroc":0.6611},{"arm":"oracle |rA-rB|","median_auroc":0.9353}]
+}

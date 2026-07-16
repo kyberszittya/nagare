@@ -1,0 +1,51 @@
+{
+ "experiment_id": "holonomy-dfa",
+ "date": "2026-07-17",
+ "host": "Apple M5 Pro, macOS 26.5.2, CPU",
+ "result": "F-HOLO-5 (MIXED / Gate 1): holonomy-DFA (global entropy broadcast + local EXACT inverse-rotor transport) reaches 0.831 vs random-DFA 0.560 (chance) with grad-alignment +0.40 vs 0.00 -> exact rotor transport IS the lever (beats vanilla DFA). BUT depth not load-bearing under it (L3 0.831 ~= L1 0.815) and it trails sequential backprop 0.894 -> the global broadcast does NOT compose through depth (DFA ceiling). Gates SLAM. CONTINUATION F-HOLO-6: backward_dfa_transported (rotor-chain transport) RECOVERS depth-composition (L3 0.894 = exact backprop, Delta-depth +0.078 vs naive +0.016), align 0.41 (approximation not exact). = validated inter-shell transport primitive for concentric Gomb-Soma (design doc captured, build gated on Gate 2).",
+ "novelty_classification": {
+  "NEW_MECHANISM": [
+   "F-HOLO-5: exact inverse-rotor feedback path lifts DFA off chance"
+  ],
+  "NEGATIVE_RESULT_REQUIRING_A_GUARD": [
+   "naive global broadcast does not compose through depth -> do not scale the naive rule to SLAM"
+  ],
+  "note": "Answers the user's small-data gate: learning does NOT collapse, but the compositional-through-depth property (GAP #2) is absent from a naive broadcast."
+ },
+ "framework_impact": {
+  "interfaces_changed": [],
+  "defaults_changed": [],
+  "components_added_or_updated": [
+   "RotorMeshNet += backward_dfa / backward_from_rot_grads (alternative credit-assignment rules; sequential backward remains default)",
+   "RotorMeshNet += backward_dfa_transported (depth-composing rotor-chain transport, F-HOLO-6)"
+  ],
+  "guards_added": [
+   "Gate-1 verdict logic in the example (holonomy-DFA must match sequential AND beat random to PASS; here PARTIAL)"
+  ],
+  "findings_added": [
+   "F-HOLO-5",
+   "F-HOLO-6"
+  ]
+ },
+ "source_changes": [
+  "src/holonomy_net.rs (+backward_dfa, +backward_from_rot_grads, +2 tests)",
+  "examples/holonomy_dfa_dissociation.rs (NEW 366 loc)"
+ ],
+ "regression_tests_added": [
+  "holonomy_net::dfa_top_layer_equals_sequential_lower_differs",
+  "holonomy_net::from_rot_grads_composes_with_dfa"
+ ],
+ "gates": {
+  "gate1": "PARTIAL (holonomy-DFA beats random YES, matches sequential NO, uses depth NO)",
+  "tests": "165 passed / 0 failed (2 new)",
+  "lint": "clippy -D warnings clean; fmt clean",
+  "perf": "1.9 s wall, negligible RSS",
+  "gate1_followup": "F-HOLO-6 RESOLVES depth-composition: transported-DFA 0.894 = sequential, Delta-depth +0.078"
+ },
+ "corrections": [],
+ "integrity_note": "Rule-vs-rule on the same net (valid); NOT a task-necessity claim (trivial beats the net here, F-HOLO-2, stated). The exact rotor transport being the lever is evidenced by both AUROC (0.831 vs 0.560) AND alignment (+0.40 vs 0.00), not one number.",
+ "honest_scope": "Naive broadcast only; Adam only; trivial-solvable substrate. Depth-composing broadcast and a learning-necessary task (Gate 2) are the open rungs before SLAM.",
+ "environment_note": "rustc 1.96.1; uncommitted.",
+ "next_experiment_authorized": "Gate 2: a learning-necessary task (trivial AND fixed closed-form both fail) to test whether transported transport recovers depth where the net is NECESSARY; THEN the concentric Gomb-Soma build (docs/design-concentric-gomb-soma.md); THEN SLAM.",
+ "next_experiment_proposal": "implement backward_dfa_transported (partial adjoint transport: each layer gets E transported by the product of inverse rotors from the top down to it, but no mesh re-mix between = between raw-broadcast and sequential); A/B vs the naive broadcast and sequential on the same substrate + alignment angle. If alignment rises toward 1 and L3>L1 returns, depth-composition is recovered."
+}

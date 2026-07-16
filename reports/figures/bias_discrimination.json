@@ -1,0 +1,5 @@
+{
+  "task":"bias_discrimination_gate2","blocks":4,"seeds":5,
+  "generic_mlp":0.6611,"block_laplacian":0.9292,"block_entropy":0.8585,"oracle":0.9353,
+  "arms":[{"arm":"generic-MLP","median_auroc":0.6611},{"arm":"block-Laplacian","median_auroc":0.9292},{"arm":"block-entropy","median_auroc":0.8585},{"arm":"oracle |rA-rB|","median_auroc":0.9353}]
+}

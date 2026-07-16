@@ -1,0 +1,7 @@
+{
+  "task":"auto_holonomy_curvature_wheel",
+  "n_rim":24,"n_edges":48,"n_train":200,"n_test":200,"seeds":5,"theta_main":0.6,
+  "gate_pass":true,
+  "main":[{"arm":"trivial-entropy","median_auroc":0.5568},{"arm":"trivial-mean","median_auroc":0.5088},{"arm":"MLP h16","median_auroc":0.5526},{"arm":"MLP h64 (strong)","median_auroc":0.6263},{"arm":"oracle","median_auroc":1.0000},{"arm":"closed-Clifford","median_auroc":1.0000}],
+  "flux_sweep":[{"theta_min":0.10,"trivial_entropy":0.5204,"mlp":0.5592,"closed_clifford":1.0000,"oracle":1.0000},{"theta_min":0.20,"trivial_entropy":0.5214,"mlp":0.5596,"closed_clifford":1.0000,"oracle":1.0000},{"theta_min":0.40,"trivial_entropy":0.5222,"mlp":0.5650,"closed_clifford":1.0000,"oracle":1.0000},{"theta_min":0.60,"trivial_entropy":0.5269,"mlp":0.5681,"closed_clifford":1.0000,"oracle":1.0000},{"theta_min":0.90,"trivial_entropy":0.5272,"mlp":0.5937,"closed_clifford":1.0000,"oracle":1.0000},{"theta_min":1.40,"trivial_entropy":0.5278,"mlp":0.6224,"closed_clifford":1.0000,"oracle":1.0000}]
+}

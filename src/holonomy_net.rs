@@ -22,6 +22,7 @@
 
 use crate::mesh_tensor::MeshTopology;
 use crate::ops::cayley_rotor::{cayley_rotor_backward, cayley_rotor_forward};
+use hymeko_clifford::{quat_conjugate, quat_rotate};
 
 const D: usize = 3;
 
@@ -123,6 +124,123 @@ impl<'m> RotorMeshNet<'m> {
             g = gv;
         }
         (grad_bivecs, g)
+    }
+
+    /// **Holonomy-DFA backward** — the biologically-plausible credit assignment. The *same*
+    /// global output-gradient `grad_out` is broadcast to *every* layer (no sequential
+    /// threading); each layer applies its own exact mesh + inverse-rotor adjoint. Global
+    /// routing, local exact transport: no weight transport, no stored tape, and — unlike
+    /// direct feedback alignment — no separate feedback weights (it reuses the forward rotors).
+    /// Returns per-layer bivector gradients `(n_nodes, 3)`.
+    ///
+    /// The top layer's gradient equals the sequential [`Self::backward`]'s (the broadcast `E`
+    /// *is* the threaded `E` at the top); lower layers differ — that is the DFA approximation.
+    ///
+    /// # Panics
+    /// If `grad_out.len() != n_nodes * 3` or the cache depth mismatches.
+    pub fn backward_dfa(&self, cache: &RotorMeshCache, grad_out: &[f32]) -> Vec<Vec<f32>> {
+        assert_eq!(grad_out.len(), self.n_nodes * D);
+        assert_eq!(cache.v_in.len(), self.depth(), "cache depth mismatch");
+        // one mesh adjoint of the global error, reused for every layer's local rotor adjoint
+        let g_rot = self.topo.conv_round_backward(grad_out, D);
+        (0..self.depth())
+            .map(|l| {
+                cayley_rotor_backward(
+                    &self.bivecs[l],
+                    &cache.v_in[l],
+                    &cache.quats[l],
+                    &g_rot,
+                    self.n_nodes,
+                )
+                .0
+            })
+            .collect()
+    }
+
+    /// Rotor-only backward from an externally supplied per-layer field gradient (each at that
+    /// layer's rotor output). Each layer's bivector gradient is the exact inverse-rotor adjoint
+    /// of its given field gradient — a hook for alternative feedback routings (e.g. random-DFA
+    /// feeds a random projection of the output error here). No mesh adjoint, no threading.
+    ///
+    /// # Panics
+    /// If `rot_grads.len() != depth`, any entry is not `(n_nodes, 3)`, or the cache mismatches.
+    pub fn backward_from_rot_grads(
+        &self,
+        cache: &RotorMeshCache,
+        rot_grads: &[Vec<f32>],
+    ) -> Vec<Vec<f32>> {
+        assert_eq!(
+            rot_grads.len(),
+            self.depth(),
+            "need one field gradient per layer"
+        );
+        assert_eq!(cache.v_in.len(), self.depth(), "cache depth mismatch");
+        (0..self.depth())
+            .map(|l| {
+                assert_eq!(rot_grads[l].len(), self.n_nodes * D);
+                cayley_rotor_backward(
+                    &self.bivecs[l],
+                    &cache.v_in[l],
+                    &cache.quats[l],
+                    &rot_grads[l],
+                    self.n_nodes,
+                )
+                .0
+            })
+            .collect()
+    }
+
+    /// **Depth-composing transported broadcast** — the middle ground between the naive broadcast
+    /// ([`Self::backward_dfa`], which hands every layer the raw top error and does not compose
+    /// through depth) and exact backprop ([`Self::backward`]). The global credit signal is
+    /// transported *down* through the **pure inverse-rotor chain** — each layer applies its own
+    /// inverse rotor `R̄` (the return-path holonomy) — so the signal a layer receives depends on
+    /// the rotors above it (depth composes), while the *inter-layer* mesh Jacobian is dropped from
+    /// the transport (the approximation vs.\ exact, and what makes it cheap/parallel).
+    ///
+    /// This is the credit-side of "connection transport": differentiation as holonomy along the
+    /// network path. It is also the backward-analogue of an inter-shell rotor transport — the
+    /// connective primitive for a concentric-shell Gömb-Soma.
+    ///
+    /// # Panics
+    /// If `grad_out.len() != n_nodes * 3` or the cache depth mismatches.
+    pub fn backward_dfa_transported(
+        &self,
+        cache: &RotorMeshCache,
+        grad_out: &[f32],
+    ) -> Vec<Vec<f32>> {
+        assert_eq!(grad_out.len(), self.n_nodes * D);
+        assert_eq!(cache.v_in.len(), self.depth(), "cache depth mismatch");
+        let mut grad_bivecs = vec![Vec::new(); self.depth()];
+        let mut g = grad_out.to_vec(); // credit signal, holonomy-transported down
+        for l in (0..self.depth()).rev() {
+            // local bivec gradient = exact mesh + rotor adjoint of the transported-so-far signal
+            let g_rot = self.topo.conv_round_backward(&g, D);
+            let (gb, _gv) = cayley_rotor_backward(
+                &self.bivecs[l],
+                &cache.v_in[l],
+                &cache.quats[l],
+                &g_rot,
+                self.n_nodes,
+            );
+            grad_bivecs[l] = gb;
+            // transport the signal DOWN by this layer's pure inverse rotor (return-path holonomy),
+            // dropping the mesh coupling from the inter-layer transport path
+            let mut g_next = vec![0.0f32; self.n_nodes * D];
+            for i in 0..self.n_nodes {
+                let q = [
+                    cache.quats[l][i * 4],
+                    cache.quats[l][i * 4 + 1],
+                    cache.quats[l][i * 4 + 2],
+                    cache.quats[l][i * 4 + 3],
+                ];
+                let gi = [g[i * D], g[i * D + 1], g[i * D + 2]];
+                let r = quat_rotate(quat_conjugate(q), gi);
+                g_next[i * D..i * D + 3].copy_from_slice(&r);
+            }
+            g = g_next;
+        }
+        grad_bivecs
     }
 }
 
@@ -229,5 +347,111 @@ mod tests {
                 grad_v0[i]
             );
         }
+    }
+
+    /// Holonomy-DFA's TOP-layer gradient equals the sequential backward's (broadcast E ≡ threaded
+    /// E at the top); lower layers differ (the DFA approximation). Also checks shapes.
+    #[test]
+    fn dfa_top_layer_equals_sequential_lower_differs() {
+        let topo = small_mesh();
+        let n = topo.n_nodes();
+        let mut nx = lcg(21);
+        let depth = 3;
+        let bivecs: Vec<Vec<f32>> = (0..depth)
+            .map(|_| (0..n * 3).map(|_| 0.3 * nx()).collect())
+            .collect();
+        let v0: Vec<f32> = (0..n * 3).map(|_| nx()).collect();
+        let grad_out: Vec<f32> = (0..n * 3).map(|_| nx()).collect();
+
+        let net = RotorMeshNet::new(&topo, bivecs);
+        let (_out, cache) = net.forward(&v0);
+        let (seq, _gv0) = net.backward(&cache, &grad_out);
+        let dfa = net.backward_dfa(&cache, &grad_out);
+
+        assert_eq!(dfa.len(), depth);
+        for layer in &dfa {
+            assert_eq!(layer.len(), n * 3);
+        }
+        // top layer identical
+        let top = depth - 1;
+        for i in 0..n * 3 {
+            assert!(
+                (seq[top][i] - dfa[top][i]).abs() < 1e-6,
+                "top layer must match sequential: seq {} vs dfa {}",
+                seq[top][i],
+                dfa[top][i]
+            );
+        }
+        // at least one lower layer must differ (broadcast ≠ threaded below the top)
+        let diff: f32 = (0..n * 3).map(|i| (seq[0][i] - dfa[0][i]).abs()).sum();
+        assert!(
+            diff > 1e-4,
+            "lower layer unexpectedly identical (diff {diff})"
+        );
+    }
+
+    /// `backward_from_rot_grads` applied to the per-layer mesh-adjoint of a broadcast grad
+    /// reproduces `backward_dfa` — the routing hook composes with the mesh adjoint.
+    #[test]
+    fn from_rot_grads_composes_with_dfa() {
+        let topo = small_mesh();
+        let n = topo.n_nodes();
+        let mut nx = lcg(5);
+        let depth = 2;
+        let bivecs: Vec<Vec<f32>> = (0..depth)
+            .map(|_| (0..n * 3).map(|_| 0.2 * nx()).collect())
+            .collect();
+        let v0: Vec<f32> = (0..n * 3).map(|_| nx()).collect();
+        let grad_out: Vec<f32> = (0..n * 3).map(|_| nx()).collect();
+        let net = RotorMeshNet::new(&topo, bivecs);
+        let (_o, cache) = net.forward(&v0);
+        let dfa = net.backward_dfa(&cache, &grad_out);
+        let g_rot = topo.conv_round_backward(&grad_out, 3);
+        let rot_grads = vec![g_rot.clone(), g_rot];
+        let via_hook = net.backward_from_rot_grads(&cache, &rot_grads);
+        for l in 0..depth {
+            for i in 0..n * 3 {
+                assert!((dfa[l][i] - via_hook[l][i]).abs() < 1e-6);
+            }
+        }
+    }
+
+    /// The transported broadcast agrees with BOTH sequential and naive-DFA at the top layer
+    /// (all three start from the raw global E), but its lower layers differ from the naive
+    /// broadcast — the rotor-chain transport actually moves the signal through depth.
+    #[test]
+    fn transported_top_matches_lower_differs_from_naive() {
+        let topo = small_mesh();
+        let n = topo.n_nodes();
+        let mut nx = lcg(31);
+        let depth = 3;
+        let bivecs: Vec<Vec<f32>> = (0..depth)
+            .map(|_| (0..n * 3).map(|_| 0.3 * nx()).collect())
+            .collect();
+        let v0: Vec<f32> = (0..n * 3).map(|_| nx()).collect();
+        let grad_out: Vec<f32> = (0..n * 3).map(|_| nx()).collect();
+        let net = RotorMeshNet::new(&topo, bivecs);
+        let (_o, cache) = net.forward(&v0);
+        let (seq, _gv) = net.backward(&cache, &grad_out);
+        let naive = net.backward_dfa(&cache, &grad_out);
+        let trans = net.backward_dfa_transported(&cache, &grad_out);
+
+        let top = depth - 1;
+        for i in 0..n * 3 {
+            assert!(
+                (trans[top][i] - seq[top][i]).abs() < 1e-6,
+                "top must match sequential"
+            );
+            assert!(
+                (trans[top][i] - naive[top][i]).abs() < 1e-6,
+                "top must match naive"
+            );
+        }
+        // a lower layer: transported must differ from the naive broadcast (transport moved it)
+        let diff: f32 = (0..n * 3).map(|i| (trans[0][i] - naive[0][i]).abs()).sum();
+        assert!(
+            diff > 1e-4,
+            "transport did not change the lower-layer signal (diff {diff})"
+        );
     }
 }

@@ -1,0 +1,54 @@
+{
+ "experiment_id": "nonlinear-curvature",
+ "date": "2026-07-16",
+ "host": "Apple M5 Pro, macOS 26.5.2, CPU",
+ "result": "F-HOLO-4: spline curvature FIELD where the F-HOLO-3 constant-rotor exact solve is BLIND (0.520, chance) alongside trivial entropy (0.520), while a closed-form ChebyCR roughness readout reaches the oracle (1.000, no training); Laplacian 0.999 confirms it is not a Chebyshev artifact; MLP over raw edges 0.537.",
+ "novelty_classification": {
+  "NEW_CANONICAL_CAPABILITY": [
+   "F-HOLO-4"
+  ],
+  "NEW_REUSABLE_COMPONENT": [
+   "NonlinearCurvatureField (curvature_field)"
+  ],
+  "NEW_EVALUATION_REQUIREMENT": [
+   "a 3-way gate: trivial AND constant-rotor BOTH blind AND oracle clears \u2014 the exact-scalar-solve-insufficient regime"
+  ],
+  "note": "User-proposed nonlinear curvature via ChebyCR patches; realized on the real spine (ChebyCR + rotor_holonomy), closed-form. Explicit NON-GOAL rejected: nonlinear along a 1-D edge (unidentifiable)."
+ },
+ "framework_impact": {
+  "interfaces_changed": [],
+  "defaults_changed": [],
+  "components_added_or_updated": [
+   "NonlinearCurvatureField v1.0 (new, default)"
+  ],
+  "guards_added": [
+   "curvature_field::constant_rotor_mean_matched_across_classes (guards the insufficiency claim)",
+   "curvature_field::gauge_leaves_curvature_invariant (guards the gauge-invariant construction)"
+  ],
+  "findings_added": [
+   "F-HOLO-4"
+  ]
+ },
+ "source_changes": [
+  "src/curvature_field.rs (NEW 471 loc)",
+  "examples/curvature_field_dissociation.rs (NEW 365 loc)",
+  "src/lib.rs (+8 exports)",
+  "reports/figures/plot_curvature_field.py (NEW)"
+ ],
+ "regression_tests_added": [
+  "curvature_field::{plaquette_holonomy_equals_field_exactly, gauge_leaves_curvature_invariant_and_edges_nontrivial, smooth_has_lower_roughness_than_rough, constant_rotor_mean_matched_across_classes, spd_inverse_correct, perf_roughness_latency_budget}"
+ ],
+ "gates": {
+  "three_way_gate": "PASS (trivial 0.520<=.60 AND constant-rotor 0.520<=.60 AND oracle 1.000>=.90)",
+  "ab": "ChebyCR 1.000 reaches oracle where constant-rotor is blind; Laplacian 0.999; MLP 0.537",
+  "tests": "cargo test --release --lib: 163 passed / 0 failed (6 new)",
+  "lint": "clippy -D warnings clean; fmt clean",
+  "perf": "readout ~30 us/sample (<100 budget); example 2.3 s, 5.2 MB"
+ },
+ "corrections": [],
+ "integrity_note": "The insufficiency claim (constant-rotor blind) is PROVED in code (matched mean flux across classes) not asserted; matched Haar marginals keep trivial entropy blind; Laplacian arm rules out a Chebyshev-basis artifact; plaquette=field and gauge-invariance are tested identities.",
+ "honest_scope": "ChebyCR is robust across generating order (a permutation always fully decorrelates), so the intended contrast->0 worst case is not reached; near-white generation and directional/anisotropic curvature are untested. Fixed low-order fit, not a learned patch (GAP #2 proper open). clifford_fir readout not yet compared.",
+ "environment_note": "rustc 1.96.1; hymeko_clifford vendored; rayon. Uncommitted.",
+ "next_experiment_authorized": "the LEARNED ChebyCR/Clifford-FIR patch + entropy feedback (GAP #2 proper) attached to THIS metric (exact scalar solve provably insufficient), OR the near-white / anisotropic worst-case stress before that.",
+ "next_experiment_proposal": "wire clifford_fir over the plaquette cycle pool as a second closed-form readout and a learned-patch arm; measure both against the fixed ChebyCR ceiling on a near-white-contrast sweep so the learned method faces a non-saturated gap."
+}

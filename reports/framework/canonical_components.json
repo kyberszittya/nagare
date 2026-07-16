@@ -1,363 +1,852 @@
 {
-  "schema_version": "1.0",
-  "updated": "2026-07-15",
-  "framework": "nagare / holonomy_learn (closed-form, FD-verified, no autograd)",
-  "note": "Query this registry before creating a new component (anti-bloat rule). All backwards hand-derived and FD-verified; no autograd. CLASSIFICATION (user-directed 2026-07-16): (a) SPINE = the real deep-learning stack (ChebyCR -> Clifford-FIR -> Gömb -> HSiKAN -> Gömb-Soma, + alpha-mix, + geometric rotors) [system map claude.ai/code/artifact/cca528aa]; (b) KEEP/USEFUL = EvolventHead family (closed-form one-pass online learner -- 'evolvent head is fine'); (c) DROP = JunctionTreeCholesky (Cholesky 'no need'); (d) EVALUATE = MeshTensor, RotorMeshNet (mechanism-demos; useful KERNELS cayley_rotor/rotor_holonomy already in the spine -- keep for provenance, low priority). Do NOT reflexively trash: check usefulness first.",
-  "components": [
-    {
-      "name": "ChebyCR (Chebyshev-Catmull-Rom)",
-      "purpose": "SPINE / basis. The nonlinearity every spline layer reuses: per-channel Catmull-Rom on [-1,1] with Chebyshev-generated control points (train-CR / deploy-Chebyshev). Explicit closed-form gradient buffers.",
-      "owning_module": "src/ops/catmull_rom.rs",
-      "symbols": ["chebyshev_cr_forward", "chebyshev_cr_backward", "catmull_rom_forward", "catmull_rom_backward", "chebyshev_control_points", "chebyshev_deploy_forward"],
-      "version": "1.0", "status": "CANONICAL", "layer": "spine",
-      "source_experiment": "core op (pre-existing); the KAN spline nonlinearity repeatedly found to be THE lever (topology inert) -- see hsikan-mlp-hybrid / cuboid-tip",
-      "evidence_paths": [], "dependencies": [],
-      "supersedes": null, "superseded_by": null, "default": true,
-      "note": "Reused by HSiKAN (inner+outer splines) and KAN. Standardise inputs to [-1,1] upstream or the spline saturates."
-    },
-    {
-      "name": "Clifford-FIR",
-      "purpose": "SPINE / signed aggregation. Entry operator: signed-cycle pool + per-vertex features -> per-cycle features. Backward via the Clifford derivative on Cl(0,1)≅ℂ, one multivector (a,b) unifying the σ=±1 sign branches.",
-      "owning_module": "src/ops/clifford_fir.rs (from hymeko_graph::spine)",
-      "symbols": ["clifford_fir_forward", "clifford_fir_backward", "CliffordFIR"],
-      "version": "1.0", "status": "CANONICAL", "layer": "spine",
-      "source_experiment": "the foundational entry operator", "evidence_paths": ["reports/2026-07-16-real-spine-signed-link.md"],
-      "dependencies": [], "supersedes": null, "superseded_by": null, "default": true
-    },
-    {
-      "name": "Gömb (gomb_shell)",
-      "purpose": "SPINE / filter-bank shell. M parallel Clifford-FIR banks over the same cycle pool, concatenated -- the 'V1 volume'. Pure orchestration over Clifford-FIR; no new derivative.",
-      "owning_module": "src/ops/gomb_shell.rs",
-      "symbols": ["gomb_outer_forward", "gomb_outer_backward"],
-      "version": "1.0", "status": "CANONICAL", "layer": "spine",
-      "source_experiment": "OuterFIRShell port", "evidence_paths": ["reports/2026-07-16-real-spine-signed-link.md"],
-      "dependencies": ["clifford_fir"], "supersedes": null, "superseded_by": null, "default": true
-    },
-    {
-      "name": "HSiKAN (Highway-SignedKAN)",
-      "purpose": "SPINE / the learnable deep layer. Sign-conditioned aggregation over each signed hyperedge, Schmidhuber highway gate, per-sign mean, inner + diagonal-outer Chebyshev splines. Hand-derived closed-form gradients.",
-      "owning_module": "src/ops/hsikan.rs",
-      "symbols": ["hsikan_forward", "hsikan_forward_chunked", "hsikan_backward", "HsikanConfig", "HsikanParams", "HsikanEdges", "SplineKind"],
-      "version": "1.1", "status": "CANONICAL", "layer": "spine",
-      "source_experiment": "HSiKAN structural-leverage arc (H1 scaling + H2 causal SUPPORTED: scramble + DeepSets double-dissociation, 3.7->61x with chain length); signed-link real-spine; v1.1 edge-chunk rayon parallelization",
-      "evidence_paths": ["reports/2026-07-16-real-spine-signed-link.md", "reports/2026-07-16-hsikan-parallel-vs-pytorch.md", "reports/figures/hsikan-bench.png"],
-      "dependencies": ["catmull_rom (ChebyCR)", "rayon"], "supersedes": null, "superseded_by": null, "default": true,
-      "note": "The KAN spline nonlinearity is the lever; the signed-hyperedge topology is often INERT (hsikan-mlp-hybrid audit). v1.1 (2026-07-16): forward/backward partition the T hyperedges into min(threads,T) contiguous chunks on the rayon pool (each edge independent; grad_x + param grads summed once). Scales 7.3x at 16 threads, checksum-identical to serial (chunk_parallel_matches_serial gate). Set RAYON_NUM_THREADS=1 to force serial. Public API + cache token unchanged. See F-HSIKAN-PAR."
-    },
-    {
-      "name": "Gömb-Soma cascade",
-      "purpose": "SPINE / the deep net. Three-shell cascade x0 -> Gömb (Clifford-FIR banks) -> HSiKAN -> inner CPML tiers -> node emb -> edge head. Driven as a signed-link predictor.",
-      "owning_module": "examples/cpml_signed_link.rs (composition over the spine ops)",
-      "symbols": ["(composition: gomb_outer_forward + hsikan_forward + tier cores)"],
-      "version": "1.0", "status": "CANONICAL", "layer": "spine",
-      "source_experiment": "signed-link on SNAP bitcoin-alpha (2 seeds + sign-shuffle): task IS structural (~0.87-0.89, shuffle->chance); cascade competitive with the inner core once trained enough (0.847@250it undertrained -> 0.875@1000it)",
-      "evidence_paths": ["reports/2026-07-16-real-spine-signed-link.md"],
-      "dependencies": ["gomb_shell", "hsikan", "clifford_fir", "catmull_rom"],
-      "supersedes": null, "superseded_by": null, "default": true,
-      "note": "CORRECTION on record: an earlier 'cascade HURTS -0.034' claim was an UNDERTRAINING artifact of the matched-250-iter budget; at 1000 iters it lands ~0.875, level with the inner core."
-    },
-    {
-      "name": "alpha-mix projection (P-graph)",
-      "purpose": "SPINE / subspace mixing. y = alpha*P(x) + (1-alpha)*x, P = oblique-safe projector onto span(U); closed-form symmetric backward. The P-graph / holonomy-basis warm-start mixing (PROJECTION_ALPHA=0.72).",
-      "owning_module": "src/ops/project_alpha_mix.rs (via src/projection.rs::apply_alpha_mix)",
-      "symbols": ["project_alpha_mix_forward", "project_alpha_mix_backward", "ProjectAlphaMixShape", "ProjectionBasis::apply_alpha_mix"],
-      "version": "1.0", "status": "CANONICAL", "layer": "spine",
-      "source_experiment": "learner warm-start projection", "evidence_paths": [],
-      "dependencies": [], "supersedes": null, "superseded_by": null, "default": true
-    },
-    {
-      "name": "geometric ops (Cayley rotor / rotor holonomy / FSR mixer)",
-      "purpose": "SPINE / geometric. Cayley bivector->unit quaternion (Spin(3)=SU(2), closed-form); rotor_holonomy = ordered non-commutative rotor product around a cycle; FSR mixer = linear + Cayley rotor + signed scatter sequence mixer.",
-      "owning_module": "src/ops/{cayley_rotor,rotor_holonomy,fsr_mixer}.rs",
-      "symbols": ["cayley_rotor_forward/backward", "rotor_holonomy_forward/backward", "FsrMixer"],
-      "version": "1.0", "status": "CANONICAL", "layer": "spine",
-      "source_experiment": "geometric substrate (Clifford/quaternion holonomy)", "evidence_paths": [],
-      "dependencies": [], "supersedes": null, "superseded_by": null, "default": true
-    },
-    {
-      "name": "KAN (tabular)",
-      "purpose": "SPINE / baseline. Generic Kolmogorov-Arnold layer over Chebyshev-CR splines, no signed structure. The plain-KAN tabular baseline.",
-      "owning_module": "src/ops/kan.rs",
-      "symbols": ["kan_forward", "kan_backward", "KanConfig"],
-      "version": "1.0", "status": "CANONICAL", "layer": "spine",
-      "source_experiment": "tabular baseline", "evidence_paths": [],
-      "dependencies": ["catmull_rom"], "supersedes": null, "superseded_by": null, "default": true
-    },
-    {
-      "name": "MeshTensor / MeshTopology",
-      "purpose": "The hypergraph latent space AS a mesh tensor (contraction, NOT inversion). The signed-hypergraph incidence (cycles/signs/scale) is the MESH (MeshTopology = the operator side); the latent is a TENSOR FIELD on it -- a d-vector per node and per hyperedge (MeshTensor = the state side). Computation is CONTRACTION along the mesh (node<->edge), delegating to hg_message. The on-mission hypergraph<->tensor conjugation and the substrate a holonomy embedding (HSiKAN / Gomb-Soma) + holonomy feedback act on. Replaces the flat-vector/precision-matrix mis-framing of the (frozen) evolvent line.",
-      "owning_module": "src/mesh_tensor.rs",
-      "symbols": ["MeshTopology", "MeshTopology::new", "MeshTopology::node_to_edge", "MeshTopology::edge_to_node", "MeshTopology::conv_round", "MeshTopology::conv_round_backward", "MeshTensor", "MeshTensor::on_nodes", "MeshTensor::lift_to_edges", "MeshTensor::project_to_nodes", "MeshTensor::conv_round"],
-      "version": "0.1",
-      "status": "CANONICAL",
-      "source_experiment": "hypergraph-latent-as-mesh-tensor (2026-07-16, user directive: 'use hypergraph latent space as a mesh tensor instead')",
-      "evidence_paths": [],
-      "supported_tasks": ["hypergraph latent as a mesh tensor field (contraction substrate)", "signed-HGNN conv round node->edge->node with FD-verified backward", "the field HSiKAN / Gomb-Soma / holonomy feedback operate on"],
-      "observation_schema": "MeshTopology(cycles (n_edges,k), signs, scale (n_nodes), n_nodes, k); MeshTensor node field (n_nodes,d)",
-      "output_schema": "node/edge tensor fields (contracted); conv_round -> (n_nodes,d); conv_round_backward -> grad on input nodes (composed hg_message backwards, FD-verified)",
-      "dependencies": ["hg_message"],
-      "known_limitations": ["thin typed wrapper over hg_message contraction -- the contraction is linear (signed mean / signed sum); nonlinear per-edge maps (HSiKAN/Gomb-Soma) + the holonomy-feedback learning rule are the NEXT layers, not yet wired", "topology is fixed structural geometry (no gradient through it)"],
-      "canonical_tests": ["mesh_tensor::conv_round_equals_manual_hg_composition", "mesh_tensor::conv_round_backward_matches_fd", "mesh_tensor::isolated_node_stays_zero_after_projection", "mesh_tensor::topology_rejects_out_of_range_corner"],
-      "supersedes": "the flat-vector-into-RLS / precision-matrix latent framing (evolvent line, frozen)",
-      "superseded_by": null,
-      "default": true,
-      "note": "ON-MISSION re-anchor after the evolvent/Cholesky devolution (see feedback-nagare-closed-form-thesis-not-gaps): latent = mesh tensor contracted, no normal equations. Next: nonlinear per-edge map (HSiKAN/Gomb-Soma) on the edge field + entropy/holonomy feedback as the learning rule."
-    },
-    {
-      "name": "RotorMeshNet",
-      "purpose": "DEEP holonomy representation over a simplicial/hypergraph mesh -- the compositional auto-holonomy, PROVEN to compose through depth with a closed-form (no-autograd) backward. Each layer = ROTATE (learned per-node Cayley bivector -> unit quaternion rotor, transports the node 3-vector field; the bivectors ARE the learned representation) + MIX (one MeshTopology::conv_round, node->edge->node, spreads the transported field across the simplicial neighborhood). Rotate+mix is genuinely deep (pure SO(3) rotations collapse; the mesh mix between them re-combines). The end-to-end backward composes the two FD-verified atoms (cayley_rotor + conv_round); the per-layer grad_v = inverse-rotor (quaternion-conjugate) transport of the upstream gradient = the ADJOINT holonomy transport that replaces backprop's tape.",
-      "owning_module": "src/holonomy_net.rs",
-      "symbols": ["RotorMeshNet", "RotorMeshNet::new", "RotorMeshNet::depth", "RotorMeshNet::bivecs_mut", "RotorMeshNet::forward", "RotorMeshNet::backward", "RotorMeshCache"],
-      "version": "0.1",
-      "status": "MECHANISM_DEMO",
-      "source_experiment": "deep-holonomy-representation step 1 (2026-07-16, user directive 'one step to deep-representation learning via Clifford/quaternion auto-holonomy + hypergraph->simplices')",
-      "evidence_paths": ["reports/2026-07-16-deep-holonomy-net-mechanism.md"],
-      "supported_tasks": ["deep learnable holonomy embedding over a mesh (rotate+mix stack)", "compositional auto-holonomy with closed-form FD-verified backward through depth", "substrate for entropy/holonomy-feedback deep representation learning"],
-      "observation_schema": "MeshTopology + per-layer bivecs (n_nodes,3); forward(v0 (n_nodes,3))",
-      "output_schema": "forward -> final field (n_nodes,3) + cache; backward(cache, grad_out) -> (per-layer grad_bivecs, grad_v0) -- composed closed-form, FD-verified end-to-end",
-      "dependencies": ["cayley_rotor", "mesh_tensor (MeshTopology::conv_round)"],
-      "known_limitations": ["MECHANISM proven (deep closed-form backward FD-verified); the LEARNING RULE is NOT wired yet -- descending this gradient is iterative GD (a stepping stone), the on-thesis instantaneous ENTROPY/holonomy feedback is the next step", "field width fixed d=3 (rotor on a 3-vector/node)", "the DISCRIMINATING experiment (entropy-top beats mean-top THROUGH DEPTH = learns useful deep features) is NOT yet run -- that is the empirical crux of 'one step'"],
-      "canonical_tests": ["holonomy_net::deep_backward_matches_fd", "holonomy_net::depth_collapses_without_the_mesh_mix_but_not_with_it"],
-      "supersedes": null,
-      "superseded_by": null,
-      "default": true,
-      "note": "Proves the MECHANISM half of 'one step to deep-representation learning' (feedback survives rotor composition through depth, closed-form). EMPIRICAL half now DEMONSTRATED (F-HOLO-1): deep+entropy double dissociation (deep+entropy 0.759 vs remove-depth 0.561 / remove-entropy 0.542 / chance 0.544) -- the net LEARNS useful features THROUGH DEPTH read by entropy not mean. Trained by GD on the closed-form gradient (stepping stone); the INSTANTANEOUS entropy-feedback rule is the remaining gap. See examples/holonomy_deep_dissociation.rs."
-    },
-    {
-      "name": "conv2d",
-      "purpose": "Learned 2-D convolution — the Neocognitron S-cell (spatial feature detector).",
-      "owning_module": "src/ops/conv2d.rs",
-      "symbols": ["conv2d_forward", "conv2d_backward", "ConvLayer", "ConvShape"],
-      "version": "1.0",
-      "status": "CANONICAL",
-      "source_experiment": "neocognitron N0",
-      "evidence_paths": ["reports/2026-07-13-neocognitron-n0-conv2d.md"],
-      "supported_tasks": ["spatial feature extraction", "keypoint backbone", "S-cell of ScBlock"],
-      "observation_schema": "x: (c_in, H, W) flat f32",
-      "output_schema": "y: (c_out, H', W') flat f32; grads (grad_x, ConvLayer)",
-      "dependencies": [],
-      "known_limitations": ["naive (no im2col); fine at G<=32, revisit for large maps"],
-      "canonical_tests": ["conv2d::grads_match_fd", "conv2d::identity_kernel_is_input", "conv2d::shift_equivariance", "tests/conv2d_learn.rs"],
-      "supersedes": null,
-      "superseded_by": null,
-      "default": true
-    },
-    {
-      "name": "group_pool",
-      "purpose": "Dihedral group-orbit attention pool — the rotation-equivariant Neocognitron C-cell (invariant resp + equivariant orient).",
-      "owning_module": "src/ops/group_pool.rs",
-      "symbols": ["group_pool_forward", "group_pool_backward", "GroupPoolOut"],
-      "version": "1.0",
-      "status": "CANONICAL",
-      "source_experiment": "neocognitron N1",
-      "evidence_paths": ["reports/2026-07-13-neocognitron-n1-ccell.md"],
-      "supported_tasks": ["LOCAL per-feature rotation-invariance"],
-      "observation_schema": "v: (n_vec, 3) oriented vectors; filt: (3,)",
-      "output_schema": "resp: (n_vec,) invariant; orient: (n_vec,) equivariant",
-      "dependencies": ["dihedral"],
-      "known_limitations": ["gives LOCAL orientation-invariance, NOT global rotation-invariance (see F-N3-2)", "discrete C_n; between-group angles only approx"],
-      "canonical_tests": ["group_pool::backward_matches_fd", "group_pool::response_is_group_invariant", "group_pool::small_tau_approaches_group_max"],
-      "supersedes": null,
-      "superseded_by": null,
-      "default": true
-    },
-    {
-      "name": "sc_block",
-      "purpose": "Stackable S/C block: conv S-cell (C_in->2K) -> bank of K oriented-unit group_pool C-cells -> K-channel invariant resp map. Output shape = next block input, so blocks stack.",
-      "owning_module": "src/ops/sc_block.rs",
-      "symbols": ["ScBlock", "sc_block_forward", "sc_block_backward", "ScBlockCache", "ScBlockGrad"],
-      "version": "1.0",
-      "status": "CANONICAL",
-      "source_experiment": "neocognitron N3",
-      "evidence_paths": ["reports/2026-07-14-neocognitron-n3-deep-stack.md"],
-      "supported_tasks": ["rotation-tolerant spatial backbone", "compositional feature hierarchy", "keypoint backbone (pose P2/P3/P4)"],
-      "observation_schema": "x: (c_in, H, W)",
-      "output_schema": "resp: (K, H', W') invariant; composed backward FD-verified through both cells",
-      "dependencies": ["conv2d", "group_pool", "dihedral"],
-      "known_limitations": ["C-cell is LOAD-BEARING only in compositional / can't-fit regimes (F-N3-1); REDUNDANT under a learnable single block (F-N2b-1)"],
-      "canonical_tests": ["sc_block::backward_matches_fd", "sc_block::two_block_stack_backward_matches_fd", "sc_block::c1_group_is_orientation_specific"],
-      "supersedes": null,
-      "superseded_by": null,
-      "default": true
-    },
-    {
-      "name": "oriented_sobel_bank / ScBlock::new_oriented",
-      "purpose": "Oriented Sobel S-cell warm-start (rotated gradient pair per unit). Canonical cold-start fix for a block feeding an entropy pool.",
-      "owning_module": "src/ops/sc_block.rs",
-      "symbols": ["oriented_sobel_bank", "ScBlock::new_oriented"],
-      "version": "1.0",
-      "status": "CANONICAL",
-      "source_experiment": "neocognitron entropy-top (assimilated 2026-07-15)",
-      "evidence_paths": ["reports/2026-07-14-neocognitron-entropy-top.md", "reports/framework/assimilations/neocognitron-arc.md"],
-      "supported_tasks": ["any ScBlock (c_in=1, 3x3) that stalls from a random cold start"],
-      "observation_schema": "k: usize (units)",
-      "output_schema": "conv weights (2k,1,3,3) flat",
-      "dependencies": [],
-      "known_limitations": ["c_in==1, 3x3 only", "a prior, not a guarantee — conv stays learnable"],
-      "canonical_tests": ["sc_block::oriented_bank_is_structured_not_isotropic", "sc_block::new_oriented_installs_the_bank"],
-      "supersedes": "4 duplicated `oriented_conv_init` copies in examples (removed)",
-      "superseded_by": null,
-      "default": false,
-      "guard_for_finding": "F-ENT-2"
-    },
-    {
-      "name": "global_entropy_pool",
-      "purpose": "Globally rotation-invariant top: per-channel response-weighted spatial covariance -> [mean, trace, eigen-entropy Hs] (invariant, arrangement-sensitive) + principal-axis angle (equivariant pose readout).",
-      "owning_module": "src/ops/global_entropy_pool.rs",
-      "symbols": ["global_entropy_pool_forward", "global_entropy_pool_backward", "GlobalEntropyPoolOut", "GlobalEntropyPoolOut::principal_angle", "GlobalEntropyPoolOut::mass", "FEATS_PER_CHANNEL"],
-      "version": "1.0",
-      "status": "CANONICAL",
-      "source_experiment": "neocognitron entropy-top (user hypothesis confirmed)",
-      "evidence_paths": ["reports/2026-07-14-neocognitron-entropy-top.md", "reports/figures/neocognitron-entropy.png"],
-      "supported_tasks": ["global-rotation-invariant recognition", "equivariant pose (orientation) readout", "real-time (~3300 updates/s) closed-loop"],
-      "observation_schema": "resp: (K, H, W)",
-      "output_schema": "feat: (K*3) invariant [mean,T,Hs]; principal_angle(c) equivariant",
-      "dependencies": [],
-      "known_limitations": ["needs an ORIENTED S-cell upstream (cold-start guard F-ENT-2)", "validated on controlled 2-shape task; not scaled to clutter"],
-      "canonical_tests": ["global_entropy_pool::backward_matches_fd", "global_entropy_pool::entropy_is_rotation_invariant", "global_entropy_pool::bar_has_lower_entropy_than_corner", "global_entropy_pool::principal_angle_tracks_bar_orientation"],
-      "supersedes": "channel-mean top (arrangement-blind; F-N3-2)",
-      "superseded_by": null,
-      "default": true,
-      "note": "Recommended top for the rotation-invariant recognition path (mean-top is arrangement-blind, held-out AUROC ~chance)."
-    },
-    {
-      "name": "soft_argmax",
-      "purpose": "Differentiable keypoint head (integral pose regression / DSNT).",
-      "owning_module": "src/ops/soft_argmax.rs",
-      "symbols": ["soft_argmax_forward", "soft_argmax_backward", "SoftArgmaxOut"],
-      "version": "1.0",
-      "status": "CANONICAL",
-      "source_experiment": "SBSH pose P0/P1; reused P2/P3/P4",
-      "evidence_paths": ["reports/2026-07-13-sbsh-pose-p0.md"],
-      "supported_tasks": ["keypoint localization from heatmaps"],
-      "observation_schema": "heat: (J, G, G)",
-      "output_schema": "coord: (J, 2)",
-      "dependencies": [],
-      "known_limitations": [],
-      "canonical_tests": ["soft_argmax::backward_matches_fd", "soft_argmax::sharp_peak_recovers_argmax", "soft_argmax::flat_gives_centroid", "soft_argmax::translation_equivariant"],
-      "supersedes": null,
-      "superseded_by": null,
-      "default": true
-    },
-    {
-      "name": "auroc",
-      "purpose": "Area under ROC (Mann-Whitney U) — canonical binary-eval utility.",
-      "owning_module": "src/metrics.rs",
-      "symbols": ["auroc"],
-      "version": "1.0",
-      "status": "CANONICAL",
-      "source_experiment": "consolidated 2026-07-15 from ~7 duplicated example copies",
-      "evidence_paths": ["reports/framework/assimilations/neocognitron-arc.md"],
-      "supported_tasks": ["any binary classification / detection eval"],
-      "observation_schema": "scores: &[f32], labels: &[u8]",
-      "output_schema": "f64 AUROC (0.5 for degenerate single-class)",
-      "dependencies": [],
-      "known_limitations": ["binary only"],
-      "canonical_tests": ["metrics::auroc_tests::perfect_and_chance_and_degenerate"],
-      "supersedes": "duplicated `fn auroc` in neocognitron_deep/entropy/aniso (removed); remaining copies in cpml_signed_link/signed_link/cr_edge_encoder flagged for consolidation",
-      "superseded_by": null,
-      "default": true
-    },
-    {
-      "name": "skeleton_hg_refine (NOT YET EXTRACTED)",
-      "purpose": "Residual signed hg_conv refinement of predicted joint coords over a skeleton graph (cycles/signs/scale + shared elin).",
-      "owning_module": "examples/pose_{backbone,symmetry,loop}.rs (private closures — duplicated x3)",
-      "symbols": ["`refine` closure (per driver)"],
-      "version": "0.1",
-      "status": "MECHANISM_DEMO",
-      "source_experiment": "SBSH pose P3 (win) / P4 (limit)",
-      "evidence_paths": ["reports/2026-07-14-sbsh-pose-p3-skeleton-win.md", "reports/2026-07-14-sbsh-pose-p4-closed-loop.md"],
-      "supported_tasks": ["structural coord refinement where recovery is a single-neighbour translation (P3: 2.6 vs 6.9px)"],
-      "observation_schema": "coord: (J,2) + skeleton (cycles, signs, scale) + LinearLayer elin",
-      "output_schema": "coord': (J,2)",
-      "dependencies": ["hg_message", "linear"],
-      "known_limitations": ["shared elin expresses neighbour-average / single-neighbour-translation ONLY; CANNOT express asymmetric affine loop closure (P4 HURTS: 10.7 vs 7.3px, F-P4-1)"],
-      "canonical_tests": [],
-      "supersedes": null,
-      "superseded_by": null,
-      "default": false,
-      "extraction_blocked_reason": "Not yet canonical: P4 measured that the shared-elin form is wrong for closed loops. The path to CANONICAL is the PER-EDGE TRANSFORM op (each hyperedge owns its map). Extract to a `SkeletonRefine` framework component ONCE the per-edge transform lands, so the canonical version is the correct one, not the limited one."
-    },
-    {
-      "name": "EvolventHead",
-      "purpose": "Incremental/online (evolvent) MULTI-OUTPUT readout — exact forgetting recursive-least-squares over a fixed feature basis; C=1 regression, C=n_classes one-hot -> argmax classification (precision P SHARED across outputs, step O(d^2 + d*C)); per-sample closed-form, NO backward sweep; tracks drift via lambda; covariance-windup guard on by default.",
-      "owning_module": "src/online.rs",
-      "symbols": ["EvolventHead", "EvolventHead::new (d,c,ridge,lambda)", "EvolventHead::with_trace_cap", "EvolventHead::predict", "EvolventHead::predict_class", "EvolventHead::update", "EvolventHead::n_outputs"],
-      "version": "2.0",
-      "status": "DEPLOYABLE",
-      "source_experiment": "evolvent E0 (streaming) + E1 (static benchmark, 50 seeds, kato15)",
-      "evidence_paths": ["reports/2026-07-15-evolvent-e1-static-benchmark.md", "reports/figures/evolvent-bench.png", "reports/2026-07-15-evolvent-e0-stream.md"],
-      "supported_tasks": ["static supervised regression AND classification (one-pass, no tuning)", "online linear-in-features readout", "non-stationary tracking (drift, with caveats)"],
-      "observation_schema": "phi: &[f32] (d features), y: &[f32] (C targets; one-hot for classification)",
-      "output_schema": "predict -> Vec<f32> (C); predict_class -> argmax; update -> per-output residuals; verified vs batch ridge",
-      "dependencies": [],
-      "known_limitations": ["O(d^2) per update (win is SAMPLE efficiency / one-pass / no-tuning, not per-step FLOPs)", "long-drift STREAMING is windup-limited (F-EVO-3); needs directional forgetting", "linear-in-features (readout only); MLP still edges it where learned features matter (iris, california)"],
-      "canonical_tests": ["online::converges_to_batch_ridge", "online::one_hot_classifies_blobs", "online::tracks_a_drift", "online::windup_guard_keeps_it_bounded"],
-      "supersedes": null,
-      "superseded_by": null,
-      "default": false,
-      "note": "DEPLOYABLE for STATIC supervised readouts (F-EVO-4, 50 seeds fixed-RNG: COMPETITIVE with 200-epoch MLP -- wins 2 loses 2 ties 2 -- beats SGD 6/6, 1-pass no-tuning). Streaming/drift still EXPERIMENTAL (F-EVO-3)."
-    },
-    {
-      "name": "BlockEvolventHead",
-      "purpose": "Block-structured (hyperedge-clique) precision evolvent -- the alternative to the dense O(d^2) PAIRWISE precision. Contiguous feature blocks (one per hyperedge), block-diagonal precision (small b_e x b_e per block) with a SHARED residual/denominator; step is O(sum b_e^2) = O(d*w). Keeps higher-order interactions (the block features can be k-way) at a fraction of the cost.",
-      "owning_module": "src/online.rs",
-      "symbols": ["BlockEvolventHead", "BlockEvolventHead::new (block_sizes,ridge,lambda)", "predict", "update", "dim", "precision_nnz"],
-      "version": "1.0",
-      "status": "EXPERIMENTAL",
-      "source_experiment": "evolvent E3 (examples/evolvent_hypergraph.rs)",
-      "evidence_paths": ["reports/2026-07-15-evolvent-e3-hypergraph-precision.md", "reports/figures/evolvent-hypergraph.png"],
-      "supported_tasks": ["additive-over-hyperedges regression/classification with bounded-width structure", "higher-order (k-way) feature interactions at O(d*w)"],
-      "observation_schema": "phi: &[f32] grouped into contiguous blocks (block_sizes), y: f32",
-      "output_schema": "predict -> f32; update -> prequential residual; single block == dense EvolventHead exactly",
-      "dependencies": [],
-      "known_limitations": ["drops cross-block (separator) coupling -> approximate for non-additive cross-hyperedge structure", "contiguous blocks only (assumes features grouped by hyperedge)", "the higher-order term must be an explicit feature"],
-      "canonical_tests": ["online::single_block_equals_dense", "online::block_matches_dense_when_separable"],
-      "supersedes": null,
-      "superseded_by": null,
-      "default": false,
-      "note": "F-EVO-5: matches dense-hyperedge R2 0.997 at 20x less precision storage; pairwise precision provably cannot represent the 3-way term. Path to CANONICAL: junction-tree (block-tridiagonal) form + update through hg_message + SBSH width certificate. E4 (InfoEvolventHead) is the EXACT version of this path."
-    },
-    {
-      "name": "InfoEvolventHead",
-      "purpose": "Information-form (junction-tree) evolvent precision -- the EXACT sparse alternative to the dense O(d^2) pairwise P. Accumulates J = Phi^T Phi + ridge*I and b = Phi^T y (each update J += phi phi^T touches only phi's support); solves J w = b. EXACT (= dense RLS, keeps ALL cross-hyperedge coupling) but J is SPARSE for local (bounded-width) measurements -> storage O(nnz(J)) = O(d*w). This is the hypergraph<->tensor conjugation: J IS the signed-hypergraph incidence made numerical (nonzero J[i,k] == GMRF conditional dependence edge).",
-      "owning_module": "src/online.rs",
-      "symbols": ["InfoEvolventHead", "InfoEvolventHead::new (d,ridge)", "InfoEvolventHead::update", "InfoEvolventHead::nnz", "InfoEvolventHead::solve", "InfoEvolventHead::predict"],
-      "version": "1.0",
-      "status": "DEPLOYABLE",
-      "source_experiment": "evolvent E4 (examples/evolvent_junction.rs, kato15 5 seeds x 4 n)",
-      "evidence_paths": ["reports/2026-07-15-evolvent-e4-junction-tree.md", "reports/figures/evolvent-junction.png", "reports/figures/evolvent_e4_results.json"],
-      "supported_tasks": ["exact online least-squares readout with LOCAL/bounded-width measurements", "GMRF / junction-tree precision at O(d*w) storage", "the exact form of the E3 hyperedge-clique precision (keeps separator coupling BlockEvolventHead drops)"],
-      "observation_schema": "phi: &[f32] (d features, locally supported), y: f32",
-      "output_schema": "solve -> Vec<f32> w (== dense RLS solution exactly); predict(phi,w) -> f32; nnz -> info-matrix sparsity",
-      "dependencies": [],
-      "known_limitations": ["sparsity is a property of the DATA (local measurements) not the head: dense/global measurements fill J -> no advantage over dense O(d^2)", "current solve is dense Gaussian elimination O(d^3); the O(d*w^2) block-tridiagonal Cholesky that exploits nnz is NOT yet implemented (nnz() accounts the sparsity a sparse solve would use)", "single-output (regression); linear-in-features (higher-order terms must be explicit features)", "measures STORAGE + EXACTNESS win, not yet a solve-TIME win"],
-      "canonical_tests": ["online::info_form_equals_dense_and_is_sparse"],
-      "supersedes": null,
-      "superseded_by": null,
-      "default": false,
-      "note": "F-EVO-6: INFO R2 == DENSE R2 exactly at every (n,seed); info-matrix storage 21.6%->2.8% of dense as n 48->384 (O(d*w) vs O(d^2), halves per doubling). Classical primitive (information filter / Lauritzen-Spiegelhalter junction tree) -- framework value is the exact+sparse evolvent head + hypergraph conjugation, NOT algorithmic novelty. Path to a solve-time win: block-tridiagonal Cholesky + SBSH width certificate. DELIVERED in E5 (JunctionTreeCholesky)."
-    },
-    {
-      "name": "JunctionTreeCholesky",
-      "purpose": "Multifrontal (clique-tree) Cholesky over a bounded-width SPD information matrix -- the SPARSE SOLVE for the E4 information form. The hypergraph clique tree drives the factorization: each clique is a hyperedge (tensor block), leaves->root elimination sends the Schur complement over each separator up to the parent (the message U = F_SS - F_SR F_RR^-1 F_RS = a contraction over eliminated interior onto the separator boundary, structurally the hg_message edge->node incidence contraction); root->leaves back-substitution. EXACT (= dense Cholesky of the assembled J) at storage O(sum|C|^2)=O(d*w^2) and factorization O(sum|C|^3)=O(d*w^3), vs dense O(d^2)/O(d^3). An online update touches ONLY its clique's path to the root (proven) -> incremental re-fire O(log N * w^3).",
-      "owning_module": "src/junction_tree.rs",
-      "symbols": ["JunctionTreeCholesky", "JunctionTreeCholesky::new (cliques,ridge,d)", "update", "solve", "solve_block_diagonal", "factor_storage", "factor_flops", "ancestors_inclusive", "factor_checksum", "Clique", "balanced_binary_tree"],
-      "version": "1.0",
-      "status": "DEPRECATED",
-      "deprecated_reason": "Cholesky/junction-tree was the exact-solve devolution -- user: 'no need for Cholesky' (2026-07-16). Kept for provenance; do NOT build on it.",
-      "source_experiment": "evolvent E5 (examples/evolvent_multifrontal.rs, kato15 5 seeds x 4 depths)",
-      "evidence_paths": ["reports/2026-07-15-evolvent-e5-multifrontal.md", "reports/figures/evolvent-multifrontal.png", "reports/figures/evolvent_e5_results.json"],
-      "supported_tasks": ["exact sparse solve of a bounded-width (junction-tree) SPD precision", "incremental/online least-squares over a clique tree with log-depth locality", "the solve-time realization of InfoEvolventHead", "measuring what cross-clique (separator) coupling is worth (solve_block_diagonal baseline)"],
-      "observation_schema": "cliques: Vec<Clique{vars residual-first, n_res, parent}> (valid clique tree, RIP, separator subset of parent, SPD J); update(clique, phi_local, y)",
-      "output_schema": "solve -> Vec<f32> x (== dense Cholesky of assembled J exactly); solve_block_diagonal -> separator-dropping baseline; factor_storage/factor_flops -> O(d*w^2)/O(d*w^3) accounting; ancestors_inclusive -> online-update locality",
-      "dependencies": [],
-      "known_limitations": ["MEASURED wall-clock speedup (criterion) is 16.7x->682x over d 105->889 AFTER the contiguous-storage rewrite (E10/F-EVO-12); was 5.9x-255x before (E9/F-EVO-11). Flop/measured gap closed 5.0x->1.86x (large d); at d=105 essentially AT the flop ceiling (1.08x). Cite 682x as deployable.", "the 682x is vs a Gaussian-elim dense baseline (~2x flops of pure Cholesky) -> layout-independent number is the 2.7x self-speedup from the rewrite; a Cholesky baseline would show ~2x more residual", "remaining headroom below the ceiling: frontal-extraction + triangular solves not blocked/SIMD-tuned (not pursued)", "incremental re-fire is PROVEN-local but the optimized refactorize_path (recompute only the path) is NOT built (E5 measures the locality that justifies it)", "requires a valid clique tree (RIP + bounded width); a measurement coupling non-adjacent cliques breaks the tree -- SBSH width certificate is the guarantee; representability needs width >= interaction order (E8/F-EVO-10)", "single-output, linear-in-features", "dense per-clique frontals (fine at bounded width)"],
-      "canonical_tests": ["junction_tree::single_clique_equals_dense", "junction_tree::branching_tree_equals_dense_at_bounded_width", "junction_tree::online_update_only_perturbs_path_to_root"],
-      "supersedes": null,
-      "superseded_by": null,
-      "default": false,
-      "note": "F-EVO-7: MF R2 == DENSE R2 at every (depth,seed); factorization FLOP speedup 18x->1270x as d 105->889 (grows (d/w)^2); online update perturbs EXACTLY the path-to-root (log2(N) cliques). Completes the precision family: dense O(d^2)/O(d^3) -> block O(d*w)/approx -> info O(d*w)/exact-dense-solve -> multifrontal O(d*w^2)/O(d*w^3)/exact. Classical method (Duff-Reid multifrontal); framework value = hypergraph clique tree AS the assembly tree, separators AS messages. WALL-CLOCK (criterion): E9/F-EVO-11 measured 5.9x-255x (Vec-per-clique, ~5x below flops); E10/F-EVO-12 CONTIGUOUS-STORAGE rewrite -> 16.7x-682x (2.7x faster solve, same exact answer), flop/measured gap closed 5x->1.86x. 682x is the deployable number (vs a Gaussian dense baseline)."
-    }
-  ]
+ "schema_version": "1.0",
+ "updated": "2026-07-16",
+ "framework": "nagare / holonomy_learn (closed-form, FD-verified, no autograd)",
+ "note": "Query this registry before creating a new component (anti-bloat rule). All backwards hand-derived and FD-verified; no autograd. CLASSIFICATION (user-directed 2026-07-16): (a) SPINE = the real deep-learning stack (ChebyCR -> Clifford-FIR -> G\u00f6mb -> HSiKAN -> G\u00f6mb-Soma, + alpha-mix, + geometric rotors) [system map claude.ai/code/artifact/cca528aa]; (b) KEEP/USEFUL = EvolventHead family (closed-form one-pass online learner -- 'evolvent head is fine'); (c) DROP = JunctionTreeCholesky (Cholesky 'no need'); (d) EVALUATE = MeshTensor, RotorMeshNet (mechanism-demos; useful KERNELS cayley_rotor/rotor_holonomy already in the spine -- keep for provenance, low priority). Do NOT reflexively trash: check usefulness first.",
+ "components": [
+  {
+   "name": "ChebyCR (Chebyshev-Catmull-Rom)",
+   "purpose": "SPINE / basis. The nonlinearity every spline layer reuses: per-channel Catmull-Rom on [-1,1] with Chebyshev-generated control points (train-CR / deploy-Chebyshev). Explicit closed-form gradient buffers.",
+   "owning_module": "src/ops/catmull_rom.rs",
+   "symbols": [
+    "chebyshev_cr_forward",
+    "chebyshev_cr_backward",
+    "catmull_rom_forward",
+    "catmull_rom_backward",
+    "chebyshev_control_points",
+    "chebyshev_deploy_forward"
+   ],
+   "version": "1.0",
+   "status": "CANONICAL",
+   "layer": "spine",
+   "source_experiment": "core op (pre-existing); the KAN spline nonlinearity repeatedly found to be THE lever (topology inert) -- see hsikan-mlp-hybrid / cuboid-tip",
+   "evidence_paths": [],
+   "dependencies": [],
+   "supersedes": null,
+   "superseded_by": null,
+   "default": true,
+   "note": "Reused by HSiKAN (inner+outer splines) and KAN. Standardise inputs to [-1,1] upstream or the spline saturates."
+  },
+  {
+   "name": "Clifford-FIR",
+   "purpose": "SPINE / signed aggregation. Entry operator: signed-cycle pool + per-vertex features -> per-cycle features. Backward via the Clifford derivative on Cl(0,1)\u2245\u2102, one multivector (a,b) unifying the \u03c3=\u00b11 sign branches.",
+   "owning_module": "src/ops/clifford_fir.rs (from hymeko_graph::spine)",
+   "symbols": [
+    "clifford_fir_forward",
+    "clifford_fir_backward",
+    "CliffordFIR"
+   ],
+   "version": "1.0",
+   "status": "CANONICAL",
+   "layer": "spine",
+   "source_experiment": "the foundational entry operator",
+   "evidence_paths": [
+    "reports/2026-07-16-real-spine-signed-link.md"
+   ],
+   "dependencies": [],
+   "supersedes": null,
+   "superseded_by": null,
+   "default": true
+  },
+  {
+   "name": "G\u00f6mb (gomb_shell)",
+   "purpose": "SPINE / filter-bank shell. M parallel Clifford-FIR banks over the same cycle pool, concatenated -- the 'V1 volume'. Pure orchestration over Clifford-FIR; no new derivative.",
+   "owning_module": "src/ops/gomb_shell.rs",
+   "symbols": [
+    "gomb_outer_forward",
+    "gomb_outer_backward"
+   ],
+   "version": "1.0",
+   "status": "CANONICAL",
+   "layer": "spine",
+   "source_experiment": "OuterFIRShell port",
+   "evidence_paths": [
+    "reports/2026-07-16-real-spine-signed-link.md"
+   ],
+   "dependencies": [
+    "clifford_fir"
+   ],
+   "supersedes": null,
+   "superseded_by": null,
+   "default": true
+  },
+  {
+   "name": "HSiKAN (Highway-SignedKAN)",
+   "purpose": "SPINE / the learnable deep layer. Sign-conditioned aggregation over each signed hyperedge, Schmidhuber highway gate, per-sign mean, inner + diagonal-outer Chebyshev splines. Hand-derived closed-form gradients.",
+   "owning_module": "src/ops/hsikan.rs",
+   "symbols": [
+    "hsikan_forward",
+    "hsikan_forward_chunked",
+    "hsikan_backward",
+    "HsikanConfig",
+    "HsikanParams",
+    "HsikanEdges",
+    "SplineKind"
+   ],
+   "version": "1.1",
+   "status": "CANONICAL",
+   "layer": "spine",
+   "source_experiment": "HSiKAN structural-leverage arc (H1 scaling + H2 causal SUPPORTED: scramble + DeepSets double-dissociation, 3.7->61x with chain length); signed-link real-spine; v1.1 edge-chunk rayon parallelization",
+   "evidence_paths": [
+    "reports/2026-07-16-real-spine-signed-link.md",
+    "reports/2026-07-16-hsikan-parallel-vs-pytorch.md",
+    "reports/figures/hsikan-bench.png"
+   ],
+   "dependencies": [
+    "catmull_rom (ChebyCR)",
+    "rayon"
+   ],
+   "supersedes": null,
+   "superseded_by": null,
+   "default": true,
+   "note": "The KAN spline nonlinearity is the lever; the signed-hyperedge topology is often INERT (hsikan-mlp-hybrid audit). v1.1 (2026-07-16): forward/backward partition the T hyperedges into min(threads,T) contiguous chunks on the rayon pool (each edge independent; grad_x + param grads summed once). Scales 7.3x at 16 threads, checksum-identical to serial (chunk_parallel_matches_serial gate). Set RAYON_NUM_THREADS=1 to force serial. Public API + cache token unchanged. See F-HSIKAN-PAR."
+  },
+  {
+   "name": "G\u00f6mb-Soma cascade",
+   "purpose": "SPINE / the deep net. Three-shell cascade x0 -> G\u00f6mb (Clifford-FIR banks) -> HSiKAN -> inner CPML tiers -> node emb -> edge head. Driven as a signed-link predictor.",
+   "owning_module": "examples/cpml_signed_link.rs (composition over the spine ops)",
+   "symbols": [
+    "(composition: gomb_outer_forward + hsikan_forward + tier cores)"
+   ],
+   "version": "1.0",
+   "status": "CANONICAL",
+   "layer": "spine",
+   "source_experiment": "signed-link on SNAP bitcoin-alpha (2 seeds + sign-shuffle): task IS structural (~0.87-0.89, shuffle->chance); cascade competitive with the inner core once trained enough (0.847@250it undertrained -> 0.875@1000it)",
+   "evidence_paths": [
+    "reports/2026-07-16-real-spine-signed-link.md"
+   ],
+   "dependencies": [
+    "gomb_shell",
+    "hsikan",
+    "clifford_fir",
+    "catmull_rom"
+   ],
+   "supersedes": null,
+   "superseded_by": null,
+   "default": true,
+   "note": "CORRECTION on record: an earlier 'cascade HURTS -0.034' claim was an UNDERTRAINING artifact of the matched-250-iter budget; at 1000 iters it lands ~0.875, level with the inner core."
+  },
+  {
+   "name": "alpha-mix projection (P-graph)",
+   "purpose": "SPINE / subspace mixing. y = alpha*P(x) + (1-alpha)*x, P = oblique-safe projector onto span(U); closed-form symmetric backward. The P-graph / holonomy-basis warm-start mixing (PROJECTION_ALPHA=0.72).",
+   "owning_module": "src/ops/project_alpha_mix.rs (via src/projection.rs::apply_alpha_mix)",
+   "symbols": [
+    "project_alpha_mix_forward",
+    "project_alpha_mix_backward",
+    "ProjectAlphaMixShape",
+    "ProjectionBasis::apply_alpha_mix"
+   ],
+   "version": "1.0",
+   "status": "CANONICAL",
+   "layer": "spine",
+   "source_experiment": "learner warm-start projection",
+   "evidence_paths": [],
+   "dependencies": [],
+   "supersedes": null,
+   "superseded_by": null,
+   "default": true
+  },
+  {
+   "name": "geometric ops (Cayley rotor / rotor holonomy / FSR mixer)",
+   "purpose": "SPINE / geometric. Cayley bivector->unit quaternion (Spin(3)=SU(2), closed-form); rotor_holonomy = ordered non-commutative rotor product around a cycle; FSR mixer = linear + Cayley rotor + signed scatter sequence mixer.",
+   "owning_module": "src/ops/{cayley_rotor,rotor_holonomy,fsr_mixer}.rs",
+   "symbols": [
+    "cayley_rotor_forward/backward",
+    "rotor_holonomy_forward/backward",
+    "FsrMixer"
+   ],
+   "version": "1.0",
+   "status": "CANONICAL",
+   "layer": "spine",
+   "source_experiment": "geometric substrate (Clifford/quaternion holonomy)",
+   "evidence_paths": [],
+   "dependencies": [],
+   "supersedes": null,
+   "superseded_by": null,
+   "default": true
+  },
+  {
+   "name": "KAN (tabular)",
+   "purpose": "SPINE / baseline. Generic Kolmogorov-Arnold layer over Chebyshev-CR splines, no signed structure. The plain-KAN tabular baseline.",
+   "owning_module": "src/ops/kan.rs",
+   "symbols": [
+    "kan_forward",
+    "kan_backward",
+    "KanConfig"
+   ],
+   "version": "1.0",
+   "status": "CANONICAL",
+   "layer": "spine",
+   "source_experiment": "tabular baseline",
+   "evidence_paths": [],
+   "dependencies": [
+    "catmull_rom"
+   ],
+   "supersedes": null,
+   "superseded_by": null,
+   "default": true
+  },
+  {
+   "name": "MeshTensor / MeshTopology",
+   "purpose": "The hypergraph latent space AS a mesh tensor (contraction, NOT inversion). The signed-hypergraph incidence (cycles/signs/scale) is the MESH (MeshTopology = the operator side); the latent is a TENSOR FIELD on it -- a d-vector per node and per hyperedge (MeshTensor = the state side). Computation is CONTRACTION along the mesh (node<->edge), delegating to hg_message. The on-mission hypergraph<->tensor conjugation and the substrate a holonomy embedding (HSiKAN / Gomb-Soma) + holonomy feedback act on. Replaces the flat-vector/precision-matrix mis-framing of the (frozen) evolvent line.",
+   "owning_module": "src/mesh_tensor.rs",
+   "symbols": [
+    "MeshTopology",
+    "MeshTopology::new",
+    "MeshTopology::node_to_edge",
+    "MeshTopology::edge_to_node",
+    "MeshTopology::conv_round",
+    "MeshTopology::conv_round_backward",
+    "MeshTensor",
+    "MeshTensor::on_nodes",
+    "MeshTensor::lift_to_edges",
+    "MeshTensor::project_to_nodes",
+    "MeshTensor::conv_round"
+   ],
+   "version": "0.1",
+   "status": "CANONICAL",
+   "source_experiment": "hypergraph-latent-as-mesh-tensor (2026-07-16, user directive: 'use hypergraph latent space as a mesh tensor instead')",
+   "evidence_paths": [],
+   "supported_tasks": [
+    "hypergraph latent as a mesh tensor field (contraction substrate)",
+    "signed-HGNN conv round node->edge->node with FD-verified backward",
+    "the field HSiKAN / Gomb-Soma / holonomy feedback operate on"
+   ],
+   "observation_schema": "MeshTopology(cycles (n_edges,k), signs, scale (n_nodes), n_nodes, k); MeshTensor node field (n_nodes,d)",
+   "output_schema": "node/edge tensor fields (contracted); conv_round -> (n_nodes,d); conv_round_backward -> grad on input nodes (composed hg_message backwards, FD-verified)",
+   "dependencies": [
+    "hg_message"
+   ],
+   "known_limitations": [
+    "thin typed wrapper over hg_message contraction -- the contraction is linear (signed mean / signed sum); nonlinear per-edge maps (HSiKAN/Gomb-Soma) + the holonomy-feedback learning rule are the NEXT layers, not yet wired",
+    "topology is fixed structural geometry (no gradient through it)"
+   ],
+   "canonical_tests": [
+    "mesh_tensor::conv_round_equals_manual_hg_composition",
+    "mesh_tensor::conv_round_backward_matches_fd",
+    "mesh_tensor::isolated_node_stays_zero_after_projection",
+    "mesh_tensor::topology_rejects_out_of_range_corner"
+   ],
+   "supersedes": "the flat-vector-into-RLS / precision-matrix latent framing (evolvent line, frozen)",
+   "superseded_by": null,
+   "default": true,
+   "note": "ON-MISSION re-anchor after the evolvent/Cholesky devolution (see feedback-nagare-closed-form-thesis-not-gaps): latent = mesh tensor contracted, no normal equations. Next: nonlinear per-edge map (HSiKAN/Gomb-Soma) on the edge field + entropy/holonomy feedback as the learning rule."
+  },
+  {
+   "name": "RotorMeshNet",
+   "purpose": "DEEP holonomy representation over a simplicial/hypergraph mesh -- the compositional auto-holonomy, PROVEN to compose through depth with a closed-form (no-autograd) backward. Each layer = ROTATE (learned per-node Cayley bivector -> unit quaternion rotor, transports the node 3-vector field; the bivectors ARE the learned representation) + MIX (one MeshTopology::conv_round, node->edge->node, spreads the transported field across the simplicial neighborhood). Rotate+mix is genuinely deep (pure SO(3) rotations collapse; the mesh mix between them re-combines). The end-to-end backward composes the two FD-verified atoms (cayley_rotor + conv_round); the per-layer grad_v = inverse-rotor (quaternion-conjugate) transport of the upstream gradient = the ADJOINT holonomy transport that replaces backprop's tape.",
+   "owning_module": "src/holonomy_net.rs",
+   "symbols": [
+    "RotorMeshNet",
+    "RotorMeshNet::new",
+    "RotorMeshNet::depth",
+    "RotorMeshNet::bivecs_mut",
+    "RotorMeshNet::forward",
+    "RotorMeshNet::backward",
+    "RotorMeshCache"
+   ],
+   "version": "0.1",
+   "status": "MECHANISM_DEMO",
+   "source_experiment": "deep-holonomy-representation step 1 (2026-07-16, user directive 'one step to deep-representation learning via Clifford/quaternion auto-holonomy + hypergraph->simplices')",
+   "evidence_paths": [
+    "reports/2026-07-16-deep-holonomy-net-mechanism.md"
+   ],
+   "supported_tasks": [
+    "deep learnable holonomy embedding over a mesh (rotate+mix stack)",
+    "compositional auto-holonomy with closed-form FD-verified backward through depth",
+    "substrate for entropy/holonomy-feedback deep representation learning"
+   ],
+   "observation_schema": "MeshTopology + per-layer bivecs (n_nodes,3); forward(v0 (n_nodes,3))",
+   "output_schema": "forward -> final field (n_nodes,3) + cache; backward(cache, grad_out) -> (per-layer grad_bivecs, grad_v0) -- composed closed-form, FD-verified end-to-end",
+   "dependencies": [
+    "cayley_rotor",
+    "mesh_tensor (MeshTopology::conv_round)"
+   ],
+   "known_limitations": [
+    "MECHANISM proven (deep closed-form backward FD-verified); the LEARNING RULE is NOT wired yet -- descending this gradient is iterative GD (a stepping stone), the on-thesis instantaneous ENTROPY/holonomy feedback is the next step",
+    "field width fixed d=3 (rotor on a 3-vector/node)",
+    "the DISCRIMINATING experiment (entropy-top beats mean-top THROUGH DEPTH = learns useful deep features) is NOT yet run -- that is the empirical crux of 'one step'"
+   ],
+   "canonical_tests": [
+    "holonomy_net::deep_backward_matches_fd",
+    "holonomy_net::depth_collapses_without_the_mesh_mix_but_not_with_it"
+   ],
+   "supersedes": null,
+   "superseded_by": null,
+   "default": true,
+   "note": "Proves the MECHANISM half of 'one step to deep-representation learning' (feedback survives rotor composition through depth, closed-form). EMPIRICAL half now DEMONSTRATED (F-HOLO-1): deep+entropy double dissociation (deep+entropy 0.759 vs remove-depth 0.561 / remove-entropy 0.542 / chance 0.544) -- the net LEARNS useful features THROUGH DEPTH read by entropy not mean. Trained by GD on the closed-form gradient (stepping stone); the INSTANTANEOUS entropy-feedback rule is the remaining gap. See examples/holonomy_deep_dissociation.rs."
+  },
+  {
+   "name": "conv2d",
+   "purpose": "Learned 2-D convolution \u2014 the Neocognitron S-cell (spatial feature detector).",
+   "owning_module": "src/ops/conv2d.rs",
+   "symbols": [
+    "conv2d_forward",
+    "conv2d_backward",
+    "ConvLayer",
+    "ConvShape"
+   ],
+   "version": "1.0",
+   "status": "CANONICAL",
+   "source_experiment": "neocognitron N0",
+   "evidence_paths": [
+    "reports/2026-07-13-neocognitron-n0-conv2d.md"
+   ],
+   "supported_tasks": [
+    "spatial feature extraction",
+    "keypoint backbone",
+    "S-cell of ScBlock"
+   ],
+   "observation_schema": "x: (c_in, H, W) flat f32",
+   "output_schema": "y: (c_out, H', W') flat f32; grads (grad_x, ConvLayer)",
+   "dependencies": [],
+   "known_limitations": [
+    "naive (no im2col); fine at G<=32, revisit for large maps"
+   ],
+   "canonical_tests": [
+    "conv2d::grads_match_fd",
+    "conv2d::identity_kernel_is_input",
+    "conv2d::shift_equivariance",
+    "tests/conv2d_learn.rs"
+   ],
+   "supersedes": null,
+   "superseded_by": null,
+   "default": true
+  },
+  {
+   "name": "group_pool",
+   "purpose": "Dihedral group-orbit attention pool \u2014 the rotation-equivariant Neocognitron C-cell (invariant resp + equivariant orient).",
+   "owning_module": "src/ops/group_pool.rs",
+   "symbols": [
+    "group_pool_forward",
+    "group_pool_backward",
+    "GroupPoolOut"
+   ],
+   "version": "1.0",
+   "status": "CANONICAL",
+   "source_experiment": "neocognitron N1",
+   "evidence_paths": [
+    "reports/2026-07-13-neocognitron-n1-ccell.md"
+   ],
+   "supported_tasks": [
+    "LOCAL per-feature rotation-invariance"
+   ],
+   "observation_schema": "v: (n_vec, 3) oriented vectors; filt: (3,)",
+   "output_schema": "resp: (n_vec,) invariant; orient: (n_vec,) equivariant",
+   "dependencies": [
+    "dihedral"
+   ],
+   "known_limitations": [
+    "gives LOCAL orientation-invariance, NOT global rotation-invariance (see F-N3-2)",
+    "discrete C_n; between-group angles only approx"
+   ],
+   "canonical_tests": [
+    "group_pool::backward_matches_fd",
+    "group_pool::response_is_group_invariant",
+    "group_pool::small_tau_approaches_group_max"
+   ],
+   "supersedes": null,
+   "superseded_by": null,
+   "default": true
+  },
+  {
+   "name": "sc_block",
+   "purpose": "Stackable S/C block: conv S-cell (C_in->2K) -> bank of K oriented-unit group_pool C-cells -> K-channel invariant resp map. Output shape = next block input, so blocks stack.",
+   "owning_module": "src/ops/sc_block.rs",
+   "symbols": [
+    "ScBlock",
+    "sc_block_forward",
+    "sc_block_backward",
+    "ScBlockCache",
+    "ScBlockGrad"
+   ],
+   "version": "1.0",
+   "status": "CANONICAL",
+   "source_experiment": "neocognitron N3",
+   "evidence_paths": [
+    "reports/2026-07-14-neocognitron-n3-deep-stack.md"
+   ],
+   "supported_tasks": [
+    "rotation-tolerant spatial backbone",
+    "compositional feature hierarchy",
+    "keypoint backbone (pose P2/P3/P4)"
+   ],
+   "observation_schema": "x: (c_in, H, W)",
+   "output_schema": "resp: (K, H', W') invariant; composed backward FD-verified through both cells",
+   "dependencies": [
+    "conv2d",
+    "group_pool",
+    "dihedral"
+   ],
+   "known_limitations": [
+    "C-cell is LOAD-BEARING only in compositional / can't-fit regimes (F-N3-1); REDUNDANT under a learnable single block (F-N2b-1)"
+   ],
+   "canonical_tests": [
+    "sc_block::backward_matches_fd",
+    "sc_block::two_block_stack_backward_matches_fd",
+    "sc_block::c1_group_is_orientation_specific"
+   ],
+   "supersedes": null,
+   "superseded_by": null,
+   "default": true
+  },
+  {
+   "name": "oriented_sobel_bank / ScBlock::new_oriented",
+   "purpose": "Oriented Sobel S-cell warm-start (rotated gradient pair per unit). Canonical cold-start fix for a block feeding an entropy pool.",
+   "owning_module": "src/ops/sc_block.rs",
+   "symbols": [
+    "oriented_sobel_bank",
+    "ScBlock::new_oriented"
+   ],
+   "version": "1.0",
+   "status": "CANONICAL",
+   "source_experiment": "neocognitron entropy-top (assimilated 2026-07-15)",
+   "evidence_paths": [
+    "reports/2026-07-14-neocognitron-entropy-top.md",
+    "reports/framework/assimilations/neocognitron-arc.md"
+   ],
+   "supported_tasks": [
+    "any ScBlock (c_in=1, 3x3) that stalls from a random cold start"
+   ],
+   "observation_schema": "k: usize (units)",
+   "output_schema": "conv weights (2k,1,3,3) flat",
+   "dependencies": [],
+   "known_limitations": [
+    "c_in==1, 3x3 only",
+    "a prior, not a guarantee \u2014 conv stays learnable"
+   ],
+   "canonical_tests": [
+    "sc_block::oriented_bank_is_structured_not_isotropic",
+    "sc_block::new_oriented_installs_the_bank"
+   ],
+   "supersedes": "4 duplicated `oriented_conv_init` copies in examples (removed)",
+   "superseded_by": null,
+   "default": false,
+   "guard_for_finding": "F-ENT-2"
+  },
+  {
+   "name": "global_entropy_pool",
+   "purpose": "Globally rotation-invariant top: per-channel response-weighted spatial covariance -> [mean, trace, eigen-entropy Hs] (invariant, arrangement-sensitive) + principal-axis angle (equivariant pose readout).",
+   "owning_module": "src/ops/global_entropy_pool.rs",
+   "symbols": [
+    "global_entropy_pool_forward",
+    "global_entropy_pool_backward",
+    "GlobalEntropyPoolOut",
+    "GlobalEntropyPoolOut::principal_angle",
+    "GlobalEntropyPoolOut::mass",
+    "FEATS_PER_CHANNEL"
+   ],
+   "version": "1.0",
+   "status": "CANONICAL",
+   "source_experiment": "neocognitron entropy-top (user hypothesis confirmed)",
+   "evidence_paths": [
+    "reports/2026-07-14-neocognitron-entropy-top.md",
+    "reports/figures/neocognitron-entropy.png"
+   ],
+   "supported_tasks": [
+    "global-rotation-invariant recognition",
+    "equivariant pose (orientation) readout",
+    "real-time (~3300 updates/s) closed-loop"
+   ],
+   "observation_schema": "resp: (K, H, W)",
+   "output_schema": "feat: (K*3) invariant [mean,T,Hs]; principal_angle(c) equivariant",
+   "dependencies": [],
+   "known_limitations": [
+    "needs an ORIENTED S-cell upstream (cold-start guard F-ENT-2)",
+    "validated on controlled 2-shape task; not scaled to clutter"
+   ],
+   "canonical_tests": [
+    "global_entropy_pool::backward_matches_fd",
+    "global_entropy_pool::entropy_is_rotation_invariant",
+    "global_entropy_pool::bar_has_lower_entropy_than_corner",
+    "global_entropy_pool::principal_angle_tracks_bar_orientation"
+   ],
+   "supersedes": "channel-mean top (arrangement-blind; F-N3-2)",
+   "superseded_by": null,
+   "default": true,
+   "note": "Recommended top for the rotation-invariant recognition path (mean-top is arrangement-blind, held-out AUROC ~chance)."
+  },
+  {
+   "name": "soft_argmax",
+   "purpose": "Differentiable keypoint head (integral pose regression / DSNT).",
+   "owning_module": "src/ops/soft_argmax.rs",
+   "symbols": [
+    "soft_argmax_forward",
+    "soft_argmax_backward",
+    "SoftArgmaxOut"
+   ],
+   "version": "1.0",
+   "status": "CANONICAL",
+   "source_experiment": "SBSH pose P0/P1; reused P2/P3/P4",
+   "evidence_paths": [
+    "reports/2026-07-13-sbsh-pose-p0.md"
+   ],
+   "supported_tasks": [
+    "keypoint localization from heatmaps"
+   ],
+   "observation_schema": "heat: (J, G, G)",
+   "output_schema": "coord: (J, 2)",
+   "dependencies": [],
+   "known_limitations": [],
+   "canonical_tests": [
+    "soft_argmax::backward_matches_fd",
+    "soft_argmax::sharp_peak_recovers_argmax",
+    "soft_argmax::flat_gives_centroid",
+    "soft_argmax::translation_equivariant"
+   ],
+   "supersedes": null,
+   "superseded_by": null,
+   "default": true
+  },
+  {
+   "name": "auroc",
+   "purpose": "Area under ROC (Mann-Whitney U) \u2014 canonical binary-eval utility.",
+   "owning_module": "src/metrics.rs",
+   "symbols": [
+    "auroc"
+   ],
+   "version": "1.0",
+   "status": "CANONICAL",
+   "source_experiment": "consolidated 2026-07-15 from ~7 duplicated example copies",
+   "evidence_paths": [
+    "reports/framework/assimilations/neocognitron-arc.md"
+   ],
+   "supported_tasks": [
+    "any binary classification / detection eval"
+   ],
+   "observation_schema": "scores: &[f32], labels: &[u8]",
+   "output_schema": "f64 AUROC (0.5 for degenerate single-class)",
+   "dependencies": [],
+   "known_limitations": [
+    "binary only"
+   ],
+   "canonical_tests": [
+    "metrics::auroc_tests::perfect_and_chance_and_degenerate"
+   ],
+   "supersedes": "duplicated `fn auroc` in neocognitron_deep/entropy/aniso (removed); remaining copies in cpml_signed_link/signed_link/cr_edge_encoder flagged for consolidation",
+   "superseded_by": null,
+   "default": true
+  },
+  {
+   "name": "skeleton_hg_refine (NOT YET EXTRACTED)",
+   "purpose": "Residual signed hg_conv refinement of predicted joint coords over a skeleton graph (cycles/signs/scale + shared elin).",
+   "owning_module": "examples/pose_{backbone,symmetry,loop}.rs (private closures \u2014 duplicated x3)",
+   "symbols": [
+    "`refine` closure (per driver)"
+   ],
+   "version": "0.1",
+   "status": "MECHANISM_DEMO",
+   "source_experiment": "SBSH pose P3 (win) / P4 (limit)",
+   "evidence_paths": [
+    "reports/2026-07-14-sbsh-pose-p3-skeleton-win.md",
+    "reports/2026-07-14-sbsh-pose-p4-closed-loop.md"
+   ],
+   "supported_tasks": [
+    "structural coord refinement where recovery is a single-neighbour translation (P3: 2.6 vs 6.9px)"
+   ],
+   "observation_schema": "coord: (J,2) + skeleton (cycles, signs, scale) + LinearLayer elin",
+   "output_schema": "coord': (J,2)",
+   "dependencies": [
+    "hg_message",
+    "linear"
+   ],
+   "known_limitations": [
+    "shared elin expresses neighbour-average / single-neighbour-translation ONLY; CANNOT express asymmetric affine loop closure (P4 HURTS: 10.7 vs 7.3px, F-P4-1)"
+   ],
+   "canonical_tests": [],
+   "supersedes": null,
+   "superseded_by": null,
+   "default": false,
+   "extraction_blocked_reason": "Not yet canonical: P4 measured that the shared-elin form is wrong for closed loops. The path to CANONICAL is the PER-EDGE TRANSFORM op (each hyperedge owns its map). Extract to a `SkeletonRefine` framework component ONCE the per-edge transform lands, so the canonical version is the correct one, not the limited one."
+  },
+  {
+   "name": "EvolventHead",
+   "purpose": "Incremental/online (evolvent) MULTI-OUTPUT readout \u2014 exact forgetting recursive-least-squares over a fixed feature basis; C=1 regression, C=n_classes one-hot -> argmax classification (precision P SHARED across outputs, step O(d^2 + d*C)); per-sample closed-form, NO backward sweep; tracks drift via lambda; covariance-windup guard on by default.",
+   "owning_module": "src/online.rs",
+   "symbols": [
+    "EvolventHead",
+    "EvolventHead::new (d,c,ridge,lambda)",
+    "EvolventHead::with_trace_cap",
+    "EvolventHead::predict",
+    "EvolventHead::predict_class",
+    "EvolventHead::update",
+    "EvolventHead::n_outputs"
+   ],
+   "version": "2.0",
+   "status": "DEPLOYABLE",
+   "source_experiment": "evolvent E0 (streaming) + E1 (static benchmark, 50 seeds, kato15)",
+   "evidence_paths": [
+    "reports/2026-07-15-evolvent-e1-static-benchmark.md",
+    "reports/figures/evolvent-bench.png",
+    "reports/2026-07-15-evolvent-e0-stream.md"
+   ],
+   "supported_tasks": [
+    "static supervised regression AND classification (one-pass, no tuning)",
+    "online linear-in-features readout",
+    "non-stationary tracking (drift, with caveats)"
+   ],
+   "observation_schema": "phi: &[f32] (d features), y: &[f32] (C targets; one-hot for classification)",
+   "output_schema": "predict -> Vec<f32> (C); predict_class -> argmax; update -> per-output residuals; verified vs batch ridge",
+   "dependencies": [],
+   "known_limitations": [
+    "O(d^2) per update (win is SAMPLE efficiency / one-pass / no-tuning, not per-step FLOPs)",
+    "long-drift STREAMING is windup-limited (F-EVO-3); needs directional forgetting",
+    "linear-in-features (readout only); MLP still edges it where learned features matter (iris, california)"
+   ],
+   "canonical_tests": [
+    "online::converges_to_batch_ridge",
+    "online::one_hot_classifies_blobs",
+    "online::tracks_a_drift",
+    "online::windup_guard_keeps_it_bounded"
+   ],
+   "supersedes": null,
+   "superseded_by": null,
+   "default": false,
+   "note": "DEPLOYABLE for STATIC supervised readouts (F-EVO-4, 50 seeds fixed-RNG: COMPETITIVE with 200-epoch MLP -- wins 2 loses 2 ties 2 -- beats SGD 6/6, 1-pass no-tuning). Streaming/drift still EXPERIMENTAL (F-EVO-3)."
+  },
+  {
+   "name": "BlockEvolventHead",
+   "purpose": "Block-structured (hyperedge-clique) precision evolvent -- the alternative to the dense O(d^2) PAIRWISE precision. Contiguous feature blocks (one per hyperedge), block-diagonal precision (small b_e x b_e per block) with a SHARED residual/denominator; step is O(sum b_e^2) = O(d*w). Keeps higher-order interactions (the block features can be k-way) at a fraction of the cost.",
+   "owning_module": "src/online.rs",
+   "symbols": [
+    "BlockEvolventHead",
+    "BlockEvolventHead::new (block_sizes,ridge,lambda)",
+    "predict",
+    "update",
+    "dim",
+    "precision_nnz"
+   ],
+   "version": "1.0",
+   "status": "EXPERIMENTAL",
+   "source_experiment": "evolvent E3 (examples/evolvent_hypergraph.rs)",
+   "evidence_paths": [
+    "reports/2026-07-15-evolvent-e3-hypergraph-precision.md",
+    "reports/figures/evolvent-hypergraph.png"
+   ],
+   "supported_tasks": [
+    "additive-over-hyperedges regression/classification with bounded-width structure",
+    "higher-order (k-way) feature interactions at O(d*w)"
+   ],
+   "observation_schema": "phi: &[f32] grouped into contiguous blocks (block_sizes), y: f32",
+   "output_schema": "predict -> f32; update -> prequential residual; single block == dense EvolventHead exactly",
+   "dependencies": [],
+   "known_limitations": [
+    "drops cross-block (separator) coupling -> approximate for non-additive cross-hyperedge structure",
+    "contiguous blocks only (assumes features grouped by hyperedge)",
+    "the higher-order term must be an explicit feature"
+   ],
+   "canonical_tests": [
+    "online::single_block_equals_dense",
+    "online::block_matches_dense_when_separable"
+   ],
+   "supersedes": null,
+   "superseded_by": null,
+   "default": false,
+   "note": "F-EVO-5: matches dense-hyperedge R2 0.997 at 20x less precision storage; pairwise precision provably cannot represent the 3-way term. Path to CANONICAL: junction-tree (block-tridiagonal) form + update through hg_message + SBSH width certificate. E4 (InfoEvolventHead) is the EXACT version of this path."
+  },
+  {
+   "name": "InfoEvolventHead",
+   "purpose": "Information-form (junction-tree) evolvent precision -- the EXACT sparse alternative to the dense O(d^2) pairwise P. Accumulates J = Phi^T Phi + ridge*I and b = Phi^T y (each update J += phi phi^T touches only phi's support); solves J w = b. EXACT (= dense RLS, keeps ALL cross-hyperedge coupling) but J is SPARSE for local (bounded-width) measurements -> storage O(nnz(J)) = O(d*w). This is the hypergraph<->tensor conjugation: J IS the signed-hypergraph incidence made numerical (nonzero J[i,k] == GMRF conditional dependence edge).",
+   "owning_module": "src/online.rs",
+   "symbols": [
+    "InfoEvolventHead",
+    "InfoEvolventHead::new (d,ridge)",
+    "InfoEvolventHead::update",
+    "InfoEvolventHead::nnz",
+    "InfoEvolventHead::solve",
+    "InfoEvolventHead::predict"
+   ],
+   "version": "1.0",
+   "status": "DEPLOYABLE",
+   "source_experiment": "evolvent E4 (examples/evolvent_junction.rs, kato15 5 seeds x 4 n)",
+   "evidence_paths": [
+    "reports/2026-07-15-evolvent-e4-junction-tree.md",
+    "reports/figures/evolvent-junction.png",
+    "reports/figures/evolvent_e4_results.json"
+   ],
+   "supported_tasks": [
+    "exact online least-squares readout with LOCAL/bounded-width measurements",
+    "GMRF / junction-tree precision at O(d*w) storage",
+    "the exact form of the E3 hyperedge-clique precision (keeps separator coupling BlockEvolventHead drops)"
+   ],
+   "observation_schema": "phi: &[f32] (d features, locally supported), y: f32",
+   "output_schema": "solve -> Vec<f32> w (== dense RLS solution exactly); predict(phi,w) -> f32; nnz -> info-matrix sparsity",
+   "dependencies": [],
+   "known_limitations": [
+    "sparsity is a property of the DATA (local measurements) not the head: dense/global measurements fill J -> no advantage over dense O(d^2)",
+    "current solve is dense Gaussian elimination O(d^3); the O(d*w^2) block-tridiagonal Cholesky that exploits nnz is NOT yet implemented (nnz() accounts the sparsity a sparse solve would use)",
+    "single-output (regression); linear-in-features (higher-order terms must be explicit features)",
+    "measures STORAGE + EXACTNESS win, not yet a solve-TIME win"
+   ],
+   "canonical_tests": [
+    "online::info_form_equals_dense_and_is_sparse"
+   ],
+   "supersedes": null,
+   "superseded_by": null,
+   "default": false,
+   "note": "F-EVO-6: INFO R2 == DENSE R2 exactly at every (n,seed); info-matrix storage 21.6%->2.8% of dense as n 48->384 (O(d*w) vs O(d^2), halves per doubling). Classical primitive (information filter / Lauritzen-Spiegelhalter junction tree) -- framework value is the exact+sparse evolvent head + hypergraph conjugation, NOT algorithmic novelty. Path to a solve-time win: block-tridiagonal Cholesky + SBSH width certificate. DELIVERED in E5 (JunctionTreeCholesky)."
+  },
+  {
+   "name": "JunctionTreeCholesky",
+   "purpose": "Multifrontal (clique-tree) Cholesky over a bounded-width SPD information matrix -- the SPARSE SOLVE for the E4 information form. The hypergraph clique tree drives the factorization: each clique is a hyperedge (tensor block), leaves->root elimination sends the Schur complement over each separator up to the parent (the message U = F_SS - F_SR F_RR^-1 F_RS = a contraction over eliminated interior onto the separator boundary, structurally the hg_message edge->node incidence contraction); root->leaves back-substitution. EXACT (= dense Cholesky of the assembled J) at storage O(sum|C|^2)=O(d*w^2) and factorization O(sum|C|^3)=O(d*w^3), vs dense O(d^2)/O(d^3). An online update touches ONLY its clique's path to the root (proven) -> incremental re-fire O(log N * w^3).",
+   "owning_module": "src/junction_tree.rs",
+   "symbols": [
+    "JunctionTreeCholesky",
+    "JunctionTreeCholesky::new (cliques,ridge,d)",
+    "update",
+    "solve",
+    "solve_block_diagonal",
+    "factor_storage",
+    "factor_flops",
+    "ancestors_inclusive",
+    "factor_checksum",
+    "Clique",
+    "balanced_binary_tree"
+   ],
+   "version": "1.0",
+   "status": "DEPRECATED",
+   "deprecated_reason": "Cholesky/junction-tree was the exact-solve devolution -- user: 'no need for Cholesky' (2026-07-16). Kept for provenance; do NOT build on it.",
+   "source_experiment": "evolvent E5 (examples/evolvent_multifrontal.rs, kato15 5 seeds x 4 depths)",
+   "evidence_paths": [
+    "reports/2026-07-15-evolvent-e5-multifrontal.md",
+    "reports/figures/evolvent-multifrontal.png",
+    "reports/figures/evolvent_e5_results.json"
+   ],
+   "supported_tasks": [
+    "exact sparse solve of a bounded-width (junction-tree) SPD precision",
+    "incremental/online least-squares over a clique tree with log-depth locality",
+    "the solve-time realization of InfoEvolventHead",
+    "measuring what cross-clique (separator) coupling is worth (solve_block_diagonal baseline)"
+   ],
+   "observation_schema": "cliques: Vec<Clique{vars residual-first, n_res, parent}> (valid clique tree, RIP, separator subset of parent, SPD J); update(clique, phi_local, y)",
+   "output_schema": "solve -> Vec<f32> x (== dense Cholesky of assembled J exactly); solve_block_diagonal -> separator-dropping baseline; factor_storage/factor_flops -> O(d*w^2)/O(d*w^3) accounting; ancestors_inclusive -> online-update locality",
+   "dependencies": [],
+   "known_limitations": [
+    "MEASURED wall-clock speedup (criterion) is 16.7x->682x over d 105->889 AFTER the contiguous-storage rewrite (E10/F-EVO-12); was 5.9x-255x before (E9/F-EVO-11). Flop/measured gap closed 5.0x->1.86x (large d); at d=105 essentially AT the flop ceiling (1.08x). Cite 682x as deployable.",
+    "the 682x is vs a Gaussian-elim dense baseline (~2x flops of pure Cholesky) -> layout-independent number is the 2.7x self-speedup from the rewrite; a Cholesky baseline would show ~2x more residual",
+    "remaining headroom below the ceiling: frontal-extraction + triangular solves not blocked/SIMD-tuned (not pursued)",
+    "incremental re-fire is PROVEN-local but the optimized refactorize_path (recompute only the path) is NOT built (E5 measures the locality that justifies it)",
+    "requires a valid clique tree (RIP + bounded width); a measurement coupling non-adjacent cliques breaks the tree -- SBSH width certificate is the guarantee; representability needs width >= interaction order (E8/F-EVO-10)",
+    "single-output, linear-in-features",
+    "dense per-clique frontals (fine at bounded width)"
+   ],
+   "canonical_tests": [
+    "junction_tree::single_clique_equals_dense",
+    "junction_tree::branching_tree_equals_dense_at_bounded_width",
+    "junction_tree::online_update_only_perturbs_path_to_root"
+   ],
+   "supersedes": null,
+   "superseded_by": null,
+   "default": false,
+   "note": "F-EVO-7: MF R2 == DENSE R2 at every (depth,seed); factorization FLOP speedup 18x->1270x as d 105->889 (grows (d/w)^2); online update perturbs EXACTLY the path-to-root (log2(N) cliques). Completes the precision family: dense O(d^2)/O(d^3) -> block O(d*w)/approx -> info O(d*w)/exact-dense-solve -> multifrontal O(d*w^2)/O(d*w^3)/exact. Classical method (Duff-Reid multifrontal); framework value = hypergraph clique tree AS the assembly tree, separators AS messages. WALL-CLOCK (criterion): E9/F-EVO-11 measured 5.9x-255x (Vec-per-clique, ~5x below flops); E10/F-EVO-12 CONTIGUOUS-STORAGE rewrite -> 16.7x-682x (2.7x faster solve, same exact answer), flop/measured gap closed 5x->1.86x. 682x is the deployable number (vs a Gaussian dense baseline)."
+  },
+  {
+   "name": "ClosedCliffordCurvature",
+   "purpose": "One-shot, closed-form curvature/holonomy estimator over a signed SO(3) connection: spanning-tree gauge-fix (R_root=I, R_node=g*R_parent) + cotree loop-closure residual (rho_e = R_b^-1 * g_ab * R_a) + curvature energy (mean ||log rho||). The 'closed Clifford approximation' of auto-holonomy (differentiation as connection transport made instantaneous, exact, no gradient descent). Companion generator builds the metric-integrity-clean flat-vs-curved discriminating task (matched Haar edge marginals).",
+   "owning_module": "holonomy_estimator + curvature_task",
+   "symbols": [
+    "tree_gauge_frames",
+    "cotree_residuals",
+    "curvature_energy",
+    "closed_clifford_curvature",
+    "oracle_curvature",
+    "wheel_graph",
+    "sample_connection",
+    "edge_log_field",
+    "ConnGraph",
+    "haar_quat",
+    "axis_angle_quat",
+    "rotor_angle",
+    "rotor_log"
+   ],
+   "version": "v1.0",
+   "status": "active",
+   "deprecated_reason": null,
+   "source_experiment": "auto-holonomy",
+   "evidence_paths": [
+    "reports/2026-07-16-auto-holonomy.md",
+    "reports/figures/auto_holonomy_dissociation.json"
+   ],
+   "supported_tasks": [
+    "curvature/integrability classification of an SO(3) connection",
+    "unsupervised curvature scoring (one-shot, no training)",
+    "discriminating-task ceiling for auto-holonomy methods"
+   ],
+   "observation_schema": "edge rotors flat (|E|,4) unit quaternions over a ConnGraph (topology + tree/cotree/cycle structure)",
+   "output_schema": "scalar curvature energy (mean cotree residual rotation angle), or per-cycle residual quaternions (m,4)",
+   "dependencies": [
+    "hymeko_clifford::{quat_mul, quat_conjugate}",
+    "rotor_holonomy_forward",
+    "spectral_reg_value_grad (trivial baseline)",
+    "metrics::auroc"
+   ],
+   "known_limitations": [
+    "exact gauge solve, not a learned compositional rule",
+    "on the wheel estimator==oracle (cycle basis == plaquettes); needs a mismatched-tree topology to strictly approximate",
+    "assumes a spanning tree + fundamental-cycle basis is available"
+   ],
+   "canonical_tests": [
+    "holonomy_estimator::estimator_equals_oracle",
+    "holonomy_estimator::flat_energy_near_zero_curved_positive",
+    "holonomy_estimator::perf_estimator_latency_budget",
+    "curvature_task::edge_marginals_match_between_classes"
+   ],
+   "supersedes": [],
+   "superseded_by": null,
+   "default": true,
+   "note": "Reuses the rotor_holonomy op and hymeko_clifford quat algebra (no re-implementation). Rust/nagare counterpart of the PyTorch B1b rotor-sync benchmark; the two bracket the op (outlier localization vs curvature classification)."
+  },
+  {
+   "name": "NonlinearCurvatureField",
+   "purpose": "Spline-parameterized curvature FIELD over a 2-D SO(3) lattice patch + a closed-form ChebyCR roughness readout. Generator: cumulative-vertical construction realizes an arbitrary per-plaquette flux field exactly, then a Haar gauge randomizes edges (curvature gauge-invariant). Readout: extract the gauge-invariant plaquette-holonomy field (rotor_holonomy), fit a low-order 2-D Chebyshev (chebyshev_knot_basis, separable projector), roughness = residual energy fraction. Demonstrates the F-HOLO-3 constant-rotor exact solve is insufficient for nonlinear (spatially-structured) curvature; the spline readout recovers it, closed-form.",
+   "owning_module": "curvature_field",
+   "symbols": [
+    "grid_graph",
+    "sample_curvature_field",
+    "chebyshev_angle_field",
+    "extract_curvature_field",
+    "constant_rotor_energy",
+    "chebycr_roughness",
+    "laplacian_roughness",
+    "GridGraph"
+   ],
+   "version": "v1.0",
+   "status": "active",
+   "deprecated_reason": null,
+   "source_experiment": "nonlinear-curvature",
+   "evidence_paths": [
+    "reports/2026-07-16-nonlinear-curvature.md",
+    "reports/figures/curvature_field_dissociation.json"
+   ],
+   "supported_tasks": [
+    "smooth-vs-rough curvature-field classification",
+    "closed-form curvature-field extraction over an SO(3) lattice",
+    "spline-roughness readout as a nonlinear-curvature ceiling"
+   ],
+   "observation_schema": "edge rotors flat (|E|,4) over a GridGraph (L x L lattice, unit-square plaquettes)",
+   "output_schema": "per-plaquette angle field (m*m) and scalar roughness (ChebyCR residual fraction / Laplacian)",
+   "dependencies": [
+    "rotor_holonomy_forward",
+    "chebyshev_knot_basis",
+    "curvature_task (haar_quat/axis_angle_quat/rotor_angle)",
+    "hymeko_clifford::{quat_mul,quat_conjugate}"
+   ],
+   "known_limitations": [
+    "fixed low-order fit, not a learned patch",
+    "angle-field only (no directional curvature)",
+    "robust across k_gen (near-white worst case untested)",
+    "clifford_fir readout not yet wired"
+   ],
+   "canonical_tests": [
+    "curvature_field::plaquette_holonomy_equals_field_exactly",
+    "curvature_field::gauge_leaves_curvature_invariant_and_edges_nontrivial",
+    "curvature_field::constant_rotor_mean_matched_across_classes",
+    "curvature_field::perf_roughness_latency_budget"
+   ],
+   "supersedes": [],
+   "superseded_by": null,
+   "default": true,
+   "note": "Companion to ClosedCliffordCurvature (F-HOLO-3): that is the constant-flux exact solve (reaches oracle); this is the nonlinear-field regime where that solve is blind and a spline readout is needed. On-ramp to the learned GAP #2 rule."
+  }
+ ]
 }

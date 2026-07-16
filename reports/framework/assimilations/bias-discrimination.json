@@ -1,0 +1,48 @@
+{
+ "experiment_id": "bias-discrimination",
+ "date": "2026-07-17",
+ "host": "Apple M5 Pro, macOS 26.5.2, CPU",
+ "result": "F-HOLO-8 (MIXED): regional 2nd-order pooling closes the generic-MLP(0.661)->oracle(0.935) gap (block-Laplacian 0.929, block-entropy 0.858) => the framework's ARCHITECTURAL PRINCIPLE (regional 2nd-order pooling) is the lever. BUT generic Laplacian (0.929) BEATS the framework entropy op (0.858) => NOT holonomy-specific; any 2nd-order regional bias suffices.",
+ "novelty_classification": {
+  "NEW_MECHANISM": [
+   "regional 2nd-order pooling closes the gap a generic learner cannot"
+  ],
+  "NEGATIVE_RESULT_REQUIRING_A_GUARD": [
+   "framework's SPECIFIC entropy op is NOT better than generic Laplacian -> do not claim holonomy-specific capability; justify concentric build by a task needing the specific structure"
+  ],
+  "note": "Third consistent instance (with F-HOLO-2, real-spine signed-link): framework PRINCIPLES validate, SPECIFIC-op superiority does not."
+ },
+ "framework_impact": {
+  "interfaces_changed": [],
+  "defaults_changed": [],
+  "components_added_or_updated": [
+   "curvature_field += block_entropy_features (framework 2nd-order pooling front-end) + block_laplacian_features (generic control)"
+  ],
+  "guards_added": [
+   "justify concentric Gomb-Soma by a task where the framework's SPECIFIC structure is necessary, not merely 2nd-order pooling (conv/Laplacian substitutes)"
+  ],
+  "findings_added": [
+   "F-HOLO-8"
+  ]
+ },
+ "source_changes": [
+  "src/curvature_field.rs (+block_entropy_features, +block_laplacian_features, +test)",
+  "examples/bias_discrimination.rs (NEW, TrainCfg struct for the trainer)",
+  "src/lib.rs (+2 exports)"
+ ],
+ "regression_tests_added": [
+  "curvature_field::block_entropy_higher_for_rough"
+ ],
+ "gates": {
+  "bias_discrimination": "regional 2nd-order pooling CLOSES the gap (0.66->0.93); NOT holonomy-specific (Laplacian 0.929 > entropy 0.858)",
+  "tests": "169 passed / 0 failed (1 new)",
+  "lint": "clippy -D warnings clean (8-arg trainer -> TrainCfg struct, no allow); fmt clean",
+  "perf": "22.3 s wall"
+ },
+ "corrections": [],
+ "integrity_note": "Same data across arms; the generic MLP got a strong attempt (128/600/700); the two block arms share the same head hyperparameters (fair bias comparison). The holonomy-specificity NEGATIVE is not suppressed - the control beat the framework op and it is reported as the headline.",
+ "honest_scope": "one task; conv baseline deferred; block front-ends use uniform column blocks. Consistent with the broader pattern (principles validate, specific ops do not beat generic baselines).",
+ "environment_note": "rustc 1.96.1; uncommitted.",
+ "next_experiment_authorized": "a task where the framework's SPECIFIC structure (non-abelian holonomy / signed-hypergraph) is NECESSARY and a conv/Laplacian cannot substitute - the real open problem gating the concentric build and any capability claim beyond 'regional 2nd-order pooling'.",
+ "next_experiment_proposal": "design a task whose discriminative signal is genuinely NON-ABELIAN (order-of-loop matters; a scalar roughness / Laplacian cannot capture it) - e.g. classify by the NON-COMMUTATIVITY of regional holonomies (does the order of traversal change the outcome), which a 2nd-order scalar pooler is blind to but rotor_holonomy captures. If the framework op wins THERE and Laplacian/conv cannot, holonomy-specificity is finally demonstrated."
+}

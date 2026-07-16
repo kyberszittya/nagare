@@ -1,0 +1,46 @@
+{
+ "experiment_id": "gate2-learning-necessary",
+ "date": "2026-07-17",
+ "host": "Apple M5 Pro, macOS 26.5.2, CPU",
+ "result": "F-HOLO-7 (NEGATIVE/informative): XOR-of-regional-roughness defeats every fixed GLOBAL closed-form (all ~0.52) AND a strong generic MLP (0.661) but is solved by a fixed REGIONAL closed-form (oracle 0.935). => bias-discriminating, NOT strictly learning-necessary. Gate 2 (strict) NOT met.",
+ "novelty_classification": {
+  "NEGATIVE_RESULT_REQUIRING_A_GUARD": [
+   "F-HOLO-7"
+  ],
+  "note": "Guards against scaling on an unmet gate; reframes the next test as bias-discrimination (holonomy/entropy model vs generic MLP) rather than learning-necessity."
+ },
+ "framework_impact": {
+  "interfaces_changed": [],
+  "defaults_changed": [],
+  "components_added_or_updated": [
+   "curvature_field += sample_regional_curvature / region_roughness_diff / realize_field (shared refactor)"
+  ],
+  "guards_added": [
+   "Gate-2 verdict: do not claim learning-necessary or scale (concentric/SLAM) \u2014 a fixed regional closed-form solves it"
+  ],
+  "findings_added": [
+   "F-HOLO-7"
+  ]
+ },
+ "source_changes": [
+  "src/curvature_field.rs (realize_field refactor behavior-preserving + sample_regional_curvature + region_roughness_diff + 2 tests)",
+  "examples/curvature_xor_gate2.rs (NEW)",
+  "src/lib.rs (+3 exports)"
+ ],
+ "regression_tests_added": [
+  "curvature_field::regional_sample_deterministic",
+  "curvature_field::regional_xor_oracle_separates_classes"
+ ],
+ "gates": {
+  "gate2_strict": "FAIL (informative): fixed-global all chance, MLP 0.661 (insufficient), oracle 0.935 is a FIXED regional closed-form => not learning-necessary",
+  "tests": "168 passed / 0 failed (2 new; F-HOLO-4 tests still pass after refactor)",
+  "lint": "clippy -D warnings clean; fmt clean",
+  "perf": "20.5 s wall"
+ },
+ "corrections": [],
+ "integrity_note": "The MLP was given a fair strong attempt (128 hidden, 600 train, 700 ep; 0.542->0.661) to rule out undertraining before concluding 'generic learner insufficient'. Not forced to a pass.",
+ "honest_scope": "Known-region-split only; a strictly-learning-necessary (latent partition) task is deferred as genuinely harder. SLAM/concentric remain gated.",
+ "environment_note": "rustc 1.96.1; uncommitted.",
+ "next_experiment_authorized": "BIAS-DISCRIMINATION test: the holonomy/entropy model (global_entropy_pool + cpml_tier regional pooling) vs the generic MLP on THIS task \u2014 does the framework bias close the 0.66->0.94 gap? Control with a plain conv/pooling net to separate 'holonomy-specific' from 'any 2nd-order bias'.",
+ "next_experiment_proposal": "build a small regional-pooling readout (per-region global_entropy_pool -> 2 features -> tiny MLP) and A/B vs the generic MLP and a conv baseline on curvature_xor_gate2; if the regional-pooling model reaches ~oracle and the generic MLP/conv do not, the framework's regional 2nd-order bias is the lever (a meaningful, honest capability claim short of 'learning necessary')."
+}

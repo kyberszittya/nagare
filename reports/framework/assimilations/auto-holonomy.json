@@ -1,0 +1,56 @@
+{
+ "experiment_id": "auto-holonomy",
+ "date": "2026-07-16",
+ "host": "Hajdus-MacBook-Pro (arm64, CPU, Apple M5 Pro)",
+ "result": "F-HOLO-3: a metric-integrity-clean SO(3)-connection task where trivial covariance entropy is at chance (0.557, GATE PASS) but the CLOSED CLIFFORD one-shot estimator reaches the oracle (1.000, no training), while a strong trained MLP stays ~chance (0.626). Flat vs curved with matched Haar edge marginals; separates only through loop products. Closed form = tree gauge-fix + cotree residual, ~2 us/sample, estimator==oracle tested identity.",
+ "novelty_classification": {
+  "NEW_CANONICAL_CAPABILITY": [
+   "F-HOLO-3"
+  ],
+  "NEW_REUSABLE_COMPONENT": [
+   "ClosedCliffordCurvature (holonomy_estimator + curvature_task)"
+  ],
+  "NEW_EVALUATION_REQUIREMENT": [
+   "the matched-marginal discriminating task is the ceiling any future auto-holonomy method must clear BEFORE being trusted (F-HOLO-2 made concrete)"
+  ],
+  "note": "ON-MISSION: the closed-form instantaneous rotor rule (GAP #2, closed-form gauge un-twist) demonstrated on the task holonomy is actually necessary for \u2014 NOT the exact-solve/Cholesky devolution (this is a holonomy transport + loop closure, O(|E|), reusing rotor_holonomy)."
+ },
+ "framework_impact": {
+  "interfaces_changed": [],
+  "defaults_changed": [],
+  "components_added_or_updated": [
+   "ClosedCliffordCurvature v1.0 (new, default)"
+  ],
+  "guards_added": [
+   "curvature_task::edge_marginals_match_between_classes (in-code metric-integrity guard: classes must have matched isotropic marginals or the gate is invalid)",
+   "example runtime Step-1 gate: trivial<=0.60 AND oracle>=0.90"
+  ],
+  "findings_added": [
+   "F-HOLO-3"
+  ]
+ },
+ "source_changes": [
+  "src/curvature_task.rs (NEW 380 loc): wheel generator, Haar/axis-angle/angle/log helpers, marginal-match + holonomy invariants",
+  "src/holonomy_estimator.rs (NEW 210 loc): tree_gauge_frames/cotree_residuals/curvature_energy/closed_clifford_curvature/oracle_curvature",
+  "examples/auto_holonomy_dissociation.rs (NEW 353 loc): gate + A/B + flux sweep",
+  "src/lib.rs (+14): pub mod/pub use append-only",
+  "reports/figures/plot_auto_holonomy.py (NEW 75 loc)"
+ ],
+ "regression_tests_added": [
+  "curvature_task::{haar_is_unit_and_canonical, rotor_angle_and_log_roundtrip, sample_is_deterministic_and_unit, flat_sample_has_identity_holonomy, curved_sample_has_bounded_flux_holonomy, edge_marginals_match_between_classes}",
+  "holonomy_estimator::{tree_gauge_root_is_identity_and_unit, estimator_equals_oracle, flat_energy_near_zero_curved_positive, perf_estimator_latency_budget}"
+ ],
+ "gates": {
+  "step1_metric_gate": "PASS (trivial-entropy 0.557 <= 0.60 AND oracle 1.000 >= 0.90)",
+  "step2_ab": "closed-Clifford 1.000 REACHES oracle 1.000, one-shot no training; strong-MLP 0.626; trivial 0.557",
+  "tests": "cargo test --release --lib: 157 passed / 0 failed (10 new)",
+  "lint": "clippy --all-targets -D warnings clean; fmt --check clean",
+  "perf": "estimator ~2 us/sample (< 50 us budget); example 13.8 s wall, 3.1 MB RSS"
+ },
+ "corrections": [],
+ "integrity_note": "F-HOLO-2 honored: the previous task was solvable by trivial entropy (0.944>0.894); this task's classes have PROVABLY matched Haar edge marginals (verified in code), so trivial entropy is at chance and holonomy's value is measurable. The strong-MLP arm (3x data, hidden 64, 400 ep -> 0.626) rules out the 'undertrained strawman' objection. estimator==oracle is a tested identity, not an assumption.",
+ "honest_scope": "On the wheel the closed form RECOVERS the oracle exactly (cycle basis == planted plaquettes) rather than strictly approximating it. This is the EXACT gauge solve; a LEARNED compositional holonomy rule (GAP #2 proper) and a topology where estimator != oracle remain open.",
+ "environment_note": "rustc 1.96.1; hymeko_clifford vendored; rayon. macOS 26.5.2 Apple M5 Pro CPU. Uncommitted (working tree dirty).",
+ "next_experiment_authorized": "grid/torus curvature task with flux on a random plaquette subset (estimator strictly approximates oracle; SNR gap), OR the learned holonomy-native rotor rule (RotorMeshNet + entropy feedback) attached to THIS metric on a task where the tree-gauge solve is insufficient (per-node multi-scale twist).",
+ "next_experiment_proposal": "Prefer the topology-mismatch grid first (cheap, still closed-form, establishes estimator!=oracle regime) before investing in the learned compositional rule (GAP #2), so the learned method is measured against a genuine estimator-oracle gap rather than a saturated ceiling."
+}
