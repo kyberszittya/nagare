@@ -192,6 +192,143 @@ fn auroc(scores: &[f32], labels: &[u8]) -> f64 {
     (sum_pos - (np * (np + 1)) as f64 / 2.0) / (np * nn) as f64
 }
 
+/// (train x, train y, test x, test y).
+type TaskData = (Vec<Vec<f32>>, Vec<u8>, Vec<Vec<f32>>, Vec<u8>);
+
+/// Shared task data for a seed: 120 train + 120 test, interleaved labels. All arms
+/// (holonomy / MLP / trivial) use this — a fair fight.
+fn gen_data(seed: u64) -> TaskData {
+    let mut rng = Rng(101 + seed);
+    let gen_set = |rng: &mut Rng, n: usize| -> (Vec<Vec<f32>>, Vec<u8>) {
+        let mut xs = Vec::new();
+        let mut ys = Vec::new();
+        for k in 0..n {
+            let lab = (k % 2) as u8;
+            xs.push(gen_sample(rng, lab));
+            ys.push(lab);
+        }
+        (xs, ys)
+    };
+    let (xtr, ytr) = gen_set(&mut rng, 120);
+    let (xte, yte) = gen_set(&mut rng, 120);
+    (xtr, ytr, xte, yte)
+}
+
+/// Baseline — a plain 2-layer MLP (flatten field N*3 → tanh(hidden) → logit),
+/// Adam-trained, on the SAME data. Returns held-out AUROC (separability).
+fn run_mlp(seed: u64, hidden: usize, lr: f32, epochs: usize) -> f64 {
+    let (xtr, ytr, xte, yte) = gen_data(seed);
+    let din = N * D;
+    let mut rng = Rng(777 + seed);
+    let mut w1: Vec<f32> = (0..hidden * din)
+        .map(|_| 0.3 * rng.g() / (din as f32).sqrt())
+        .collect();
+    let mut b1 = vec![0.0f32; hidden];
+    let mut w2: Vec<f32> = (0..hidden)
+        .map(|_| 0.3 * rng.g() / (hidden as f32).sqrt())
+        .collect();
+    let mut b2 = 0.0f32;
+    let (mut sw1, mut sb1, mut sw2, mut sb2) = (
+        AdamState::new(hidden * din),
+        AdamState::new(hidden),
+        AdamState::new(hidden),
+        AdamState::new(1),
+    );
+    let fwd = |w1: &[f32], b1: &[f32], w2: &[f32], b2: f32, x: &[f32]| -> (f32, Vec<f32>) {
+        let mut h = vec![0.0f32; hidden];
+        for j in 0..hidden {
+            let mut z = b1[j];
+            for k in 0..din {
+                z += w1[j * din + k] * x[k];
+            }
+            h[j] = z.tanh();
+        }
+        let logit = b2 + (0..hidden).map(|j| w2[j] * h[j]).sum::<f32>();
+        (logit, h)
+    };
+    for _ in 0..epochs {
+        let (mut gw1, mut gb1, mut gw2, mut gb2) = (
+            vec![0.0f32; hidden * din],
+            vec![0.0f32; hidden],
+            vec![0.0f32; hidden],
+            0.0f32,
+        );
+        for (x, &y) in xtr.iter().zip(&ytr) {
+            let (logit, h) = fwd(&w1, &b1, &w2, b2, x);
+            let dlogit = sigmoid(logit) - y as f32;
+            gb2 += dlogit;
+            for j in 0..hidden {
+                gw2[j] += dlogit * h[j];
+                let dz = dlogit * w2[j] * (1.0 - h[j] * h[j]);
+                gb1[j] += dz;
+                for k in 0..din {
+                    gw1[j * din + k] += dz * x[k];
+                }
+            }
+        }
+        let m = xtr.len() as f32;
+        for g in gw1.iter_mut() {
+            *g /= m;
+        }
+        for g in gb1.iter_mut() {
+            *g /= m;
+        }
+        for g in gw2.iter_mut() {
+            *g /= m;
+        }
+        gb2 /= m;
+        adam_step(&mut w1, &gw1, &mut sw1, lr);
+        adam_step(&mut b1, &gb1, &mut sb1, lr);
+        adam_step(&mut w2, &gw2, &mut sw2, lr);
+        let mut bb = [b2];
+        adam_step(&mut bb, &[gb2], &mut sb2, lr);
+        b2 = bb[0];
+    }
+    let scores: Vec<f32> = xte.iter().map(|x| fwd(&w1, &b1, &w2, b2, x).0).collect();
+    let a = auroc(&scores, &yte);
+    a.max(1.0 - a)
+}
+
+/// Baseline — the trivial "no holonomy" arm: a readout (entropy or mean) of the RAW
+/// field + logistic (no rotor net at all), Adam-trained, same data. Held-out AUROC.
+fn run_trivial(seed: u64, use_entropy: bool, cfg: &SpectralEntropyConfig) -> f64 {
+    let (xtr, ytr, xte, yte) = gen_data(seed);
+    let n_feat = if use_entropy { 1 } else { D };
+    let mut w = vec![0.0f32; n_feat];
+    let mut b = 0.0f32;
+    let (mut sw, mut sb) = (AdamState::new(n_feat), AdamState::new(1));
+    for _ in 0..300 {
+        let (mut gw, mut gbias) = (vec![0.0f32; n_feat], 0.0f32);
+        for (x, &y) in xtr.iter().zip(&ytr) {
+            let feat = readout(x, use_entropy, cfg);
+            let logit = feat.iter().zip(&w).map(|(f, wi)| f * wi).sum::<f32>() + b;
+            let dlogit = sigmoid(logit) - y as f32;
+            for c in 0..n_feat {
+                gw[c] += dlogit * feat[c];
+            }
+            gbias += dlogit;
+        }
+        let m = xtr.len() as f32;
+        for g in gw.iter_mut() {
+            *g /= m;
+        }
+        gbias /= m;
+        adam_step(&mut w, &gw, &mut sw, 0.05);
+        let mut bb = [b];
+        adam_step(&mut bb, &[gbias], &mut sb, 0.05);
+        b = bb[0];
+    }
+    let scores: Vec<f32> = xte
+        .iter()
+        .map(|x| {
+            let feat = readout(x, use_entropy, cfg);
+            feat.iter().zip(&w).map(|(f, wi)| f * wi).sum::<f32>() + b
+        })
+        .collect();
+    let a = auroc(&scores, &yte);
+    a.max(1.0 - a)
+}
+
 /// Train one (depth, readout) config; return (final held-out AUROC, [(epoch, AUROC)]
 /// at checkpoints — the convergence curve).
 fn run_config(
@@ -422,4 +559,24 @@ fn main() {
         let pts: Vec<String> = curve.iter().map(|(e, a)| format!("{e}:{a:.3}")).collect();
         println!("  {name}  {}", pts.join(" "));
     }
+
+    // COMPETITIVENESS: the fair fight — same data, external baselines.
+    let median5 = |mut f: Box<dyn FnMut(u64) -> f64>| -> f64 {
+        let mut v: Vec<f64> = (0..5).map(&mut *f).collect();
+        v.sort_by(|a, b| a.total_cmp(b));
+        v[2]
+    };
+    println!("\n== COMPETITIVENESS: fair fight (5 seeds, held-out AUROC median, SAME data) ==");
+    let holo = median5(Box::new(|s| {
+        run_config(3, true, s, &cfg, 0.05, 200, Opt::Adam).0
+    }));
+    let mlp_small = median5(Box::new(|s| run_mlp(s, 3, 0.05, 200)));
+    let mlp_large = median5(Box::new(|s| run_mlp(s, 16, 0.05, 200)));
+    let triv_ent = median5(Box::new(|s| run_trivial(s, true, &cfg)));
+    let triv_mean = median5(Box::new(|s| run_trivial(s, false, &cfg)));
+    println!("  deep holonomy + entropy (Adam)   {holo:.3}   (~110 params)");
+    println!("  MLP 36->3->1   (capacity-matched) {mlp_small:.3}   (~112 params)");
+    println!("  MLP 36->16->1  (strong baseline)  {mlp_large:.3}   (~610 params)");
+    println!("  trivial: raw entropy + logistic  {triv_ent:.3}   (NO net, ~2 params)");
+    println!("  trivial: raw mean + logistic     {triv_mean:.3}   (sanity → chance)");
 }

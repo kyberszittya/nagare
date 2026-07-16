@@ -25,5 +25,15 @@
     "adam_lr0p02":  [0.728, 0.755, 0.756, 0.781, 0.833, 0.838, 0.883, 0.920, 0.940],
     "nesterov_lr0p5": [0.728, 0.728, 0.729, 0.733, 0.762, 0.830, 0.818, 0.823, 0.825],
     "nesterov_lr1p0": [0.728, 0.730, 0.733, 0.747, 0.797, 0.799, 0.833, 0.850, 0.865]
+  },
+  "competitiveness_fair_fight_5seed_median": {
+    "note": "HONEST NEGATIVE: on THIS task the deep holonomy net does NOT earn its complexity. The TRIVIAL raw-field entropy + logistic (NO holonomy net, ~2 params) BEATS the deep holonomy net (0.944 vs 0.894). The coherent-twist vs isotropic classes are already separated by the RAW field's covariance eigen-entropy (coherent = 2D-spread structured cov, isotropic = 3D-spread) -- so the deep rotor 'un-twisting' is unnecessary and here slightly COUNTERPRODUCTIVE (random rotors + mesh mix partly scramble the cleanly-visible coherence). MLPs (0.69/0.67) trail both -- confirming the ENTROPY readout (a 2nd-order stat) is the lever, not depth. This RETRACTS the competitiveness implication of F-HOLO-1: the double dissociation is internally real (depth+entropy beat the holonomy net's OWN ablations) but against the RIGHT external baseline the whole apparatus loses. Evaluation-metric-integrity lesson: I optimized under a ceiling (0.944 trivial) that a 2-param baseline already exceeds.",
+    "arms": [
+      {"name": "trivial: raw entropy + logistic (NO net)", "auroc": 0.944, "params": 2},
+      {"name": "deep holonomy + entropy (Adam)", "auroc": 0.894, "params": 110},
+      {"name": "MLP 36->3->1 (capacity-matched)", "auroc": 0.690, "params": 112},
+      {"name": "MLP 36->16->1 (strong)", "auroc": 0.666, "params": 610},
+      {"name": "trivial: raw mean + logistic (sanity)", "auroc": 0.559, "params": 4}
+    ]
   }
 }

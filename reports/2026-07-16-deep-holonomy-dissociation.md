@@ -29,6 +29,38 @@ learned net: **entropy** (normalized spectral eigen-entropy, arrangement-sensiti
 
 Figure: `reports/figures/holonomy-dissociation.png`.
 
+## ⚠ Competitiveness — HONEST NEGATIVE (added, and it qualifies everything above)
+
+Asked "is this competitive?", I ran the fair fight: the same task/data, with external baselines. 5 seeds, held-out
+AUROC median (`reports/figures/holonomy-fairfight.png`):
+
+| arm | AUROC | params |
+|---|---|---|
+| **trivial: raw entropy + logistic (NO holonomy net)** | **0.944** | ~2 |
+| deep holonomy + entropy (Adam) | 0.894 | ~110 |
+| MLP 36→3→1 (capacity-matched) | 0.690 | ~112 |
+| MLP 36→16→1 (strong) | 0.666 | ~610 |
+| trivial: raw mean + logistic (sanity) | 0.559 | ~4 |
+
+**On this task the deep holonomy net does NOT earn its complexity — a 2-parameter raw-entropy baseline beats it
+(0.944 vs 0.894).** The coherent-twist vs isotropic classes are already separated by the *raw* field's covariance
+eigen-entropy (coherent = structured 2-D-spread covariance, isotropic = 3-D-spread), so the deep rotor "un-twisting"
+is unnecessary — and here slightly *counterproductive* (random rotors + mesh mix partly scramble the coherence that
+was cleanly visible in the raw field). The MLPs trail both, which confirms the **entropy readout** (a 2nd-order
+statistic) is the lever, not depth.
+
+**What this qualifies:** the double dissociation below is *internally* real (depth+entropy beat the holonomy net's
+own ablations), but it does **not** show the apparatus is useful — against the right external baseline the whole
+thing loses. In evaluation-metric-integrity terms: I optimized the holonomy net under a ceiling (0.944, trivial)
+that a 2-parameter method already exceeds. So F-HOLO-1's *learning-through-depth* claim stands; its *competitiveness*
+implication is **retracted**.
+
+**What competitiveness would now require:** a task where the raw-entropy baseline **fails** but the holonomy
+transformation **succeeds** — i.e., where the discriminative structure is *not* visible in the raw covariance and
+only appears after the right rotor transport (e.g., a per-node-varying twist that must be un-wound before it reads).
+My current task lacks that property. Until such a task exists, running on a *real* dataset (Part 2) is premature —
+the method must first beat trivial baselines on a controlled task where holonomy is genuinely necessary.
+
 ## The double dissociation
 
 - **deep + entropy = 0.759** — the winner.
