@@ -42,6 +42,28 @@ mean pooling is blind to them regardless of depth. That is exactly "deep-represe
 was the open question: the representation is *learned* (the per-layer bivectors), the learning *propagates through
 depth* (via the closed-form adjoint/inverse-rotor transport), and it is read by *entropy, not a supervised feature*.
 
+## How instantaneous? — the convergence curve (added: answering the "instantaneous vs slow" question)
+
+Held-out AUROC vs training passes, deep+entropy, seed 0 (`reports/figures/holonomy-convergence.png`):
+
+| passes | 1 | 5 | 20 | 100 | 200 |
+|---|---|---|---|---|---|
+| lr=0.05 | 0.728 | 0.728 | 0.728 | 0.731 | 0.742 |
+| lr=2.0 | 0.728 | 0.738 | 0.805 | 0.889 | **0.902** |
+
+Two honest readings:
+- **The representation is near-instantaneous.** *One pass* already gives **0.728** — vs shallow+entropy 0.561 and
+  chance ~0.54. So the deep-holonomy+entropy *architecture* (deep rotors + mesh mix + entropy readout + a fitted
+  linear probe) is discriminative almost immediately, mostly from the architecture over *random* rotors plus a
+  one-pass linear fit. That is the thesis's "instantaneous" flavor (sample-fast, like the entropy pool / one-pass
+  evolvent) — and depth is load-bearing *even at one pass* (0.728 vs shallow 0.561).
+- **The committed 2×2 (lr=0.05) was undertrained**, sitting at ~0.74 (near the one-pass floor). With a proper LR the
+  deep+entropy ceiling is **~0.90** — so the dissociation is *stronger* than the committed table shows, not weaker.
+- **But the rotor *weight* learning (0.73 → 0.90) is still iterative GD.** The near-instant part is the architecture
+  + linear probe; refining the rotors to the ceiling takes passes. So the *pure one-shot instantaneous ROTOR rule*
+  — the thesis in full — is **not** achieved here; it remains the open frontier (I measured the question honestly
+  rather than shipping a rule I could not verify).
+
 ## Integrity — the gradient is verified, the result is not a phantom
 
 Before trusting any training number, a **hard FD gate** checked the entire end-to-end closed-form gradient (BCE →

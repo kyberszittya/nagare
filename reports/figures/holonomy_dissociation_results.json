@@ -9,5 +9,12 @@
   "auroc_median_5seed": {
     "deep_entropy": 0.759, "deep_mean": 0.542, "shallow_entropy": 0.561, "shallow_mean": 0.544
   },
-  "note": "DOUBLE DISSOCIATION: deep+entropy 0.759 wins; removing EITHER depth (->0.561) OR the entropy readout (->0.542) collapses to ~chance (0.544 both-off). Both depth AND arrangement(entropy) load-bearing => the deep holonomy net LEARNS useful features THROUGH DEPTH readable only by the entropy (arrangement) readout. HONEST: trained by GD on the closed-form holonomy gradient (stepping stone), NOT yet the instantaneous entropy-feedback rule; entropy is the READOUT/objective, training is supervised BCE. AUROC 0.759 above chance not saturated (hard zero-mean task); loss decrease gentle."
+  "note": "DOUBLE DISSOCIATION: deep+entropy 0.759 wins; removing EITHER depth (->0.561) OR the entropy readout (->0.542) collapses to ~chance (0.544 both-off). Both depth AND arrangement(entropy) load-bearing => the deep holonomy net LEARNS useful features THROUGH DEPTH readable only by the entropy (arrangement) readout. HONEST: trained by GD on the closed-form holonomy gradient (stepping stone), NOT yet the instantaneous entropy-feedback rule; entropy is the READOUT/objective, training is supervised BCE. AUROC 0.759 above chance not saturated (hard zero-mean task); loss decrease gentle.",
+  "convergence_deep_entropy_seed0": {
+    "note": "held-out AUROC vs #passes. ONE pass already 0.728 (near-instantaneous, mostly architecture + linear probe over random deep rotors; vs shallow 0.561). The committed 2x2 (lr=0.05) was UNDERTRAINED -> ~0.74 (near the one-pass floor). With lr=2.0 iterative training refines to 0.90. So: the deep-holonomy+entropy ARCHITECTURE is discriminative near-instantly; ROTOR-weight learning (0.73->0.90) is still ITERATIVE GD. The pure one-shot instantaneous ROTOR rule remains open.",
+    "passes":  [1, 2, 3, 5, 10, 20, 50, 100, 200],
+    "lr_0p05": [0.728, 0.728, 0.728, 0.728, 0.728, 0.728, 0.729, 0.731, 0.742],
+    "lr_0p5":  [0.728, 0.728, 0.728, 0.729, 0.731, 0.741, 0.765, 0.798, 0.788],
+    "lr_2p0":  [0.728, 0.730, 0.731, 0.738, 0.763, 0.805, 0.788, 0.889, 0.902]
+  }
 }

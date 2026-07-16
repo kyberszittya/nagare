@@ -180,14 +180,16 @@ fn auroc(scores: &[f32], labels: &[u8]) -> f64 {
     (sum_pos - (np * (np + 1)) as f64 / 2.0) / (np * nn) as f64
 }
 
-/// Train one (depth, readout) config; return held-out AUROC.
+/// Train one (depth, readout) config; return (final held-out AUROC, [(epoch, AUROC)]
+/// at checkpoints — the convergence curve).
 fn run_config(
     depth: usize,
     use_entropy: bool,
     seed: u64,
     cfg: &SpectralEntropyConfig,
-    verbose: bool,
-) -> f64 {
+    lr: f32,
+    epochs: usize,
+) -> (f64, Vec<(usize, f64)>) {
     let topo = ring_mesh();
     let mut rng = Rng(101 + seed);
     // data
@@ -211,8 +213,20 @@ fn run_config(
     let n_feat = if use_entropy { 1 } else { D };
     let mut w = vec![0.0f32; n_feat];
     let mut b = 0.0f32;
-    let lr = 0.05f32;
-    let epochs = 200usize;
+
+    let eval = |bivecs: &[Vec<f32>], w: &[f32], b: f32| -> f64 {
+        let mut scores = Vec::new();
+        for x in &xte {
+            let net = RotorMeshNet::new(&topo, bivecs.to_vec());
+            let (out, _) = net.forward(x);
+            let feat = readout(&out, use_entropy, cfg);
+            scores.push(feat.iter().zip(w).map(|(f, wi)| f * wi).sum::<f32>() + b);
+        }
+        let a = auroc(&scores, &yte);
+        a.max(1.0 - a) // symmetric under label flip; report separability
+    };
+    let checkpoints = [1usize, 2, 3, 5, 10, 20, 50, 100, 200];
+    let mut curve = Vec::new();
 
     for ep in 0..epochs {
         let mut gb: Vec<Vec<f32>> = bivecs.iter().map(|v| vec![0.0f32; v.len()]).collect();
@@ -250,21 +264,12 @@ fn run_config(
             w[c] -= lr * gw[c] / m;
         }
         b -= lr * gbias / m;
-        if verbose && (ep % 40 == 0 || ep == epochs - 1) {
-            println!("    ep {ep:3}  loss {:.4}", loss / m);
+        let _ = loss;
+        if checkpoints.contains(&(ep + 1)) {
+            curve.push((ep + 1, eval(&bivecs, &w, b)));
         }
     }
-
-    // eval
-    let mut scores = Vec::new();
-    for x in &xte {
-        let net = RotorMeshNet::new(&topo, bivecs.clone());
-        let (out, _) = net.forward(x);
-        let feat = readout(&out, use_entropy, cfg);
-        scores.push(feat.iter().zip(&w).map(|(f, wi)| f * wi).sum::<f32>() + b);
-    }
-    let a = auroc(&scores, &yte);
-    a.max(1.0 - a) // AUROC is symmetric under label flip; report separability
+    (eval(&bivecs, &w, b), curve)
 }
 
 /// Hard FD gate: analytic end-to-end grad w.r.t. a bivec entry == finite difference.
@@ -329,20 +334,24 @@ fn main() {
     if fdcheck {
         return;
     }
-    println!("\n== training smoke (deep+entropy, seed 0, live loss) ==");
-    let smoke = run_config(3, true, 0, &cfg, true);
-    println!("  deep+entropy held-out AUROC (seed 0): {smoke:.3}");
-
-    println!("\n== 2x2 dissociation (5 seeds, held-out AUROC median) ==");
+    println!("\n== 2x2 dissociation (5 seeds, lr=0.05 x 200 ep, held-out AUROC median) ==");
     println!("  {:<16} {:>10} {:>10}", "", "entropy", "mean");
     for (name, depth) in [("deep (L=3)", 3usize), ("shallow (L=1)", 1usize)] {
         let med = |ent: bool| -> f64 {
             let mut v: Vec<f64> = (0..5)
-                .map(|s| run_config(depth, ent, s, &cfg, false))
+                .map(|s| run_config(depth, ent, s, &cfg, 0.05, 200).0)
                 .collect();
             v.sort_by(|a, b| a.total_cmp(b));
             v[2]
         };
         println!("  {:<16} {:>10.3} {:>10.3}", name, med(true), med(false));
+    }
+
+    // "how instantaneous?" — held-out AUROC vs number of passes (deep+entropy), a few LRs.
+    println!("\n== convergence: deep+entropy held-out AUROC vs #passes (seed 0) ==");
+    for lr in [0.05f32, 0.5, 2.0] {
+        let (_final, curve) = run_config(3, true, 0, &cfg, lr, 200);
+        let pts: Vec<String> = curve.iter().map(|(e, a)| format!("{e}:{a:.3}")).collect();
+        println!("  lr={lr:<4}  {}", pts.join("  "));
     }
 }
