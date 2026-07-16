@@ -5,15 +5,132 @@
   "setup": "HSiKAN forward+backward (sign-routed Chebyshev splines + highway gate over signed hyperedges, arity 3, d=16, cheb 6, 2 branches), 100 iters. Nagare = closed-form no-tape, now EDGE-CHUNK PARALLEL (rayon, chunk_parallel_matches_serial gate). PyTorch = same architecture with autograd. Peak RSS via /usr/bin/time -l.",
   "single_thread_note": "Per-core (1 thread): Nagare 2.3x FASTER than PyTorch (24 vs 52 ms @20k, 62 vs 140 @50k, 124 vs 283 @100k). Memory 4-5x LESS (86 vs 459 MB, 207 vs 843, 405 vs 1468).",
   "rows_1thread": [
-    {"edges": 20000,  "nagare_ms": 24.1, "pytorch_ms_1thr": 52.5,  "pytorch_ms_6thr": 20.5, "nagare_rss_mb": 85.7,  "pytorch_rss_mb": 459.4},
-    {"edges": 50000,  "nagare_ms": 62.0, "pytorch_ms_1thr": 139.7, "pytorch_ms_6thr": 51.3, "nagare_rss_mb": 206.9, "pytorch_rss_mb": 842.7},
-    {"edges": 100000, "nagare_ms": 123.8,"pytorch_ms_1thr": 282.7, "pytorch_ms_6thr": 104.8,"nagare_rss_mb": 404.9, "pytorch_rss_mb": 1468.4}
+    {
+      "edges": 20000,
+      "nagare_ms": 24.1,
+      "pytorch_ms_1thr": 52.5,
+      "pytorch_ms_6thr": 20.5,
+      "nagare_rss_mb": 85.7,
+      "pytorch_rss_mb": 459.4
+    },
+    {
+      "edges": 50000,
+      "nagare_ms": 62.0,
+      "pytorch_ms_1thr": 139.7,
+      "pytorch_ms_6thr": 51.3,
+      "nagare_rss_mb": 206.9,
+      "pytorch_rss_mb": 842.7
+    },
+    {
+      "edges": 100000,
+      "nagare_ms": 123.8,
+      "pytorch_ms_1thr": 282.7,
+      "pytorch_ms_6thr": 104.8,
+      "nagare_rss_mb": 404.9,
+      "pytorch_rss_mb": 1468.4
+    }
   ],
   "parallel_note": "hsikan_forward/backward now partition the T hyperedges into min(threads,T) contiguous chunks run on the rayon pool; checksum identical across thread counts. At 16 threads Nagare scales 7.3x (61->8.3ms @50k) while PyTorch saturates ~6-8 threads (51->42ms). Matched 16 threads: Nagare ~5x FASTER + ~3x LESS memory. Parallelism costs P-fold transient grad_x copies: RSS 196->269 MB (50k), 386->568 MB (100k) from 1->16 threads -- still 2.6-3.1x under PyTorch.",
-  "thread_scaling_50k_ms": {"1": 61.1, "2": 31.3, "4": 17.6, "8": 12.1, "16": 8.3},
+  "thread_scaling_50k_ms": {
+    "1": 61.1,
+    "2": 31.3,
+    "4": 17.6,
+    "8": 12.1,
+    "16": 8.3
+  },
   "matched_16thr": [
-    {"edges": 50000,  "nagare_ms": 8.1,  "nagare_rss_mb": 269, "pytorch_ms": 42.2, "pytorch_rss_mb": 842.7},
-    {"edges": 100000, "nagare_ms": 16.8, "nagare_rss_mb": 568, "pytorch_ms": 81.3, "pytorch_rss_mb": 1468.4}
+    {
+      "edges": 50000,
+      "nagare_ms": 8.1,
+      "nagare_rss_mb": 269,
+      "pytorch_ms": 42.2,
+      "pytorch_rss_mb": 842.7
+    },
+    {
+      "edges": 100000,
+      "nagare_ms": 16.8,
+      "nagare_rss_mb": 568,
+      "pytorch_ms": 81.3,
+      "pytorch_rss_mb": 1468.4
+    }
   ],
-  "nagare_rss_by_threads": {"50000": {"1": 196, "16": 269}, "100000": {"1": 386, "16": 568}}
+  "nagare_rss_by_threads": {
+    "50000": {
+      "1": 196,
+      "16": 269
+    },
+    "100000": {
+      "1": 386,
+      "16": 568
+    }
+  },
+  "kato15_32core": {
+    "host": "kato15 (32-core Xeon, torch 2.11.0+cu128 CPU)",
+    "nagare_fwdbwd_ms": {
+      "50k": {
+        "1": 165,
+        "2": 100,
+        "4": 69,
+        "8": 48,
+        "16": 34,
+        "32": 32
+      },
+      "100k": {
+        "1": 335,
+        "2": 169,
+        "4": 143,
+        "8": 99,
+        "16": 74,
+        "32": 68
+      }
+    },
+    "nagare_rss_mb": {
+      "50k": {
+        "1": 197,
+        "32": 233
+      },
+      "100k": {
+        "1": 392,
+        "32": 467
+      }
+    },
+    "pytorch_fwdbwd_ms": {
+      "50k": {
+        "1": 330,
+        "8": 160,
+        "32": 5360
+      },
+      "100k": {
+        "1": 717,
+        "8": 398,
+        "32": "killed (thrash)"
+      }
+    },
+    "note": "Nagare scales 165->32ms 1->32 threads (5.2x) then SATURATES 16->32 (34->32). PyTorch REGRESSES catastrophically at 32 threads (160->5360ms @50k, 33x slowdown = CPU intra-op over-subscription thrash on tiny d=16); killed the 100k th=32 run. Nagare best (32ms) vs PyTorch best (160ms @8thr) = 5x; at matched 32 threads 167x. Nagare degrades gracefully, PyTorch collapses."
+  },
+  "scenario_A_dim_sweep": {
+    "setup": "Mac, 50k edges, fwd+bwd, 1->16 thread speedup (min of 2-3 runs)",
+    "scaling_1to16": {
+      "d16": 7.26,
+      "d32": 7.93,
+      "d64": 7.8
+    },
+    "finding": "Scaling is 7.3-7.9x across d=16/32/64 at <=16 threads -- roughly FLAT in d. This REFUTES the earlier 'memory-bandwidth bound at d=16' assertion: up to 16 threads it scales cleanly regardless of d. The kato15 16->32 flattening is a separate 32-core regime whose cause is NOT isolated (bandwidth / per-chunk work too small at 32 chunks for d=16 / NUMA / turbo all plausible) -- hypothesis, not conclusion."
+  },
+  "scenario_B_deploy_vs_train": {
+    "setup": "Mac, 50k edges, d=16, 8 threads, min of 2-3 runs; RSS via /usr/bin/time -l",
+    "nagare": {
+      "fwd_only_ms": 9.9,
+      "fwd_bwd_ms": 12.8,
+      "fwd_only_rss_mb": 16,
+      "fwd_bwd_rss_mb": 293
+    },
+    "pytorch": {
+      "fwd_only_ms": 18.9,
+      "fwd_bwd_ms": 47.2,
+      "fwd_only_rss_mb": 469,
+      "fwd_bwd_rss_mb": 779
+    },
+    "finding": "DEPLOY (forward-only): Nagare 16 MB vs PyTorch 469 MB = 29x less memory (streaming chunked forward drops each chunk's cache), 1.9x faster. TRAINING: 3.7x faster. Backward OVERHEAD: Nagare +29% (closed-form, nearly free), PyTorch +150% (tape replay). The no-autograd-tape thesis pays off most on the deploy memory axis."
+  }
 }

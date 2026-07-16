@@ -117,9 +117,47 @@ None (nagare repo; no CORE.YAML gate on this op). Change is additive + API-prese
 - kato15 (32 cores) synced to this work but has **no torch** — the PyTorch arm was not run
   there; a head-to-head at 32 threads needs a torch install on the cluster.
 
+## Further scenarios (2026-07-16)
+
+### kato15 32-core (Xeon, torch 2.11 CPU)
+
+Nagare fwd+bwd @50k: 165→100→69→48→34→32 ms across 1/2/4/8/16/32 threads (5.2×, then
+**saturates 16→32**). PyTorch: 330 (1) → 160 (8) → **5360 ms (32)** — a **33× regression**,
+classic CPU intra-op over-subscription thrash on the tiny d=16 matmuls (the 100k th=32 run
+was killed rather than left thrashing the node). **Nagare degrades gracefully; PyTorch
+collapses.** Nagare best (32 ms) vs PyTorch best (160 ms @8thr) = 5×; matched 32 threads =
+167×.
+
+### Scenario A — dimension sweep (discriminating test of the saturation cause)
+
+1→16-thread speedup, min-of-N, 50k edges: **d=16 7.26× · d=32 7.93× · d=64 7.80×**. Scaling
+is **~flat in d** below 16 threads. This **refutes** the off-hand "bandwidth-bound at d=16"
+reading — up to 16 threads it scales cleanly regardless of d. The kato15 16→32 flattening is
+a separate 32-core regime whose cause is **not isolated** (bandwidth / per-chunk work too
+small at 32 chunks for d=16 / NUMA / turbo all plausible). Recorded as hypothesis, not
+conclusion.
+
+### Scenario B — deploy (forward-only) vs training (fwd+bwd)
+
+50k, d=16, 8 threads; RSS via `/usr/bin/time -l`:
+
+| | fwd-only (deploy) | fwd+bwd (train) |
+|---|---|---|
+| Nagare | 9.9 ms / **16 MB** | 12.8 ms / 293 MB |
+| PyTorch | 18.9 ms / 469 MB | 47.2 ms / 779 MB |
+
+Deploy via `hsikan_forward_chunked` (streams chunks, drops each cache) = **16 MB vs 469 MB =
+29× less memory**, 1.9× faster. Training 3.7× faster. **Backward overhead: Nagare +29%
+(closed-form, nearly free) vs PyTorch +150% (tape replay).** The no-autograd-tape thesis
+shows strongest on the deploy memory axis and the backward-overhead axis.
+
+Figure: `reports/figures/hsikan-scenarios.png`.
+
 ## Open items
 
 - Only `hsikan` is parallelized; `clifford_fir`/`gomb_shell` stay serial — same edge/bank
   chunk pattern applies if the full Gömb-Soma cascade becomes the bottleneck.
 - P-fold `grad_x` memory can be cut with a sparse per-chunk vertex-grad scatter if RSS
   becomes the binding constraint.
+- Isolate the 16→32-thread flattening cause (bandwidth vs chunk-granularity) with a
+  32-thread dim-sweep on kato15 before making any bandwidth claim.
