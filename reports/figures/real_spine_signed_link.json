@@ -1,0 +1,15 @@
+{
+  "experiment": "real-spine-signed-link",
+  "date": "2026-07-16",
+  "host": "Hajdus-MacBook-Pro (arm64, CPU)",
+  "dataset": "SNAP soc-sign-bitcoinalpha (V=3783, 24186 signed edges, 16974 triangles)",
+  "note": "The REAL Nagare spine (examples/cpml_signed_link.rs) on a REAL signed graph — no invention. Signed-link IS a genuine structural task (~0.87-0.89 AUROC, collapses to ~0.50 under sign-shuffle = no leakage). BUT the FULL Gomb-Soma cascade UNDERPERFORMS the simple tiered inner core (0.849 vs 0.886) and under shuffle drops BELOW chance (0.433 = overfits). Consistent with prior 'topology INERT, spline nonlinearity is the lever' findings. This is the honest baseline before wiring the global entropy feedback.",
+  "arms_test_auroc_2seed": [
+    {"arm": "L=3 tiered inner (fixed)",        "s0": 0.8818, "s1": 0.8899, "shuffle_s0": 0.5030, "verdict": "BEST"},
+    {"arm": "inner core + holonomy (M=1)",      "s0": 0.8769, "s1": 0.8898, "shuffle_s0": 0.5039, "verdict": "ties best"},
+    {"arm": "inner core + holonomy (M=4)",      "s0": 0.8752, "s1": 0.8847, "shuffle_s0": 0.4931, "verdict": "~ties"},
+    {"arm": "L=1 flat inner (fixed)",           "s0": 0.8686, "s1": 0.8700, "shuffle_s0": 0.4991, "verdict": "baseline"},
+    {"arm": "signed hypergraph conv (learned)", "s0": 0.8662, "s1": 0.8524, "shuffle_s0": 0.5144, "verdict": "ties baseline"},
+    {"arm": "FULL Gomb-Soma cascade (L=3)",     "s0": 0.8483, "s1": 0.8488, "shuffle_s0": 0.4332, "verdict": "WORST (HURTS -0.034; below chance on shuffle = overfits)"}
+  ]
+}

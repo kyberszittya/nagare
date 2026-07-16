@@ -14,3 +14,4 @@ docs/tex.log
 
 # Plans live on disk only (IP: public repo, Csapó co-author line) — never committed.
 /docs/plans/
+data/signed/*.csv
