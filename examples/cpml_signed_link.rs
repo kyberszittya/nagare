@@ -559,7 +559,10 @@ fn run_cascade(
     let ntr = tr_y.len() as f32;
 
     // DIAGNOSTIC (undertraining check): cascade budget tunable via env, default 250.
-    let casc_iters = std::env::var("CASC_ITERS").ok().and_then(|s| s.parse().ok()).unwrap_or(250usize);
+    let casc_iters = std::env::var("CASC_ITERS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(250usize);
     for it in 0..casc_iters {
         // Forward.
         let y_out = gomb_outer_forward(&batch, x0, &banks, n, F);
