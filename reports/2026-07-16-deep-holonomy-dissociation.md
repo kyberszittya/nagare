@@ -64,6 +64,30 @@ Two honest readings:
   — the thesis in full — is **not** achieved here; it remains the open frontier (I measured the question honestly
   rather than shipping a rule I could not verify).
 
+## Optimizer — adaptive momentum (Adam) accelerates it ~10× (the "make it fast" step)
+
+Same deep+entropy net, same closed-form gradient, seed 0 — GD vs Adam (reusing the crate's `adam_step`) vs Nesterov
+(`reports/figures/holonomy-optimizers.png`):
+
+| passes | 5 | 10 | 20 | 100 | 200 |
+|---|---|---|---|---|---|
+| GD (lr=2.0) | 0.738 | 0.763 | 0.805 | 0.889 | 0.902 |
+| **Adam (lr=0.05)** | 0.833 | **0.870** | 0.832 | 0.941 | **0.947** |
+| Nesterov (lr=1.0) | 0.747 | 0.797 | 0.799 | 0.850 | 0.865 |
+
+- **Adam reaches 0.87 in ~10 passes; GD needs ~100** — roughly a 10× acceleration — and Adam's ceiling is *higher*
+  (0.947 vs 0.902). So adaptive momentum both speeds convergence and improves the optimum.
+- **Nesterov helps but less** than Adam. The lever here is Adam's **per-parameter adaptive scaling**: the rotor-
+  bivector gradients have very different magnitudes across parameters, so a single global step (GD/Nesterov) is
+  mis-scaled; Adam normalizes per-parameter.
+- This is **plain Euclidean Adam over the Cayley chart** — the cheap step-1 baseline. It is still *iterative* (~10
+  passes, not one shot), but ~10 passes is the practical **near-instantaneous / few-shot** regime.
+- **Next, the two on-thesis geometric refinements** (each to be measured against this Adam baseline): (a) **Clifford
+  momentum** — parallel-transport the momentum by the inverse rotor (the holonomy transport already built) so it is
+  correct on the manifold; (b) **entropy preconditioner** — replace Adam's diagonal second-moment with the
+  spectral-entropy curvature (a natural-gradient step), which is what could push it toward genuinely few (~1–3)
+  passes.
+
 ## Integrity — the gradient is verified, the result is not a phantom
 
 Before trusting any training number, a **hard FD gate** checked the entire end-to-end closed-form gradient (BCE →

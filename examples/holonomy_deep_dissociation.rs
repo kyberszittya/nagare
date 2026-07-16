@@ -19,10 +19,22 @@
 //!
 //! Run: `cargo run --release --example holonomy_deep_dissociation [-- --fdcheck]`
 
-use holonomy_learn::{spectral_reg_value_grad, MeshTopology, RotorMeshNet, SpectralEntropyConfig};
+use holonomy_learn::{
+    adam_step, spectral_reg_value_grad, AdamState, MeshTopology, RotorMeshNet,
+    SpectralEntropyConfig,
+};
 
 const N: usize = 12; // ring nodes
 const D: usize = 3;
+
+/// Optimizer for the rotor bivectors + classifier: plain gradient descent, Adam
+/// (adaptive momentum, `adam_step`), or Nesterov momentum.
+#[derive(Clone, Copy, PartialEq)]
+enum Opt {
+    Gd,
+    Adam,
+    Nesterov,
+}
 
 struct Rng(u64);
 impl Rng {
@@ -189,6 +201,7 @@ fn run_config(
     cfg: &SpectralEntropyConfig,
     lr: f32,
     epochs: usize,
+    opt: Opt,
 ) -> (f64, Vec<(usize, f64)>) {
     let topo = ring_mesh();
     let mut rng = Rng(101 + seed);
@@ -228,6 +241,16 @@ fn run_config(
     let checkpoints = [1usize, 2, 3, 5, 10, 20, 50, 100, 200];
     let mut curve = Vec::new();
 
+    // optimizer state (Adam moments per group; Nesterov velocities). Cheap to hold
+    // for all opts; only the selected arm reads them.
+    let mut adam_b: Vec<AdamState> = (0..depth).map(|_| AdamState::new(N * D)).collect();
+    let mut adam_w = AdamState::new(n_feat);
+    let mut adam_bias = AdamState::new(1);
+    let mut nes_b: Vec<Vec<f32>> = (0..depth).map(|_| vec![0.0f32; N * D]).collect();
+    let mut nes_w = vec![0.0f32; n_feat];
+    let mut nes_bias = 0.0f32;
+    let mu = 0.9f32;
+
     for ep in 0..epochs {
         let mut gb: Vec<Vec<f32>> = bivecs.iter().map(|v| vec![0.0f32; v.len()]).collect();
         let mut gw = vec![0.0f32; n_feat];
@@ -254,16 +277,54 @@ fn run_config(
                 }
             }
         }
+        // average gradients over the batch
         let m = xtr.len() as f32;
-        for l in 0..depth {
-            for i in 0..N * D {
-                bivecs[l][i] -= lr * gb[l][i] / m;
+        for layer in gb.iter_mut() {
+            for g in layer.iter_mut() {
+                *g /= m;
             }
         }
-        for c in 0..n_feat {
-            w[c] -= lr * gw[c] / m;
+        for g in gw.iter_mut() {
+            *g /= m;
         }
-        b -= lr * gbias / m;
+        gbias /= m;
+        // apply the chosen optimizer
+        match opt {
+            Opt::Gd => {
+                for l in 0..depth {
+                    for i in 0..N * D {
+                        bivecs[l][i] -= lr * gb[l][i];
+                    }
+                }
+                for c in 0..n_feat {
+                    w[c] -= lr * gw[c];
+                }
+                b -= lr * gbias;
+            }
+            Opt::Adam => {
+                for l in 0..depth {
+                    adam_step(&mut bivecs[l], &gb[l], &mut adam_b[l], lr);
+                }
+                adam_step(&mut w, &gw, &mut adam_w, lr);
+                let mut bb = [b];
+                adam_step(&mut bb, &[gbias], &mut adam_bias, lr);
+                b = bb[0];
+            }
+            Opt::Nesterov => {
+                for l in 0..depth {
+                    for i in 0..N * D {
+                        nes_b[l][i] = mu * nes_b[l][i] + gb[l][i];
+                        bivecs[l][i] -= lr * (gb[l][i] + mu * nes_b[l][i]);
+                    }
+                }
+                for c in 0..n_feat {
+                    nes_w[c] = mu * nes_w[c] + gw[c];
+                    w[c] -= lr * (gw[c] + mu * nes_w[c]);
+                }
+                nes_bias = mu * nes_bias + gbias;
+                b -= lr * (gbias + mu * nes_bias);
+            }
+        }
         let _ = loss;
         if checkpoints.contains(&(ep + 1)) {
             curve.push((ep + 1, eval(&bivecs, &w, b)));
@@ -339,7 +400,7 @@ fn main() {
     for (name, depth) in [("deep (L=3)", 3usize), ("shallow (L=1)", 1usize)] {
         let med = |ent: bool| -> f64 {
             let mut v: Vec<f64> = (0..5)
-                .map(|s| run_config(depth, ent, s, &cfg, 0.05, 200).0)
+                .map(|s| run_config(depth, ent, s, &cfg, 0.05, 200, Opt::Gd).0)
                 .collect();
             v.sort_by(|a, b| a.total_cmp(b));
             v[2]
@@ -347,11 +408,18 @@ fn main() {
         println!("  {:<16} {:>10.3} {:>10.3}", name, med(true), med(false));
     }
 
-    // "how instantaneous?" — held-out AUROC vs number of passes (deep+entropy), a few LRs.
-    println!("\n== convergence: deep+entropy held-out AUROC vs #passes (seed 0) ==");
-    for lr in [0.05f32, 0.5, 2.0] {
-        let (_final, curve) = run_config(3, true, 0, &cfg, lr, 200);
+    // "how few passes?" — deep+entropy AUROC vs passes, GD vs Adam vs Nesterov (seed 0).
+    println!("\n== convergence: deep+entropy AUROC vs #passes (seed 0), optimizers ==");
+    let runs = [
+        ("GD        lr=2.0 ", Opt::Gd, 2.0f32),
+        ("Adam      lr=0.05", Opt::Adam, 0.05),
+        ("Adam      lr=0.02", Opt::Adam, 0.02),
+        ("Nesterov  lr=0.5 ", Opt::Nesterov, 0.5),
+        ("Nesterov  lr=1.0 ", Opt::Nesterov, 1.0),
+    ];
+    for (name, opt, lr) in runs {
+        let (_final, curve) = run_config(3, true, 0, &cfg, lr, 200, opt);
         let pts: Vec<String> = curve.iter().map(|(e, a)| format!("{e}:{a:.3}")).collect();
-        println!("  lr={lr:<4}  {}", pts.join("  "));
+        println!("  {name}  {}", pts.join(" "));
     }
 }

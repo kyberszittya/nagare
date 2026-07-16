@@ -16,5 +16,14 @@
     "lr_0p05": [0.728, 0.728, 0.728, 0.728, 0.728, 0.728, 0.729, 0.731, 0.742],
     "lr_0p5":  [0.728, 0.728, 0.728, 0.729, 0.731, 0.741, 0.765, 0.798, 0.788],
     "lr_2p0":  [0.728, 0.730, 0.731, 0.738, 0.763, 0.805, 0.788, 0.889, 0.902]
+  },
+  "optimizers_deep_entropy_seed0": {
+    "note": "ADAPTIVE MOMENTUM (Adam, reusing adam_step) DRAMATICALLY accelerates the rotor-weight learning AND raises the ceiling: Adam reaches 0.87 in 10 passes (GD needs ~100) and 0.947 at 200 (GD 0.902). Nesterov helps (0.83 by ~20, ceiling 0.865) but less than Adam — adaptive PER-PARAMETER scaling is the lever (rotor-bivec grads have very different scales). This is PLAIN EUCLIDEAN Adam on the Cayley-chart bivecs = step 1 (cheap baseline); the CLIFFORD (parallel-transport momentum by inverse rotor) + ENTROPY (natural-gradient preconditioner) refinements are next. Still ITERATIVE (~10 passes, not one shot) but few-shot = practical near-instantaneous.",
+    "passes":       [1, 2, 3, 5, 10, 20, 50, 100, 200],
+    "gd_lr2p0":     [0.728, 0.730, 0.731, 0.738, 0.763, 0.805, 0.788, 0.889, 0.902],
+    "adam_lr0p05":  [0.728, 0.757, 0.807, 0.833, 0.870, 0.832, 0.882, 0.941, 0.947],
+    "adam_lr0p02":  [0.728, 0.755, 0.756, 0.781, 0.833, 0.838, 0.883, 0.920, 0.940],
+    "nesterov_lr0p5": [0.728, 0.728, 0.729, 0.733, 0.762, 0.830, 0.818, 0.823, 0.825],
+    "nesterov_lr1p0": [0.728, 0.730, 0.733, 0.747, 0.797, 0.799, 0.833, 0.850, 0.865]
   }
 }
